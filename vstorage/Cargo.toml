@@ -1,0 +1,17 @@
+[package]
+name = "vstorage"
+version = "0.1.0"
+authors = ["Hugo Osvaldo Barrera <hugo@whynothugo.nl>"]
+edition = "2021"
+description = "A common API for various icalendar/vcard storages."
+readme = "README.md"
+homepage = "https://github.com/pimutils/vdirsyncer/issues/946"
+keywords = ["vdir", "filesystem", "icalendar", "caldav"]
+# TODO: license = " MPL-2.0" ?
+
+[dependencies]
+url = "2.2.2"
+sha2 = "0.10.2"
+# TODO: Maybe use camino for UTF8 paths??
+log = "0.4.17"
+async-std = "1.12.0"

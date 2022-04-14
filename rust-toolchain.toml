@@ -1,0 +1,3 @@
+[toolchain]
+# Required for try_collect
+channel = "nightly"

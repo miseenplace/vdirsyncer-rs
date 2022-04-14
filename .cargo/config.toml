@@ -1,0 +1,2 @@
+[build]
+rustdocflags = ["--deny=warnings", "--allow=incomplete-features"]
