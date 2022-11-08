@@ -185,8 +185,6 @@ impl Collection for FilesystemCollection {
     }
 
     async fn update(&mut self, href: &str, etag: &str, item: &Item) -> Result<Etag> {
-        // TODO: filename extension???
-        //       I'm not sure I can use `set_extension`; can the filename contain a dot?
         let filename = self.path.join(href);
 
         let actual_etag = etag_for_path::<PathBuf>(&filename).await?;
