@@ -9,6 +9,7 @@ use async_std::{
     path::{Path, PathBuf},
     stream::{Stream, StreamExt},
 };
+use std::rc::Rc;
 use std::{
     fs::Metadata,
     io::{Error, ErrorKind, Result},
@@ -27,7 +28,7 @@ use crate::base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage};
 pub struct FilesystemStorage {
     path: PathBuf,
     read_only: bool,
-    metadata: FilesystemMetadata,
+    metadata: Rc<FilesystemMetadata>,
 }
 
 impl Storage for FilesystemStorage {
@@ -38,7 +39,7 @@ impl Storage for FilesystemStorage {
         Ok(FilesystemStorage {
             path: path_from_url(url)?,
             read_only,
-            metadata,
+            metadata: Rc::from(metadata),
         })
     }
 
@@ -88,17 +89,6 @@ impl Storage for FilesystemStorage {
 }
 
 /// Metadata for a storage instance.
-///
-/// # Known issues
-///
-/// We clone the instance passed to a storage and each collection has its own copy. Ideally,
-/// collections would keep a reference to their storage and use that instead. However, that's not
-/// yet supported (this requires Traits with async fn's to return values with an associated
-/// lifetime).
-///
-/// The cloning isn't terrible; memory usage is just a few bytes being wasted for each collection.
-/// This will be fixed once the upstream support is in place.
-#[derive(Clone)]
 pub struct FilesystemMetadata {
     /// Filename extension for items in a storage. Files with matching extension are treated a
     /// items for a collection, and all other files are ignored.
@@ -111,7 +101,7 @@ pub struct FilesystemMetadata {
 /// details.
 pub struct FilesystemCollection {
     path: PathBuf,
-    metadata: FilesystemMetadata,
+    metadata: Rc<FilesystemMetadata>,
 }
 
 impl Collection for FilesystemCollection {
