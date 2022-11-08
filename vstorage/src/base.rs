@@ -60,6 +60,17 @@ pub trait Storage: Sized {
 ///
 /// The type of items contained is restricted by the underlying implementation.
 pub trait Collection {
+    /// A unique identifier for this collection.
+    ///
+    /// Href should not change over time, so should be associated with an immutable property of the
+    /// collection (e.g.: a relative URL path, or a directory's filename).
+    ///
+    /// # Note for implementers
+    ///
+    /// It the underlying implementation has native immutable IDs for collections, that should
+    /// always be preferred.
+    fn id(&self) -> &str;
+
     /// Enumerates items in this collection.
     async fn list(&self) -> Result<Vec<ItemRef>>;
 

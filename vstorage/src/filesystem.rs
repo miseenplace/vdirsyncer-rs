@@ -63,7 +63,16 @@ impl Storage for FilesystemStorage {
             if !entry.metadata().await?.is_dir() {
                 continue;
             }
+            let dir_name = entry
+                .file_name()
+                .to_str()
+                .ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidFilename, "collection name is not utf8")
+                })?
+                .to_owned();
+
             collections.push(FilesystemCollection {
+                dir_name,
                 path: entry.path(),
                 metadata: self.metadata.clone(),
             });
@@ -77,6 +86,7 @@ impl Storage for FilesystemStorage {
         create_dir(&path).await?;
 
         Ok(FilesystemCollection {
+            dir_name: href.to_owned(),
             path,
             metadata: self.metadata.clone(),
         })
@@ -100,6 +110,7 @@ pub struct FilesystemMetadata {
 /// See documentation for [`vdir`](https://vdirsyncer.pimutils.org/en/stable/vdir.html) for
 /// details.
 pub struct FilesystemCollection {
+    dir_name: String,
     path: PathBuf,
     metadata: Rc<FilesystemMetadata>,
 }
@@ -202,6 +213,10 @@ impl Collection for FilesystemCollection {
 
         let etag = etag_for_path::<PathBuf>(&filename).await?;
         Ok(etag)
+    }
+
+    fn id(&self) -> &str {
+        self.dir_name.as_str()
     }
 }
 
