@@ -82,7 +82,7 @@ impl Storage for FilesystemStorage {
     }
 
     async fn create_collection(&mut self, href: &str) -> Result<FilesystemCollection> {
-        let path = self.path.join(href);
+        let path = self.join_collection_href(href)?;
         create_dir(&path).await?;
 
         Ok(FilesystemCollection {
@@ -93,8 +93,25 @@ impl Storage for FilesystemStorage {
     }
 
     async fn destroy_collection(&mut self, href: &str) -> Result<()> {
-        let path = self.path.join(href);
+        let path = self.join_collection_href(href)?;
         remove_dir_all(path).await
+    }
+}
+
+impl FilesystemStorage {
+    // Joins an href to the collection's path.
+    //
+    // Errors if the resulting path is not a child of the storage's directory.
+    fn join_collection_href(&self, href: &str) -> Result<PathBuf> {
+        let path = self.path.join(href);
+        if path.parent() != Some(&self.path) {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "directory is not child of storage directory",
+            ));
+        };
+
+        Ok(path)
     }
 }
 
