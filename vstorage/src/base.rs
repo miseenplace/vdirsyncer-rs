@@ -65,6 +65,8 @@ pub trait Storage: Sized {
 /// A collection may be an "addressbook" or a "calendar".
 ///
 /// The type of items contained is restricted by the underlying implementation.
+///
+/// Collections never cache data locally. For reading items in bulk, prefer [`get_many`].
 pub trait Collection {
     /// A unique identifier for this collection.
     ///
