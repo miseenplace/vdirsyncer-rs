@@ -82,19 +82,24 @@ impl Storage for FilesystemStorage {
     }
 
     async fn create_collection(&mut self, href: &str) -> Result<FilesystemCollection> {
+        let collection = self.open_collection(href)?;
+        create_dir(&collection.path).await?;
+        Ok(collection)
+    }
+
+    async fn destroy_collection(&mut self, href: &str) -> Result<()> {
         let path = self.join_collection_href(href)?;
-        create_dir(&path).await?;
+        remove_dir_all(path).await
+    }
+
+    fn open_collection(&self, href: &str) -> Result<Self::Collection> {
+        let path = self.join_collection_href(href)?;
 
         Ok(FilesystemCollection {
             dir_name: href.to_owned(),
             path,
             metadata: self.metadata.clone(),
         })
-    }
-
-    async fn destroy_collection(&mut self, href: &str) -> Result<()> {
-        let path = self.join_collection_href(href)?;
-        remove_dir_all(path).await
     }
 }
 
@@ -234,6 +239,10 @@ impl Collection for FilesystemCollection {
 
     fn id(&self) -> &str {
         self.dir_name.as_str()
+    }
+
+    fn href(&self) -> &str {
+        &self.dir_name
     }
 }
 

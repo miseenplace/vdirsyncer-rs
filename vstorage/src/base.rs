@@ -52,6 +52,12 @@ pub trait Storage: Sized {
     /// Deletes an existing collection.
     async fn destroy_collection(&mut self, href: &str) -> Result<()>;
 
+    /// Open an existing collection.
+    ///
+    /// This method DOES NOT check the existence of the collection. If existence needs to be
+    /// verified, use [`discover_collections`] to enumerate all collections instead.
+    fn open_collection(&self, href: &str) -> Result<Self::Collection>;
+
     // NOTE: to sync a single-collection storage to a multi-collection storage #name=XXXX to the URL.
     //       (e.g.: a webical calendar to a local storage)
 }
@@ -70,6 +76,14 @@ pub trait Collection {
     /// It the underlying implementation has native immutable IDs for collections, that should
     /// always be preferred.
     fn id(&self) -> &str;
+
+    /// The path to this collection inside the storage.
+    ///
+    /// This value can be used with [`Storage::open_collection`] to later access this same
+    /// collection.
+    ///
+    /// The exact meaning of this value is storage-specific, but should be remain consistent.
+    fn href(&self) -> &str;
 
     /// Enumerates items in this collection.
     async fn list(&self) -> Result<Vec<ItemRef>>;
