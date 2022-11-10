@@ -1,14 +1,14 @@
 use reqwest::StatusCode;
 use std::{
     io::{Error, ErrorKind, Result},
-    rc::Rc,
+    sync::Arc,
 };
 use url::Url;
 
 use crate::base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage};
 
 pub struct WebCalStorage {
-    url: Rc<Url>,
+    url: Arc<Url>,
     collection_name: String,
     client: reqwest::Client,
 }
@@ -47,7 +47,7 @@ impl Storage for WebCalStorage {
             ));
         };
         Ok(WebCalStorage {
-            url: Rc::new(url.clone()),
+            url: Arc::new(url.clone()),
             collection_name: fragment.to_owned(),
             client: reqwest::Client::new(),
         })
@@ -118,7 +118,7 @@ impl Storage for WebCalStorage {
 
 pub struct WebCalCollection {
     id: String,
-    url: Rc<Url>,
+    url: Arc<Url>,
 }
 
 impl Collection for WebCalCollection {

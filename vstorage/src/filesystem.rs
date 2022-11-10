@@ -9,7 +9,7 @@ use async_std::{
     path::{Path, PathBuf},
     stream::{Stream, StreamExt},
 };
-use std::rc::Rc;
+use std::sync::Arc;
 use std::{
     fs::Metadata,
     io::{Error, ErrorKind, Result},
@@ -28,7 +28,7 @@ use crate::base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage};
 pub struct FilesystemStorage {
     path: PathBuf,
     read_only: bool,
-    metadata: Rc<FilesystemMetadata>,
+    metadata: Arc<FilesystemMetadata>,
 }
 
 impl Storage for FilesystemStorage {
@@ -39,7 +39,7 @@ impl Storage for FilesystemStorage {
         Ok(FilesystemStorage {
             path: path_from_url(url)?,
             read_only,
-            metadata: Rc::from(metadata),
+            metadata: Arc::from(metadata),
         })
     }
 
@@ -134,7 +134,7 @@ pub struct FilesystemMetadata {
 pub struct FilesystemCollection {
     dir_name: String,
     path: PathBuf,
-    metadata: Rc<FilesystemMetadata>,
+    metadata: Arc<FilesystemMetadata>,
 }
 
 impl Collection for FilesystemCollection {

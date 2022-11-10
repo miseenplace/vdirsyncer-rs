@@ -24,7 +24,7 @@ pub type Etag = String;
 /// CalDav server, a local filesystem, etc.
 ///
 /// Storages may have one or more [`Collection`]s (e.g.: calendars).
-pub trait Storage: Sized {
+pub trait Storage: Sized + Sync + Send {
     // XXX TODO FIXME: keep in mind item types
     // instances has one item type (e.g.: calendar only has todos)
 
@@ -67,7 +67,7 @@ pub trait Storage: Sized {
 /// The type of items contained is restricted by the underlying implementation.
 ///
 /// Collections never cache data locally. For reading items in bulk, prefer [`get_many`].
-pub trait Collection {
+pub trait Collection: Sync + Send {
     /// A unique identifier for this collection.
     ///
     /// Href should not change over time, so should be associated with an immutable property of the
