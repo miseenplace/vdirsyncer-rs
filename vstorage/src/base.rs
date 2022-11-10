@@ -141,7 +141,6 @@ pub enum MetadataKind {
 /// one with the sole purpose of extracing a UID. Proper parsing of components is out of scope,
 /// since we want to sync potentially invalid items too.
 pub struct Item {
-    // XXX: Should this maybe be bytes? Probably not, everything we hande is text.
     pub(crate) raw: String,
 }
 
@@ -158,6 +157,7 @@ impl Item {
             .map(String::from)?;
 
         // If the following lines start with a space or tab, they're a continuation of the UID.
+        // See: https://www.rfc-editor.org/rfc/rfc5545#section-3.1
         lines
             .map_while(|line| line.strip_prefix(' ').or_else(|| line.strip_prefix('\t')))
             .for_each(|part| uid.push_str(part));
