@@ -40,7 +40,7 @@ impl Storage for WebCalStorage {
         })?;
         // NOTE: It would be nice to support `webcal://` here, but the Url crate won't allow
         // changing the scheme of such a Url.
-        if ["http", "https"].contains(&url.scheme()) {
+        if !["http", "https"].contains(&url.scheme()) {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
                 "URL scheme must be http or https",
