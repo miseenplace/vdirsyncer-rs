@@ -1,20 +1,17 @@
 //! Implements reading/writing entries from a local filesystem [`vdir`].
 //!
 //! [`vdir`]: https://vdirsyncer.pimutils.org/en/stable/vdir.html
-use async_std::{
-    fs::{
-        create_dir, metadata, read_dir, read_to_string, remove_dir_all, DirEntry, File, OpenOptions,
-    },
-    io::WriteExt,
-    path::{Path, PathBuf},
-    stream::{Stream, StreamExt},
-};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{
     fs::Metadata,
     io::{Error, ErrorKind, Result},
     os::unix::prelude::MetadataExt,
 };
+use tokio::fs::{
+    create_dir, metadata, read_dir, read_to_string, remove_dir_all, DirEntry, File, OpenOptions,
+};
+use tokio::io::AsyncWriteExt;
 use url::Url;
 
 use crate::base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage};
@@ -57,10 +54,10 @@ impl Storage for FilesystemStorage {
         let mut entries = read_dir(&self.path).await?;
 
         let mut collections = Vec::new();
-        while let Some(entry) = entries.next().await {
-            let entry = entry?;
+        while let Ok(entry) = entries.next_entry().await {
+            let entry = entry.unwrap();
 
-            if !entry.metadata().await?.is_dir() {
+            if !metadata(entry.path()).await?.is_dir() {
                 continue;
             }
             let dir_name = entry
@@ -141,9 +138,9 @@ impl Collection for FilesystemCollection {
     async fn list(&self) -> Result<Vec<ItemRef>> {
         let mut read_dir = read_dir(&self.path).await?;
 
-        let mut items = Vec::with_capacity(read_dir.size_hint().0);
-        while let Some(entry) = read_dir.next().await {
-            let entry = entry?;
+        let mut items = Vec::new();
+        while let Ok(entry) = read_dir.next_entry().await {
+            let entry = entry.unwrap();
             let href = entry
                 .file_name()
                 .to_str()
@@ -247,20 +244,18 @@ impl Collection for FilesystemCollection {
 }
 
 fn path_from_url(url: &Url) -> Result<PathBuf> {
-    let path = url
+    url
         .to_file_path()
-        .map_err(|_| Error::from(ErrorKind::InvalidInput))?;
-
-    Ok(path.into())
+        .map_err(|_| Error::from(ErrorKind::InvalidInput))
 }
 
 async fn etag_for_path<P: AsRef<Path>>(path: &Path) -> Result<Etag> {
-    let metadata = path.metadata().await?;
+    let metadata = metadata(path).await?;
     Ok(etag_for_metadata(&metadata))
 }
 
 async fn etag_for_direntry(dir_entry: &DirEntry) -> Result<Etag> {
-    let metadata = dir_entry.metadata().await?;
+    let metadata = metadata(dir_entry.path()).await?;
     Ok(etag_for_metadata(&metadata))
 }
 
