@@ -84,6 +84,7 @@ impl Storage for WebCalStorage {
         Ok(vec![WebCalCollection {
             id: self.collection_name.to_owned(),
             url: self.url.clone(),
+            client: self.client.clone(),
         }])
     }
 
@@ -112,6 +113,7 @@ impl Storage for WebCalStorage {
         Ok(WebCalCollection {
             id: self.collection_name.to_owned(),
             url: self.url.clone(),
+            client: self.client.clone(),
         })
     }
 }
@@ -119,6 +121,7 @@ impl Storage for WebCalStorage {
 pub struct WebCalCollection {
     id: String,
     url: Arc<Url>,
+    client: reqwest::Client,
 }
 
 impl Collection for WebCalCollection {
