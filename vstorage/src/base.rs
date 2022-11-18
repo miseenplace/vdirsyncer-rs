@@ -140,6 +140,7 @@ pub enum MetadataKind {
 /// Note that this is not a proper validating parser for icalendar or vcard; it's a very simple
 /// one with the sole purpose of extracing a UID. Proper parsing of components is out of scope,
 /// since we want to sync potentially invalid items too.
+#[derive(Debug)]
 pub struct Item {
     pub(crate) raw: String,
 }

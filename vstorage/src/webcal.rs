@@ -5,7 +5,10 @@ use std::{
 };
 use url::Url;
 
-use crate::base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage};
+use crate::{
+    base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage},
+    simple_component::Component,
+};
 
 pub struct WebCalStorage {
     url: Arc<Url>,
@@ -55,23 +58,9 @@ impl Storage for WebCalStorage {
 
     async fn check(&self) -> Result<()> {
         // TODO: Should map status codes to io::Error. if 404 -> NotFound, etc.
-        let response = self
-            .client
-            .get((*self.url).clone())
-            .send()
-            .await
-            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+        let raw = fetch_raw(&self.client, &self.url).await?;
 
-        if response.status() != StatusCode::OK {
-            return Err(Error::new(ErrorKind::Other, "request did not return 200"));
-        }
-
-        if !response
-            .text()
-            .await
-            .map_err(|e| Error::new(ErrorKind::Other, e))?
-            .starts_with("BEGIN:VCALENDAR")
-        {
+        if !raw.starts_with("BEGIN:VCALENDAR") {
             return Err(Error::new(
                 ErrorKind::Other,
                 "response for URL doesn't look like a calendar",
@@ -103,11 +92,10 @@ impl Storage for WebCalStorage {
     }
 
     fn open_collection(&self, href: &str) -> Result<Self::Collection> {
-        // TODO: the fragment is not actually relevant here.
-        if !href.is_empty() {
+        if Some(href) != self.url.fragment() {
             return Err(Error::new(
                 ErrorKind::NotFound,
-                "only the '' collection is available via webical",
+                format!("this storage only contains the '{}' collection", href),
             ));
         }
         Ok(WebCalCollection {
@@ -118,26 +106,88 @@ impl Storage for WebCalStorage {
     }
 }
 
+#[derive(Debug)]
 pub struct WebCalCollection {
     id: String,
     url: Arc<Url>,
     client: reqwest::Client,
 }
 
+impl PartialEq for &WebCalCollection {
+    fn eq(&self, other: &Self) -> bool {
+        (&self.id, &self.url).eq(&(&other.id, &other.url))
+    }
+}
+
 impl Collection for WebCalCollection {
     async fn list(&self) -> Result<Vec<ItemRef>> {
-        // TODO: need to parse icalendar data.
-        todo!()
+        let raw = fetch_raw(&self.client, &self.url).await?;
+
+        // TODO: it would be best if the parser could operate on a stream, although that might
+        //       complicate inlining VTIMEZONEs that are at the end.
+        let calendar = Component::parse(raw);
+        let refs = calendar
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
+            .subcomponents
+            .iter()
+            .map(|c| ItemRef {
+                href: c.uid(),
+                etag: crate::util::hash(c.raw()),
+            })
+            .collect();
+
+        Ok(refs)
     }
 
+    /// Returns a single item from the collection.
+    ///
+    /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. It is
+    /// strongly recommended to use [`get_many`] instead.
     async fn get(&self, href: &str) -> Result<(Item, Etag)> {
-        // TODO: need to parse icalendar data.
-        todo!()
+        let raw = fetch_raw(&self.client, &self.url).await?;
+
+        // TODO: it would be best if the parser could operate on a stream, although that might
+        //       complicate inlining VTIMEZONEs that are at the end.
+        let calendar = Component::parse(raw);
+        let components = calendar
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
+            .subcomponents;
+        let component = components
+            .iter()
+            .find(|c| c.uid() == href)
+            .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
+
+        let raw = component.raw();
+        let hash = crate::util::hash(&raw);
+
+        Ok((Item { raw }, hash))
     }
 
     async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Item, Etag)>> {
-        // TODO: need to parse icalendar data.
-        todo!()
+        let raw = fetch_raw(&self.client, &self.url).await?;
+
+        // TODO: it would be best if the parser could operate on a stream, although that might
+        //       complicate inlining VTIMEZONEs that are at the end.
+        let calendar = Component::parse(raw);
+        let mut components = calendar
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
+            .subcomponents;
+
+        // TODO: we need to fail if an href is missing from upstream.
+        // Although this can be done externally to this method? I'm not sure the API should
+        // guarantee it, since upstream APIs don't seem to do so.
+        // This needs to be though about. A lot.
+        components.retain(|c| hrefs.contains(&c.uid().as_ref()));
+
+        components
+            .iter()
+            .map(|c| {
+                let raw = c.raw();
+                let hash = crate::util::hash(&raw);
+
+                Ok((Item { raw }, hash))
+            })
+            .collect()
     }
 
     async fn add(&mut self, _: &Item) -> Result<ItemRef> {
@@ -174,5 +224,66 @@ impl Collection for WebCalCollection {
 
     fn href(&self) -> &str {
         ""
+    }
+}
+
+/// Helper method to fetch a URL and return its body as a String.
+///
+/// Be warned! This swallows headers (including `Etag`!).
+#[inline]
+async fn fetch_raw(client: &reqwest::Client, url: &Url) -> Result<String> {
+    let response = client
+        // TODO: upstream should impl IntoURL for &Url
+        .get((*url).clone())
+        .send()
+        .await
+        .map_err(|e| Error::new(ErrorKind::Other, e))?;
+
+    if response.status() != StatusCode::OK {
+        return Err(Error::new(ErrorKind::Other, "request did not return 200"));
+    }
+
+    let raw = response
+        .text()
+        .await
+        .map_err(|e| Error::new(ErrorKind::Other, e))?;
+
+    Ok(raw)
+}
+
+mod test {
+
+    // FIXME: only run this test with a dedicated flag for networked test.
+    // FIXME: use a webcal link hosted by me.
+    // TODO: these are just validation tests and not suitable as a keeper.
+    #[tokio::test]
+    async fn test_dummy() {
+        use super::WebCalStorage;
+        use crate::base::Collection;
+        use crate::base::Storage;
+        use url::Url;
+
+        let link = "https://www.officeholidays.com/ics/netherlands#holidays";
+        let storage = WebCalStorage::new(&Url::parse(link).unwrap(), (), true).unwrap();
+        storage.check().await.unwrap();
+        let collection = &storage.open_collection("holidays").unwrap();
+        let discovery = &storage.discover_collections().await.unwrap();
+
+        assert_eq!(&collection, &discovery.first().unwrap());
+
+        let item_refs = collection.list().await.unwrap();
+
+        for item_ref in &item_refs {
+            let (_item, etag) = collection.get(&item_ref.href).await.unwrap();
+            // Might file if upstream file mutates between requests.
+            assert_eq!(etag, item_ref.etag);
+        }
+
+        let hrefs: Vec<&str> = item_refs.iter().map(|r| r.href.as_ref()).collect();
+        let many = collection.get_many(&hrefs.to_owned()).await.unwrap();
+
+        assert_eq!(many.len(), hrefs.len());
+        assert_eq!(many.len(), item_refs.len());
+        // TODO: compare their contents and etags, though these should all match.
     }
 }
