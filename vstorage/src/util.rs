@@ -4,6 +4,8 @@ use sha2::{Digest, Sha256};
 ///
 /// This is used as a fallback when a storage backend doesn't provide [`Etag`] values, or when an
 /// item is missing its `UID`.
+///
+/// [`Etag`]: crate::base::Etag
 pub fn hash<S: AsRef<str>>(input: S) -> String {
     format!("{:X}", Sha256::digest(input.as_ref()))
 }

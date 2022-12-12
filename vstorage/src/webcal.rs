@@ -143,6 +143,8 @@ impl Collection for WebCalCollection {
     ///
     /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. It is
     /// strongly recommended to use [`get_many`] instead.
+    ///
+    /// [`get_many`]: crate::base::Collection::get_many
     async fn get(&self, href: &str) -> Result<(Item, Etag)> {
         let raw = fetch_raw(&self.client, &self.url).await?;
 

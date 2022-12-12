@@ -56,6 +56,8 @@ pub trait Storage: Sized + Sync + Send {
     ///
     /// This method DOES NOT check the existence of the collection. If existence needs to be
     /// verified, use [`discover_collections`] to enumerate all collections instead.
+    ///
+    /// [`discover_collections`]: Self::discover_collections
     fn open_collection(&self, href: &str) -> Result<Self::Collection>;
 
     // NOTE: to sync a single-collection storage to a multi-collection storage #name=XXXX to the URL.
@@ -67,6 +69,8 @@ pub trait Storage: Sized + Sync + Send {
 /// The type of items contained is restricted by the underlying implementation.
 ///
 /// Collections never cache data locally. For reading items in bulk, prefer [`get_many`].
+///
+/// [`get_many`]: Self::get_many
 pub trait Collection: Sync + Send {
     /// A unique identifier for this collection.
     ///
