@@ -25,8 +25,8 @@ pub type Etag = String;
 ///
 /// Storages may have one or more [`Collection`]s (e.g.: calendars).
 pub trait Storage: Sized + Sync + Send {
-    // XXX TODO FIXME: keep in mind item types
-    // instances has one item type (e.g.: calendar only has todos)
+    // TODO: Will eventually need to support non-icalendar things here.
+    // TODO: Some calendar instances only allow a single item type (e.g.: events but not todos).
 
     /// Implementation-specific metadata.
     ///
