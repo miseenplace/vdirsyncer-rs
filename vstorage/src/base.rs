@@ -38,6 +38,8 @@ pub trait Storage: Sized + Sync + Send {
     type Collection: Collection; // ??????
 
     /// Creates a new storage instance based on the given URL.
+    // TODO: drop this method. It's oversimplified; too many things are not representable in a URL.
+    // E.g.: a CalDav instance uses DIGEST auth. Or pinning a TLS certificate.
     fn new(url: &Url, metadata: Self::Metadata, read_only: bool) -> Result<Self>;
 
     /// Checks that the storage works. This includes validating credentials, and reachability.
