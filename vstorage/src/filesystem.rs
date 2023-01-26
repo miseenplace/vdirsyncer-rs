@@ -12,7 +12,6 @@ use tokio::fs::{
     create_dir, metadata, read_dir, read_to_string, remove_dir_all, DirEntry, File, OpenOptions,
 };
 use tokio::io::AsyncWriteExt;
-use url::Url;
 
 use crate::base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage};
 
@@ -23,25 +22,23 @@ use crate::base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage};
 /// Each child directory is treated as `FilesystemCollection`]. Nested subdirectories are strictly
 /// not supported.
 pub struct FilesystemStorage {
-    path: PathBuf,
+    definition: Arc<FilesystemDefinition>,
     read_only: bool,
-    metadata: Arc<FilesystemMetadata>,
 }
 
 impl Storage for FilesystemStorage {
-    type Metadata = FilesystemMetadata;
+    type Definition = FilesystemDefinition;
     type Collection = FilesystemCollection;
 
-    fn new(url: &Url, metadata: FilesystemMetadata, read_only: bool) -> Result<Self> {
+    fn new(definition: FilesystemDefinition, read_only: bool) -> Result<Self> {
         Ok(FilesystemStorage {
-            path: path_from_url(url)?,
+            definition: Arc::from(definition),
             read_only,
-            metadata: Arc::from(metadata),
         })
     }
 
     async fn check(&self) -> Result<()> {
-        let meta = metadata(&self.path).await?;
+        let meta = metadata(&self.definition.path).await?;
 
         if meta.is_dir() {
             Ok(())
@@ -51,7 +48,7 @@ impl Storage for FilesystemStorage {
     }
 
     async fn discover_collections(&self) -> Result<Vec<FilesystemCollection>> {
-        let mut entries = read_dir(&self.path).await?;
+        let mut entries = read_dir(&self.definition.path).await?;
 
         let mut collections = Vec::new();
         while let Ok(entry) = entries.next_entry().await {
@@ -71,7 +68,7 @@ impl Storage for FilesystemStorage {
             collections.push(FilesystemCollection {
                 dir_name,
                 path: entry.path(),
-                metadata: self.metadata.clone(),
+                definition: self.definition.clone(),
             });
         }
 
@@ -95,7 +92,7 @@ impl Storage for FilesystemStorage {
         Ok(FilesystemCollection {
             dir_name: href.to_owned(),
             path,
-            metadata: self.metadata.clone(),
+            definition: self.definition.clone(),
         })
     }
 }
@@ -105,8 +102,8 @@ impl FilesystemStorage {
     //
     // Errors if the resulting path is not a child of the storage's directory.
     fn join_collection_href(&self, href: &str) -> Result<PathBuf> {
-        let path = self.path.join(href);
-        if path.parent() != Some(&self.path) {
+        let path = self.definition.path.join(href);
+        if path.parent() != Some(&self.definition.path) {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
                 "directory is not child of storage directory",
@@ -117,8 +114,9 @@ impl FilesystemStorage {
     }
 }
 
-/// Metadata for a storage instance.
-pub struct FilesystemMetadata {
+/// Definition for a storage instance.
+pub struct FilesystemDefinition {
+    pub path: PathBuf,
     /// Filename extension for items in a storage. Files with matching extension are treated a
     /// items for a collection, and all other files are ignored.
     pub extension: String,
@@ -131,7 +129,7 @@ pub struct FilesystemMetadata {
 pub struct FilesystemCollection {
     dir_name: String,
     path: PathBuf,
-    metadata: Arc<FilesystemMetadata>,
+    definition: Arc<FilesystemDefinition>,
 }
 
 impl Collection for FilesystemCollection {
@@ -197,7 +195,7 @@ impl Collection for FilesystemCollection {
     async fn add(&mut self, item: &Item) -> Result<ItemRef> {
         let href = item.ident();
         // TODO: check that href is a valid href, else, use a uuid.
-        let href = format!("{}.{}", href, self.metadata.extension);
+        let href = format!("{}.{}", href, self.definition.extension);
 
         let filename = self.path.join(&href);
         let mut file = OpenOptions::new()
@@ -241,12 +239,6 @@ impl Collection for FilesystemCollection {
     fn href(&self) -> &str {
         &self.dir_name
     }
-}
-
-fn path_from_url(url: &Url) -> Result<PathBuf> {
-    url
-        .to_file_path()
-        .map_err(|_| Error::from(ErrorKind::InvalidInput))
 }
 
 async fn etag_for_path<P: AsRef<Path>>(path: &Path) -> Result<Etag> {

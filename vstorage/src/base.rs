@@ -8,8 +8,6 @@
 use sha2::{Digest, Sha256};
 use std::io::Result;
 
-use url::Url;
-
 /// An identifier for a specific version of a resource.
 ///
 /// Etags are bound to a specific storage. A storage SHOULD return the same `Etag` for an item as
@@ -28,19 +26,17 @@ pub trait Storage: Sized + Sync + Send {
     // TODO: Will eventually need to support non-icalendar things here.
     // TODO: Some calendar instances only allow a single item type (e.g.: events but not todos).
 
-    /// Implementation-specific metadata.
+    /// Implementation-specific definition.
     ///
     /// This type carries configuration for storage instances, like TLS configuration for
     /// network-based storages, or file extensions for filesystem based storages.
-    type Metadata; // TODO: should be serde::Serialize?
+    type Definition; // TODO: should be serde::Serialize?
 
     /// Concrete collection type for this storage implementation.
     type Collection: Collection; // ??????
 
-    /// Creates a new storage instance based on the given URL.
-    // TODO: drop this method. It's oversimplified; too many things are not representable in a URL.
-    // E.g.: a CalDav instance uses DIGEST auth. Or pinning a TLS certificate.
-    fn new(url: &Url, metadata: Self::Metadata, read_only: bool) -> Result<Self>;
+    /// Creates a new storage instance.
+    fn new(definition: Self::Definition, read_only: bool) -> Result<Self>;
 
     /// Checks that the storage works. This includes validating credentials, and reachability.
     async fn check(&self) -> Result<()>;
@@ -61,9 +57,6 @@ pub trait Storage: Sized + Sync + Send {
     ///
     /// [`discover_collections`]: Self::discover_collections
     fn open_collection(&self, href: &str) -> Result<Self::Collection>;
-
-    // NOTE: to sync a single-collection storage to a multi-collection storage #name=XXXX to the URL.
-    //       (e.g.: a webical calendar to a local storage)
 }
 
 /// A collection may be an "addressbook" or a "calendar".

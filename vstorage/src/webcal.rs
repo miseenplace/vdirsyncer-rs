@@ -16,42 +16,40 @@ pub struct WebCalStorage {
     client: reqwest::Client,
 }
 
+pub struct WebCalDefinition {
+    url: Url,
+    collection_name: String,
+}
+
 impl Storage for WebCalStorage {
-    type Metadata = ();
+    type Definition = WebCalDefinition;
 
     type Collection = WebCalCollection;
 
     /// Create a new storage instance.
     ///
     ///
-    /// Unlike other [`Storage`] implementations, this one allows only a single collection. The id
-    /// of the collection MUST be provided as a URL fragment (e.g.: `#my-collection`).
+    /// Unlike other [`Storage`] implementations, this one allows only a single collection.
     ///
     /// The URL's scheme MUST be one of `http` or `https`.
-    fn new(url: &Url, _: Self::Metadata, read_only: bool) -> Result<Self> {
+    fn new(definition: Self::Definition, read_only: bool) -> Result<Self> {
         if !read_only {
             return Err(Error::new(
                 ErrorKind::Unsupported,
                 "webcal only support read-only storages",
             ));
         }
-        let fragment = url.fragment().ok_or_else(|| {
-            Error::new(
-                ErrorKind::InvalidInput,
-                "missing fragment with collection id",
-            )
-        })?;
         // NOTE: It would be nice to support `webcal://` here, but the Url crate won't allow
         // changing the scheme of such a Url.
-        if !["http", "https"].contains(&url.scheme()) {
+        if !["http", "https"].contains(&definition.url.scheme()) {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
                 "URL scheme must be http or https",
             ));
         };
         Ok(WebCalStorage {
-            url: Arc::new(url.clone()),
-            collection_name: fragment.to_owned(),
+            url: Arc::new(definition.url),
+            collection_name: definition.collection_name,
             client: reqwest::Client::new(),
         })
     }
@@ -263,10 +261,14 @@ mod test {
         use super::WebCalStorage;
         use crate::base::Collection;
         use crate::base::Storage;
+        use crate::webcal::WebCalDefinition;
         use url::Url;
 
-        let link = "https://www.officeholidays.com/ics/netherlands#holidays";
-        let storage = WebCalStorage::new(&Url::parse(link).unwrap(), (), true).unwrap();
+        let metdata = WebCalDefinition {
+            url: Url::parse("https://www.officeholidays.com/ics/netherlands").unwrap(),
+            collection_name: "holidays".to_string(),
+        };
+        let storage = WebCalStorage::new(metdata, true).unwrap();
         storage.check().await.unwrap();
         let collection = &storage.open_collection("holidays").unwrap();
         let discovery = &storage.discover_collections().await.unwrap();
