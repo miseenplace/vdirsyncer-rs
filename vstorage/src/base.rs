@@ -20,10 +20,10 @@ use url::Url;
 /// [MDN]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
 pub type Etag = String;
 
-/// A storage is a the highest level abstraction where items can be stored. It can be a remote
-/// CalDav server, a local filesystem, etc.
+/// A storage is the highest level abstraction where items can be stored. It can be a remote CalDav
+/// server, a local filesystem, etc.
 ///
-/// Storages may have one or more [`Collection`]s (e.g.: calendars).
+/// Storages may contain one or more [`Collection`]s (e.g.: calendars or address books).
 pub trait Storage: Sized + Sync + Send {
     // TODO: Will eventually need to support non-icalendar things here.
     // TODO: Some calendar instances only allow a single item type (e.g.: events but not todos).
