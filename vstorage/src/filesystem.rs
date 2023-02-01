@@ -15,7 +15,7 @@ use tokio::io::AsyncWriteExt;
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_stream::StreamExt;
 
-use crate::base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage};
+use crate::base::{Collection, Etag, Href, Item, ItemRef, MetadataKind, Storage};
 
 // TODO: atomic writes
 
@@ -172,6 +172,27 @@ impl Collection for FilesystemCollection {
         for href in hrefs {
             items.push(self.get(href).await?);
         }
+        Ok(items)
+    }
+
+    async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>> {
+        let mut read_dir = read_dir(&self.path).await?;
+
+        let mut items = Vec::new();
+        while let Ok(entry) = read_dir.next_entry().await {
+            let entry = entry.unwrap();
+            let href: String = entry
+                .file_name()
+                .to_str()
+                .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Filename is not valid UTF-8"))?
+                .into();
+            let etag = etag_for_direntry(&entry).await?;
+            let item = Item {
+                raw: read_to_string(&href).await?,
+            };
+            items.push((href, item, etag));
+        }
+
         Ok(items)
     }
 

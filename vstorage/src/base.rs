@@ -18,6 +18,12 @@ use std::io::Result;
 /// [MDN]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
 pub type Etag = String;
 
+/// The path to the item inside the collection.
+///
+/// For example, for CardDav collections this is the path of the entry inside the collection. For
+/// Filesystem, this the file's relative path, etc. `Href`s MUST be valid UTF-8 sequences.
+pub type Href = String;
+
 /// A storage is the highest level abstraction where items can be stored. It can be a remote CalDav
 /// server, a local filesystem, etc.
 ///
@@ -96,6 +102,9 @@ pub trait Collection: Sync + Send {
     /// required. Duplicate `href`s will be ignored.
     // XXX: This API is kinda bad. It's very all or nothing. If an individual item has issues, the whole query fails.
     async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Item, Etag)>>;
+
+    /// Fetch all items in the collection.
+    async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>>;
 
     /// Saves a new item into the collection
     async fn add(&mut self, item: &Item) -> Result<ItemRef>;

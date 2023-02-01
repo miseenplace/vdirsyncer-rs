@@ -6,7 +6,7 @@ use std::{
 use url::Url;
 
 use crate::{
-    base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage},
+    base::{Collection, Etag, Href, Item, ItemRef, MetadataKind, Storage},
     simple_component::Component,
 };
 
@@ -186,6 +186,27 @@ impl Collection for WebCalCollection {
                 let hash = crate::util::hash(&raw);
 
                 Ok((Item { raw }, hash))
+            })
+            .collect()
+    }
+
+    async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>> {
+        let raw = fetch_raw(&self.client, &self.url).await?;
+
+        // TODO: it would be best if the parser could operate on a stream, although that might
+        //       complicate inlining VTIMEZONEs that are at the end.
+        let calendar = Component::parse(raw);
+        let components = calendar
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
+            .subcomponents;
+
+        components
+            .iter()
+            .map(|c| {
+                let raw = c.raw();
+                let hash = crate::util::hash(&raw);
+
+                Ok((c.uid(), Item { raw }, hash))
             })
             .collect()
     }
