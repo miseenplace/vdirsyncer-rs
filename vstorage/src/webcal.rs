@@ -90,7 +90,7 @@ impl Storage for WebCalStorage {
     }
 
     fn open_collection(&self, href: &str) -> Result<Self::Collection> {
-        if Some(href) != self.url.fragment() {
+        if href != self.collection_name {
             return Err(Error::new(
                 ErrorKind::NotFound,
                 format!("this storage only contains the '{}' collection", href),
