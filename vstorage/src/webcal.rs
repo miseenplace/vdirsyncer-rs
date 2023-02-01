@@ -17,8 +17,8 @@ pub struct WebCalStorage {
 }
 
 pub struct WebCalDefinition {
-    url: Url,
-    collection_name: String,
+    pub url: Url,
+    pub collection_name: String,
 }
 
 impl Storage for WebCalStorage {
