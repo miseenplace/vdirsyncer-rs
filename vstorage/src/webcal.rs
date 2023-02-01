@@ -32,13 +32,8 @@ impl Storage for WebCalStorage {
     /// Unlike other [`Storage`] implementations, this one allows only a single collection.
     ///
     /// The URL's scheme MUST be one of `http` or `https`.
-    fn new(definition: Self::Definition, read_only: bool) -> Result<Self> {
-        if !read_only {
-            return Err(Error::new(
-                ErrorKind::Unsupported,
-                "webcal only support read-only storages",
-            ));
-        }
+    // TODO: might be best to have ReadOnly<Storage> as a wrapper that does all things RO.
+    fn new(definition: Self::Definition) -> Result<Self> {
         // NOTE: It would be nice to support `webcal://` here, but the Url crate won't allow
         // changing the scheme of such a Url.
         if !["http", "https"].contains(&definition.url.scheme()) {
@@ -289,7 +284,7 @@ mod test {
             url: Url::parse("https://www.officeholidays.com/ics/netherlands").unwrap(),
             collection_name: "holidays".to_string(),
         };
-        let storage = WebCalStorage::new(metdata, true).unwrap();
+        let storage = WebCalStorage::new(metdata).unwrap();
         storage.check().await.unwrap();
         let collection = &storage.open_collection("holidays").unwrap();
         let discovery = &storage.discover_collections().await.unwrap();

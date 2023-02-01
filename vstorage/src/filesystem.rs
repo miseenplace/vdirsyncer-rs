@@ -25,17 +25,15 @@ use crate::base::{Collection, Etag, Href, Item, ItemRef, MetadataKind, Storage};
 /// not supported.
 pub struct FilesystemStorage {
     definition: Arc<FilesystemDefinition>,
-    read_only: bool,
 }
 
 impl Storage for FilesystemStorage {
     type Definition = FilesystemDefinition;
     type Collection = FilesystemCollection;
 
-    fn new(definition: FilesystemDefinition, read_only: bool) -> Result<Self> {
+    fn new(definition: FilesystemDefinition) -> Result<Self> {
         Ok(FilesystemStorage {
             definition: Arc::from(definition),
-            read_only,
         })
     }
 

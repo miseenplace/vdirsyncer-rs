@@ -24,21 +24,15 @@ async fn main() {
     let url = Url::parse(raw_url.as_str()).expect("provided URL must be valid");
     let path = PathBuf::from(raw_path);
 
-    let webcal = WebCalStorage::new(
-        WebCalDefinition {
-            url,
-            collection_name: String::from("holidays_nl"),
-        },
-        true,
-    )
+    let webcal = WebCalStorage::new(WebCalDefinition {
+        url,
+        collection_name: String::from("holidays_nl"),
+    })
     .expect("can create webcal storage");
-    let mut fs = FilesystemStorage::new(
-        FilesystemDefinition {
-            path,
-            extension: String::from("ics"),
-        },
-        false,
-    )
+    let mut fs = FilesystemStorage::new(FilesystemDefinition {
+        path,
+        extension: String::from("ics"),
+    })
     .expect("can create fs storage");
 
     let webcal_collection = webcal

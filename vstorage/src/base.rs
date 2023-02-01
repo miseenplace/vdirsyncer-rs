@@ -42,7 +42,7 @@ pub trait Storage: Sized + Sync + Send {
     type Collection: Collection; // ??????
 
     /// Creates a new storage instance.
-    fn new(definition: Self::Definition, read_only: bool) -> Result<Self>;
+    fn new(definition: Self::Definition) -> Result<Self>;
 
     /// Checks that the storage works. This includes validating credentials, and reachability.
     async fn check(&self) -> Result<()>;

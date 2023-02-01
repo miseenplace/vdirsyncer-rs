@@ -12,3 +12,4 @@ pub mod filesystem;
 mod simple_component;
 pub mod util;
 pub mod webcal;
+pub mod readonly;
