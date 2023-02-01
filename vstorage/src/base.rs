@@ -5,7 +5,6 @@
 //!
 //! See [`Storage`] as an entry point to this module.
 
-use sha2::{Digest, Sha256};
 use std::io::Result;
 
 /// An identifier for a specific version of a resource.
@@ -185,7 +184,7 @@ impl Item {
         //  - Some props may be re-sorted, but the Item is still the same.
         //
         //  See vdirsyncer's vobject.py for details on this.
-        format!("{:X}", Sha256::digest(&(self.raw)))
+        crate::util::hash(&(self.raw))
     }
 
     /// A unique identifier for this item. Is either the UID (if any), or the hash of its contents.
