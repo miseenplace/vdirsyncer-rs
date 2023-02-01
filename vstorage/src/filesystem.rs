@@ -12,6 +12,8 @@ use tokio::fs::{
     create_dir, metadata, read_dir, read_to_string, remove_dir_all, DirEntry, File, OpenOptions,
 };
 use tokio::io::AsyncWriteExt;
+use tokio_stream::wrappers::ReadDirStream;
+use tokio_stream::StreamExt;
 
 use crate::base::{Collection, Etag, Item, ItemRef, MetadataKind, Storage};
 
@@ -134,11 +136,11 @@ pub struct FilesystemCollection {
 
 impl Collection for FilesystemCollection {
     async fn list(&self) -> Result<Vec<ItemRef>> {
-        let mut read_dir = read_dir(&self.path).await?;
+        let mut read_dir = ReadDirStream::new(read_dir(&self.path).await?);
 
         let mut items = Vec::new();
-        while let Ok(entry) = read_dir.next_entry().await {
-            let entry = entry.unwrap();
+        while let Some(entry) = read_dir.next().await {
+            let entry = entry?;
             let href = entry
                 .file_name()
                 .to_str()

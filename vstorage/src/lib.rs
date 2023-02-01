@@ -9,6 +9,6 @@
 
 pub mod base;
 pub mod filesystem;
-pub mod webcal;
-pub mod util;
 mod simple_component;
+pub mod util;
+pub mod webcal;
