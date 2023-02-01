@@ -1,3 +1,8 @@
+//! Implements reading entries from a remote webcal resource.
+//!
+//! Webcal is a de-facto standard, and is basically a single icalendar file hosted via http(s).
+//!
+//! See the [Webcal wikipedia page](https://en.wikipedia.org/wiki/Webcal).
 use reqwest::StatusCode;
 use std::{
     io::{Error, ErrorKind, Result},
@@ -10,14 +15,25 @@ use crate::{
     simple_component::Component,
 };
 
+/// A storage which exposes items in remote icalendar resource.
+///
+/// A webcal storage contains exactly one collection, which contains all the entires found in the
+/// remote resource. The name of this single collection must be specified via the
+/// [`WebCalDefinition::collection_name`] property.
+///
+/// This storage is a bit of an odd one (since in reality, there's no concept of collections in
+/// webcal. The extra abstraction layer is here merely to match the format of other storages.
 pub struct WebCalStorage {
-    url: Arc<Url>,
-    collection_name: String,
+    definition: Arc<WebCalDefinition>,
     client: reqwest::Client,
 }
 
+/// Definition for a [`WebCalStorage`].
+#[derive(Debug, PartialEq)]
 pub struct WebCalDefinition {
+    /// The URL of the remote icalendar resource. Must be HTTP or HTTPS.
     pub url: Url,
+    /// The name to be given to the single collection available.
     pub collection_name: String,
 }
 
@@ -28,11 +44,7 @@ impl Storage for WebCalStorage {
 
     /// Create a new storage instance.
     ///
-    ///
     /// Unlike other [`Storage`] implementations, this one allows only a single collection.
-    ///
-    /// The URL's scheme MUST be one of `http` or `https`.
-    // TODO: might be best to have ReadOnly<Storage> as a wrapper that does all things RO.
     fn new(definition: Self::Definition) -> Result<Self> {
         // NOTE: It would be nice to support `webcal://` here, but the Url crate won't allow
         // changing the scheme of such a Url.
@@ -43,15 +55,15 @@ impl Storage for WebCalStorage {
             ));
         };
         Ok(WebCalStorage {
-            url: Arc::new(definition.url),
-            collection_name: definition.collection_name,
+            definition: Arc::new(definition),
             client: reqwest::Client::new(),
         })
     }
 
+    /// Checks that the remove resource exists and whether it looks like an icalendar resource.
     async fn check(&self) -> Result<()> {
         // TODO: Should map status codes to io::Error. if 404 -> NotFound, etc.
-        let raw = fetch_raw(&self.client, &self.url).await?;
+        let raw = fetch_raw(&self.client, &self.definition.url).await?;
 
         if !raw.starts_with("BEGIN:VCALENDAR") {
             return Err(Error::new(
@@ -62,38 +74,41 @@ impl Storage for WebCalStorage {
         Ok(())
     }
 
+    /// Returns a single collection with the name specified in the definition.
     async fn discover_collections(&self) -> Result<Vec<Self::Collection>> {
         Ok(vec![WebCalCollection {
-            id: self.collection_name.to_owned(),
-            url: self.url.clone(),
+            definition: self.definition.clone(),
             client: self.client.clone(),
         }])
     }
 
+    /// Unsupported for this storage type.
     async fn create_collection(&mut self, _: &str) -> Result<Self::Collection> {
         Err(Error::new(
             ErrorKind::Unsupported,
-            "creating collections via webdav is not supported",
+            "creating collections via webcal is not supported",
         ))
     }
 
+    /// Unsupported for this storage type.
     async fn destroy_collection(&mut self, _: &str) -> Result<()> {
         Err(Error::new(
             ErrorKind::Unsupported,
-            "creating collections via webdav is not supported",
+            "creating collections via webcal is not supported",
         ))
     }
 
+    /// Usable only with the collection name specified in the definition. Any other name will
+    /// return [`ErrorKind::NotFound`]
     fn open_collection(&self, href: &str) -> Result<Self::Collection> {
-        if href != self.collection_name {
+        if href != self.definition.collection_name {
             return Err(Error::new(
                 ErrorKind::NotFound,
-                format!("this storage only contains the '{}' collection", href),
+                format!("this storage only contains the '{href}' collection"),
             ));
         }
         Ok(WebCalCollection {
-            id: self.collection_name.to_owned(),
-            url: self.url.clone(),
+            definition: self.definition.clone(),
             client: self.client.clone(),
         })
     }
@@ -101,20 +116,23 @@ impl Storage for WebCalStorage {
 
 #[derive(Debug)]
 pub struct WebCalCollection {
-    id: String,
-    url: Arc<Url>,
+    definition: Arc<WebCalDefinition>,
     client: reqwest::Client,
 }
 
 impl PartialEq for &WebCalCollection {
     fn eq(&self, other: &Self) -> bool {
-        (&self.id, &self.url).eq(&(&other.id, &other.url))
+        self.definition.eq(&other.definition)
     }
 }
 
 impl Collection for WebCalCollection {
+    /// Enumerates items in this collection.
+    ///
+    /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. If some
+    /// items need to be read as well, it is generally best to use [`WebCalCollection::get_all`] instead.
     async fn list(&self) -> Result<Vec<ItemRef>> {
-        let raw = fetch_raw(&self.client, &self.url).await?;
+        let raw = fetch_raw(&self.client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -135,11 +153,11 @@ impl Collection for WebCalCollection {
     /// Returns a single item from the collection.
     ///
     /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. It is
-    /// strongly recommended to use [`get_many`] instead.
+    /// strongly recommended to use [`WebCalCollection::get_all`] instead.
     ///
     /// [`get_many`]: crate::base::Collection::get_many
     async fn get(&self, href: &str) -> Result<(Item, Etag)> {
-        let raw = fetch_raw(&self.client, &self.url).await?;
+        let raw = fetch_raw(&self.client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -158,8 +176,12 @@ impl Collection for WebCalCollection {
         Ok((Item { raw }, hash))
     }
 
+    /// Returns multiple items from the collection.
+    ///
+    /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. It is
+    /// generally best to use [`WebCalCollection::get_all`] instead.
     async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Item, Etag)>> {
-        let raw = fetch_raw(&self.client, &self.url).await?;
+        let raw = fetch_raw(&self.client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -185,8 +207,11 @@ impl Collection for WebCalCollection {
             .collect()
     }
 
+    /// Fetch all items in the collection.
+    ///
+    /// Performs a single HTTP(s) request to fetch all items.
     async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>> {
-        let raw = fetch_raw(&self.client, &self.url).await?;
+        let raw = fetch_raw(&self.client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -206,36 +231,40 @@ impl Collection for WebCalCollection {
             .collect()
     }
 
+    /// Unsupported for this storage type.
     async fn add(&mut self, _: &Item) -> Result<ItemRef> {
         Err(Error::new(
             ErrorKind::Unsupported,
-            "creating collections via webdav is not supported",
+            "creating collections via webcal is not supported",
         ))
     }
 
+    /// Unsupported for this storage type.
     async fn update(&mut self, _: &str, _: &str, _: &Item) -> Result<Etag> {
         Err(Error::new(
             ErrorKind::Unsupported,
-            "updating items via webdav is not supported",
+            "updating items via webcal is not supported",
         ))
     }
 
+    /// Unsupported for this storage type.
     async fn set_meta(&mut self, _: MetadataKind, _: &str) -> Result<()> {
         Err(Error::new(
             ErrorKind::Unsupported,
-            "setting metadata via webdav is not supported",
+            "setting metadata via webcal is not supported",
         ))
     }
 
+    /// Unsupported for this storage type.
     async fn get_meta(&self, _: MetadataKind) -> Result<String> {
         Err(Error::new(
             ErrorKind::Unsupported,
-            "getting metadata via webdav is not supported",
+            "getting metadata via webcal is not supported",
         ))
     }
 
     fn id(&self) -> &str {
-        return self.id.as_str();
+        self.definition.collection_name.as_str()
     }
 
     fn href(&self) -> &str {
