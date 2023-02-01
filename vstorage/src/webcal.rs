@@ -114,6 +114,13 @@ impl Storage for WebCalStorage {
     }
 }
 
+/// A collection of items in a webcal storage.
+///
+/// For this collection type, the `Href` is the UID of the entries. There is no other way to
+/// address individual entries, so this is essentially the only choice.
+///
+/// The fact that `Href = UID` is a quirk specific to this storage type, and should not be relied
+/// upon in general.
 #[derive(Debug)]
 pub struct WebCalCollection {
     definition: Arc<WebCalDefinition>,
@@ -141,9 +148,13 @@ impl Collection for WebCalCollection {
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .subcomponents
             .iter()
-            .map(|c| ItemRef {
-                href: c.uid(),
-                etag: crate::util::hash(c.raw()),
+            .map(|c| {
+                let item = Item { raw: c.raw() };
+
+                ItemRef {
+                    href: item.ident(),
+                    etag: crate::util::hash(c.raw()),
+                }
             })
             .collect();
 
@@ -165,15 +176,20 @@ impl Collection for WebCalCollection {
         let components = calendar
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .subcomponents;
-        let component = components
+        let item = components
             .iter()
-            .find(|c| c.uid() == href)
+            .find_map(|c| {
+                let item = Item { raw: c.raw() };
+                if item.ident() == href {
+                    Some(item)
+                } else {
+                    None
+                }
+            })
             .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
 
-        let raw = component.raw();
-        let hash = crate::util::hash(&raw);
-
-        Ok((Item { raw }, hash))
+        let hash = crate::util::hash(&item.raw);
+        Ok((item, hash))
     }
 
     /// Returns multiple items from the collection.
@@ -186,23 +202,21 @@ impl Collection for WebCalCollection {
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
         let calendar = Component::parse(raw);
-        let mut components = calendar
+        let components = calendar
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .subcomponents;
 
-        // TODO: we need to fail if an href is missing from upstream.
-        // Although this can be done externally to this method? I'm not sure the API should
-        // guarantee it, since upstream APIs don't seem to do so.
-        // This needs to be though about. A lot.
-        components.retain(|c| hrefs.contains(&c.uid().as_ref()));
-
         components
             .iter()
-            .map(|c| {
+            .filter_map(|c| {
                 let raw = c.raw();
-                let hash = crate::util::hash(&raw);
-
-                Ok((Item { raw }, hash))
+                let item = Item { raw };
+                if hrefs.contains(&(item.ident().as_ref())) {
+                    let hash = crate::util::hash(&item.raw);
+                    Some(Ok((item, hash)))
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -225,8 +239,9 @@ impl Collection for WebCalCollection {
             .map(|c| {
                 let raw = c.raw();
                 let hash = crate::util::hash(&raw);
+                let item = Item { raw };
 
-                Ok((c.uid(), Item { raw }, hash))
+                Ok((item.ident(), item, hash))
             })
             .collect()
     }

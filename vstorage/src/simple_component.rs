@@ -140,17 +140,6 @@ impl Component {
         Ok(())
     }
 
-    // HACK?
-    pub(crate) fn uid(&self) -> String {
-        for line in &self.lines {
-            if let Some(uid) = line.strip_prefix("UID:") {
-                return uid.to_string();
-            }
-        }
-
-        "FAILED!".to_string()
-    }
-
     pub(crate) fn raw(&self) -> String {
         // FIXME: this is horribly inefficent.
         let mut raw = String::new();
