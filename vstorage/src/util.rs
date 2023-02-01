@@ -1,3 +1,4 @@
+//! Miscellaneous helpers.
 use sha2::{Digest, Sha256};
 
 /// Return the SHA256 hash of a string.

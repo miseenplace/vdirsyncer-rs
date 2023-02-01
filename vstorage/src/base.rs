@@ -131,7 +131,7 @@ pub struct ItemRef {
 
 /// Metadata types supported by storages.
 ///
-/// See also [`Collection::set_meta`]
+/// See also [`Collection::get_meta`] and [`Collection::set_meta`].
 #[non_exhaustive]
 #[derive(Copy, Clone)]
 pub enum MetadataKind {
@@ -148,7 +148,7 @@ pub enum MetadataKind {
 ///
 /// Note that this is not a proper validating parser for icalendar or vcard; it's a very simple
 /// one with the sole purpose of extracing a UID. Proper parsing of components is out of scope,
-/// since we want to sync potentially invalid items too.
+/// since we want to enable operating on potentially invalid items too.
 #[derive(Debug)]
 pub struct Item {
     pub(crate) raw: String,
