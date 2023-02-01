@@ -196,7 +196,7 @@ impl Collection for WebCalCollection {
     ///
     /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. It is
     /// generally best to use [`WebCalCollection::get_all`] instead.
-    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Item, Etag)>> {
+    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Href, Item, Etag)>> {
         let raw = fetch_raw(&self.client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
@@ -213,7 +213,7 @@ impl Collection for WebCalCollection {
                 let item = Item { raw };
                 if hrefs.contains(&(item.ident().as_ref())) {
                     let hash = crate::util::hash(&item.raw);
-                    Some(Ok((item, hash)))
+                    Some(Ok((item.ident(), item, hash)))
                 } else {
                     None
                 }

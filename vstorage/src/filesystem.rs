@@ -164,11 +164,12 @@ impl Collection for FilesystemCollection {
         Ok((item, etag))
     }
 
-    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Item, Etag)>> {
+    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Href, Item, Etag)>> {
         // No specialisation for this type; it's fast enough for now.
         let mut items = Vec::with_capacity(hrefs.len());
         for href in hrefs {
-            items.push(self.get(href).await?);
+            let (item, etag) = self.get(href).await?;
+            items.push((String::from(*href), item, etag));
         }
         Ok(items)
     }

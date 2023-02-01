@@ -94,7 +94,7 @@ impl<C: Collection> Collection for ReadOnlyCollection<C> {
     async fn get_many(
         &self,
         hrefs: &[&str],
-    ) -> Result<Vec<(crate::base::Item, crate::base::Etag)>> {
+    ) -> Result<Vec<(crate::base::Href, crate::base::Item, crate::base::Etag)>> {
         self.inner.get_many(hrefs).await
     }
 

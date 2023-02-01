@@ -103,7 +103,7 @@ pub trait Collection: Sync + Send {
     /// Fetch multiple items. Similar to [`Collection::get`], but optimised to minimise the amount of IO
     /// required. Duplicate `href`s will be ignored.
     // XXX: This API is kinda bad. It's very all or nothing. If an individual item has issues, the whole query fails.
-    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Item, Etag)>>;
+    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Href, Item, Etag)>>;
 
     /// Fetch all items in the collection.
     async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>>;
