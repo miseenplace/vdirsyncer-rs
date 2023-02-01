@@ -2,6 +2,12 @@
 //! It DOES NOT synchronise items; it does a blind one-way copy.
 //!
 //! This is mostly a proof of concept of the basic storage implementations.
+//!
+//! Usage:
+//!
+//! ```
+//! cargo run --example=webcal_to_vdir https://www.officeholidays.com/ics/netherlands /tmp/holidays
+//! ```
 
 use std::path::PathBuf;
 use url::Url;
