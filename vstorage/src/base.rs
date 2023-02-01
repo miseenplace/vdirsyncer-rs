@@ -124,7 +124,7 @@ pub trait Collection: Sync + Send {
 
 /// A reference to an [`Item`] inside a collection.
 pub struct ItemRef {
-    pub href: String, // XXX: Am I sure this can only be utf8?
+    pub href: String, // TODO: This should be parametrized, or I should document the restriction.
     pub etag: Etag,
 }
 
