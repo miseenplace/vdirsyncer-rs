@@ -24,17 +24,18 @@ pub type Etag = String;
 pub type Href = String;
 
 /// A storage is the highest level abstraction where items can be stored. It can be a remote CalDav
-/// server, a local filesystem, etc.
+/// account, a local filesystem, etc.
 ///
-/// Storages may contain one or more [`Collection`]s (e.g.: calendars or address books).
+/// Each storage may contain one or more [`Collection`]s (e.g.: calendars or address books).
 pub trait Storage: Sized + Sync + Send {
     // TODO: Will eventually need to support non-icalendar things here.
     // TODO: Some calendar instances only allow a single item type (e.g.: events but not todos).
 
     /// Implementation-specific definition.
     ///
-    /// This type carries configuration for storage instances, like TLS configuration for
-    /// network-based storages, or file extensions for filesystem based storages.
+    /// This type carries any configuration required to define a storage instances. This include
+    /// this like URL or TLS for network-based storages, or path and file extensions for filesystem
+    /// based storages.
     type Definition; // TODO: should be serde::Serialize?
 
     /// Concrete collection type for this storage implementation.
@@ -58,13 +59,11 @@ pub trait Storage: Sized + Sync + Send {
     /// Open an existing collection.
     ///
     /// This method DOES NOT check the existence of the collection. If existence needs to be
-    /// verified, use [`discover_collections`] to enumerate all collections instead.
-    ///
-    /// [`discover_collections`]: Self::discover_collections
+    /// verified, use [`Self::discover_collections`] to enumerate all collections instead.
     fn open_collection(&self, href: &str) -> Result<Self::Collection>;
 }
 
-/// A collection may be an "addressbook" or a "calendar".
+/// A collection may, for example, be an address book or a calendar.
 ///
 /// The type of items contained is restricted by the underlying implementation. Collections contain
 /// zero or more items (e.g.: an address book contains events). Each item is addressed by an
