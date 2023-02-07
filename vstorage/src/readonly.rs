@@ -52,11 +52,10 @@ impl<S: Storage> Storage for ReadOnlyStorage<S> {
     }
 
     async fn discover_collections(&self) -> Result<Vec<Self::Collection>> {
-        self.inner.discover_collections().await.map(|v| {
-            v.into_iter()
-                .map(|c| ReadOnlyCollection { inner: c })
-                .collect()
-        })
+        self.inner
+            .discover_collections()
+            .await
+            .map(|v| v.into_iter().map(S::Collection::into).collect())
     }
 
     async fn create_collection(&mut self, _href: &str) -> Result<Self::Collection> {
