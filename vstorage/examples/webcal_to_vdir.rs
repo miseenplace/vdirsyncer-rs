@@ -44,27 +44,29 @@ async fn main() {
     let webcal_collection = webcal
         .open_collection("holidays_nl")
         .expect("can open webcal collection");
-    let mut fs_collection = fs
+    let fs_collection = fs
         .create_collection("holidays_nl")
         .await
         .expect("can create fs collection");
 
-    for (_href, item, _etag) in webcal_collection
-        .get_all()
-        .await
-        .expect("webcal remote has items")
-    {
-        fs_collection
+    let copied = copy_collection(Box::new(webcal_collection), Box::new(fs_collection)).await;
+
+    println!("Copied {copied} items");
+}
+
+/// Copies from `source` to `target` and returns the amount of items copied.
+///
+/// NOTE: This function serves an extra purpose: the validates that the `Collection` trait is
+/// object safe and works well when used in such way.
+async fn copy_collection(source: Box<dyn Collection>, mut target: Box<dyn Collection>) -> usize {
+    let mut count = 0;
+    for (_href, item, _etag) in source.get_all().await.expect("webcal remote has items") {
+        count += 1;
+        target
             .add(&item)
             .await
             .expect("write to local filesystem collection");
     }
 
-    let count = fs_collection
-        .list()
-        .await
-        .expect("list items in filesystem collection")
-        .len();
-
-    println!("Copied {count} items");
+    count
 }

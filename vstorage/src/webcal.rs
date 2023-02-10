@@ -3,6 +3,7 @@
 //! Webcal is a de-facto standard, and is basically a single icalendar file hosted via http(s).
 //!
 //! See the [Webcal wikipedia page](https://en.wikipedia.org/wiki/Webcal).
+use async_trait::async_trait;
 use reqwest::StatusCode;
 use std::{
     io::{Error, ErrorKind, Result},
@@ -37,6 +38,7 @@ pub struct WebCalDefinition {
     pub collection_name: String,
 }
 
+#[async_trait]
 impl Storage for WebCalStorage {
     type Definition = WebCalDefinition;
 
@@ -133,6 +135,7 @@ impl PartialEq for &WebCalCollection {
     }
 }
 
+#[async_trait]
 impl Collection for WebCalCollection {
     /// Enumerates items in this collection.
     ///

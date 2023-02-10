@@ -5,6 +5,8 @@
 //!
 //! [`ReadOnlyFilesystem`]: std::io::ErrorKind::ReadOnlyFilesystem
 
+use async_trait::async_trait;
+
 use crate::base::Collection;
 use crate::base::Storage;
 use std::io;
@@ -36,6 +38,7 @@ pub struct ReadOnlyCollection<C: Collection> {
     inner: C,
 }
 
+#[async_trait]
 impl<S: Storage> Storage for ReadOnlyStorage<S> {
     type Definition = S::Definition;
 
@@ -73,6 +76,7 @@ impl<S: Storage> Storage for ReadOnlyStorage<S> {
     }
 }
 
+#[async_trait]
 impl<C: Collection> Collection for ReadOnlyCollection<C> {
     fn id(&self) -> &str {
         self.inner.id()

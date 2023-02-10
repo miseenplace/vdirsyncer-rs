@@ -8,6 +8,7 @@ use std::{
     io::{Error, ErrorKind, Result},
     os::unix::prelude::MetadataExt,
 };
+use async_trait::async_trait;
 use tokio::fs::{
     create_dir, metadata, read_dir, read_to_string, remove_dir_all, DirEntry, File, OpenOptions,
 };
@@ -27,6 +28,7 @@ pub struct FilesystemStorage {
     definition: Arc<FilesystemDefinition>,
 }
 
+#[async_trait]
 impl Storage for FilesystemStorage {
     type Definition = FilesystemDefinition;
     type Collection = FilesystemCollection;
@@ -132,6 +134,7 @@ pub struct FilesystemCollection {
     definition: Arc<FilesystemDefinition>,
 }
 
+#[async_trait]
 impl Collection for FilesystemCollection {
     async fn list(&self) -> Result<Vec<ItemRef>> {
         let mut read_dir = ReadDirStream::new(read_dir(&self.path).await?);

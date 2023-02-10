@@ -7,6 +7,8 @@
 
 use std::io::Result;
 
+use async_trait::async_trait;
+
 /// An identifier for a specific version of a resource.
 ///
 /// Etags are bound to a specific storage. A storage SHOULD return the same `Etag` for an item as
@@ -27,6 +29,7 @@ pub type Href = String;
 /// account, a local filesystem, etc.
 ///
 /// Each storage may contain one or more [`Collection`]s (e.g.: calendars or address books).
+#[async_trait]
 pub trait Storage: Sized + Sync + Send {
     // TODO: Will eventually need to support non-icalendar things here.
     // TODO: Some calendar instances only allow a single item type (e.g.: events but not todos).
@@ -72,6 +75,7 @@ pub trait Storage: Sized + Sync + Send {
 /// Collections never cache data locally. For reading items in bulk, prefer [`get_many`].
 ///
 /// [`get_many`]: Self::get_many
+#[async_trait]
 pub trait Collection: Sync + Send {
     /// A unique identifier for this collection.
     ///
@@ -213,6 +217,7 @@ mod tests {
     // so this is not really a problem.
 
     use super::Item;
+    use crate::base::Collection;
 
     fn item_from_raw(raw: String) -> Item {
         Item { raw }
@@ -278,5 +283,11 @@ mod tests {
             item.ident(),
             "23A1B4246052E5BBB7AED65EDD759EBB03EF314DB055C109716D0301F9AC8E19"
         );
+    }
+
+    #[test]
+    fn test_collection_is_object_safe() {
+        #[allow(dead_code)]
+        fn dummy(_: Box<dyn Collection>) {}
     }
 }
