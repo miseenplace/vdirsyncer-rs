@@ -13,7 +13,7 @@ pub(crate) struct Component {
     pub(crate) subcomponents: Vec<Component>,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub(crate) enum ComponentError {
     /// An unknown (or not implemented) kind of component was found. E.g.: `BEGIN:VUNSUPPORTED`.
     #[error("unknown (or unimplemented) kind of component: {0}")]
@@ -49,10 +49,6 @@ impl Component {
     // XXX: This is ugly and inefficent.
     // The general ideal (as copied from the python edition) is great, but the impl is bad.
     /// Parse a component from a raw string input.
-    ///
-    /// # Panics
-    ///
-    /// Panics if there's a missing `END:` line, and with a few other inconsistencies.
     pub(crate) fn parse(input: String) -> Result<Component, ComponentError> {
         let mut root: Option<Component> = None;
         let mut stack = Vec::new();
@@ -162,7 +158,9 @@ impl Component {
     }
 }
 
+#[cfg(test)]
 mod test {
+    use crate::simple_component::ComponentError;
 
     #[test]
     fn test_parse_and_split_collection() {
@@ -360,5 +358,27 @@ mod test {
                 },
             )
         ); // end assert
+    }
+
+    #[test]
+    fn test_missing_end() {
+        use super::Component;
+
+        let calendar = vec![
+            "BEGIN:VCALENDAR",
+            "BEGIN:VTIMEZONE",
+            "TZID:Europe/Rome",
+            "END:VTIMEZONE",
+            "BEGIN:VEVENT",
+            "SUMMARY:This event is probably invalid due to missing fields",
+            "UID:11bb6bed-c29b-4999-a627-12dee35f8395",
+            "END:VEVENT",
+        ]
+        .join("\r\n");
+
+        assert_eq!(
+            Component::parse(calendar),
+            Err(ComponentError::UnterminatedComponent)
+        );
     }
 }
