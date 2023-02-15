@@ -12,7 +12,7 @@ use std::{
 use url::Url;
 
 use crate::{
-    base::{Collection, Etag, Href, Item, ItemRef, MetadataKind, Storage},
+    base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage},
     simple_component::Component,
 };
 
@@ -38,30 +38,28 @@ pub struct WebCalDefinition {
     pub collection_name: String,
 }
 
-#[async_trait]
-impl Storage for WebCalStorage {
-    type Definition = WebCalDefinition;
-
-    type Collection = WebCalCollection;
-
+impl Definition for WebCalDefinition {
     /// Create a new storage instance.
     ///
     /// Unlike other [`Storage`] implementations, this one allows only a single collection.
-    fn new(definition: Self::Definition) -> Result<Self> {
+    fn storage(self) -> Result<Box<dyn Storage>> {
         // NOTE: It would be nice to support `webcal://` here, but the Url crate won't allow
         // changing the scheme of such a Url.
-        if !["http", "https"].contains(&definition.url.scheme()) {
+        if !["http", "https"].contains(&self.url.scheme()) {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
                 "URL scheme must be http or https",
             ));
         };
-        Ok(WebCalStorage {
-            definition: Arc::new(definition),
+        Ok(Box::from(WebCalStorage {
+            definition: Arc::new(self),
             client: reqwest::Client::new(),
-        })
+        }))
     }
+}
 
+#[async_trait]
+impl Storage for WebCalStorage {
     /// Checks that the remove resource exists and whether it looks like an icalendar resource.
     async fn check(&self) -> Result<()> {
         // TODO: Should map status codes to io::Error. if 404 -> NotFound, etc.
@@ -77,15 +75,15 @@ impl Storage for WebCalStorage {
     }
 
     /// Returns a single collection with the name specified in the definition.
-    async fn discover_collections(&self) -> Result<Vec<Self::Collection>> {
-        Ok(vec![WebCalCollection {
+    async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
+        Ok(vec![Box::from(WebCalCollection {
             definition: self.definition.clone(),
             client: self.client.clone(),
-        }])
+        })])
     }
 
     /// Unsupported for this storage type.
-    async fn create_collection(&mut self, _: &str) -> Result<Self::Collection> {
+    async fn create_collection(&mut self, _: &str) -> Result<Box<dyn Collection>> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "creating collections via webcal is not supported",
@@ -102,17 +100,17 @@ impl Storage for WebCalStorage {
 
     /// Usable only with the collection name specified in the definition. Any other name will
     /// return [`ErrorKind::NotFound`]
-    fn open_collection(&self, href: &str) -> Result<Self::Collection> {
+    fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
         if href != self.definition.collection_name {
             return Err(Error::new(
                 ErrorKind::NotFound,
                 format!("this storage only contains the '{href}' collection"),
             ));
         }
-        Ok(WebCalCollection {
+        Ok(Box::from(WebCalCollection {
             definition: self.definition.clone(),
             client: self.client.clone(),
-        })
+        }))
     }
 }
 
@@ -123,7 +121,6 @@ impl Storage for WebCalStorage {
 ///
 /// The fact that `Href = UID` is a quirk specific to this storage type, and should not be relied
 /// upon in general.
-#[derive(Debug)]
 pub struct WebCalCollection {
     definition: Arc<WebCalDefinition>,
     client: reqwest::Client,
@@ -314,16 +311,15 @@ async fn fetch_raw(client: &reqwest::Client, url: &Url) -> Result<String> {
     Ok(raw)
 }
 
+#[cfg(test)]
 mod test {
+    use crate::base::Definition;
 
     // FIXME: only run this test with a dedicated flag for networked test.
     // FIXME: use a webcal link hosted by me.
     // TODO: these are just validation tests and not suitable as a keeper.
     #[tokio::test]
     async fn test_dummy() {
-        use super::WebCalStorage;
-        use crate::base::Collection;
-        use crate::base::Storage;
         use crate::webcal::WebCalDefinition;
         use url::Url;
 
@@ -331,12 +327,12 @@ mod test {
             url: Url::parse("https://www.officeholidays.com/ics/netherlands").unwrap(),
             collection_name: "holidays".to_string(),
         };
-        let storage = WebCalStorage::new(metdata).unwrap();
+        let storage = metdata.storage().unwrap();
         storage.check().await.unwrap();
         let collection = &storage.open_collection("holidays").unwrap();
         let discovery = &storage.discover_collections().await.unwrap();
 
-        assert_eq!(&collection, &discovery.first().unwrap());
+        assert_eq!(&collection.id(), &discovery.first().unwrap().id());
 
         let item_refs = collection.list().await.unwrap();
 

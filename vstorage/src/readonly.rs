@@ -34,34 +34,28 @@ pub struct ReadOnlyStorage<S: Storage> {
 }
 
 /// A wrapper around a [`Collection`] that disallows any write operations.
-pub struct ReadOnlyCollection<C: Collection> {
-    inner: C,
+pub struct ReadOnlyCollection {
+    inner: Box<dyn Collection>,
 }
 
 #[async_trait]
 impl<S: Storage> Storage for ReadOnlyStorage<S> {
-    type Definition = S::Definition;
-
-    type Collection = ReadOnlyCollection<S::Collection>;
-
-    fn new(definition: Self::Definition) -> Result<Self> {
-        Ok(Self {
-            inner: S::new(definition)?,
-        })
-    }
-
     async fn check(&self) -> Result<()> {
         self.inner.check().await
     }
 
-    async fn discover_collections(&self) -> Result<Vec<Self::Collection>> {
-        self.inner
-            .discover_collections()
-            .await
-            .map(|v| v.into_iter().map(S::Collection::into).collect())
+    async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
+        self.inner.discover_collections().await.map(|v| {
+            v.into_iter()
+                .map(|c| {
+                    let b: Box<dyn Collection> = Box::from(ReadOnlyCollection::from(c));
+                    b
+                })
+                .collect()
+        })
     }
 
-    async fn create_collection(&mut self, _href: &str) -> Result<Self::Collection> {
+    async fn create_collection(&mut self, _href: &str) -> Result<Box<dyn Collection>> {
         Err(io::ErrorKind::ReadOnlyFilesystem.into())
     }
 
@@ -69,15 +63,16 @@ impl<S: Storage> Storage for ReadOnlyStorage<S> {
         Err(io::ErrorKind::ReadOnlyFilesystem.into())
     }
 
-    fn open_collection(&self, href: &str) -> Result<Self::Collection> {
-        self.inner
-            .open_collection(href)
-            .map(|c| ReadOnlyCollection { inner: c })
+    fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
+        self.inner.open_collection(href).map(|c| {
+            let b: Box<dyn Collection> = Box::from(ReadOnlyCollection::from(c));
+            b
+        })
     }
 }
 
 #[async_trait]
-impl<C: Collection> Collection for ReadOnlyCollection<C> {
+impl Collection for ReadOnlyCollection {
     fn id(&self) -> &str {
         self.inner.id()
     }
@@ -135,8 +130,8 @@ impl<S: Storage> From<S> for ReadOnlyStorage<S> {
     }
 }
 
-impl<C: Collection> From<C> for ReadOnlyCollection<C> {
-    fn from(value: C) -> Self {
+impl From<Box<dyn Collection>> for ReadOnlyCollection {
+    fn from(value: Box<dyn Collection>) -> Self {
         Self { inner: value }
     }
 }

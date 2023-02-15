@@ -12,11 +12,9 @@
 use std::path::PathBuf;
 use url::Url;
 use vstorage::base::Collection;
-use vstorage::base::Storage;
+use vstorage::base::Definition;
 use vstorage::filesystem::FilesystemDefinition;
-use vstorage::filesystem::FilesystemStorage;
 use vstorage::webcal::WebCalDefinition;
-use vstorage::webcal::WebCalStorage;
 
 #[tokio::main]
 async fn main() {
@@ -30,15 +28,17 @@ async fn main() {
     let url = Url::parse(raw_url.as_str()).expect("provided URL must be valid");
     let path = PathBuf::from(raw_path);
 
-    let webcal = WebCalStorage::new(WebCalDefinition {
+    let webcal = WebCalDefinition {
         url,
         collection_name: String::from("holidays_nl"),
-    })
+    }
+    .storage()
     .expect("can create webcal storage");
-    let mut fs = FilesystemStorage::new(FilesystemDefinition {
+    let mut fs = FilesystemDefinition {
         path,
         extension: String::from("ics"),
-    })
+    }
+    .storage()
     .expect("can create fs storage");
 
     let webcal_collection = webcal
@@ -49,7 +49,7 @@ async fn main() {
         .await
         .expect("can create fs collection");
 
-    let copied = copy_collection(Box::new(webcal_collection), Box::new(fs_collection)).await;
+    let copied = copy_collection(webcal_collection, fs_collection).await;
 
     println!("Copied {copied} items");
 }

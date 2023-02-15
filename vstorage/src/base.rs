@@ -25,36 +25,32 @@ pub type Etag = String;
 /// Filesystem, this the file's relative path, etc. `Href`s MUST be valid UTF-8 sequences.
 pub type Href = String;
 
+/// Implementation-specific definition.
+///
+/// This type carries any configuration required to define a storage instances. This include
+/// this like URL or TLS for network-based storages, or path and file extensions for filesystem
+/// based storages.
+pub trait Definition: Sync + Send {
+    fn storage(self) -> Result<Box<dyn Storage>>;
+}
+
 /// A storage is the highest level abstraction where items can be stored. It can be a remote CalDav
 /// account, a local filesystem, etc.
 ///
 /// Each storage may contain one or more [`Collection`]s (e.g.: calendars or address books).
 #[async_trait]
-pub trait Storage: Sized + Sync + Send {
+pub trait Storage: Sync + Send {
     // TODO: Will eventually need to support non-icalendar things here.
     // TODO: Some calendar instances only allow a single item type (e.g.: events but not todos).
-
-    /// Implementation-specific definition.
-    ///
-    /// This type carries any configuration required to define a storage instances. This include
-    /// this like URL or TLS for network-based storages, or path and file extensions for filesystem
-    /// based storages.
-    type Definition; // TODO: should be serde::Serialize?
-
-    /// Concrete collection type for this storage implementation.
-    type Collection: Collection; // ??????
-
-    /// Creates a new storage instance.
-    fn new(definition: Self::Definition) -> Result<Self>;
 
     /// Checks that the storage works. This includes validating credentials, and reachability.
     async fn check(&self) -> Result<()>;
 
     /// Finds existing collections for this storage.
-    async fn discover_collections(&self) -> Result<Vec<Self::Collection>>;
+    async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>>;
 
     /// Creates a new collection.
-    async fn create_collection(&mut self, href: &str) -> Result<Self::Collection>;
+    async fn create_collection(&mut self, href: &str) -> Result<Box<dyn Collection>>;
 
     /// Deletes an existing collection.
     async fn destroy_collection(&mut self, href: &str) -> Result<()>;
@@ -63,7 +59,7 @@ pub trait Storage: Sized + Sync + Send {
     ///
     /// This method DOES NOT check the existence of the collection. If existence needs to be
     /// verified, use [`Self::discover_collections`] to enumerate all collections instead.
-    fn open_collection(&self, href: &str) -> Result<Self::Collection>;
+    fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>>;
 }
 
 /// A collection may, for example, be an address book or a calendar.
@@ -218,6 +214,7 @@ mod tests {
 
     use super::Item;
     use crate::base::Collection;
+    use crate::base::Storage;
 
     fn item_from_raw(raw: String) -> Item {
         Item { raw }
@@ -283,6 +280,12 @@ mod tests {
             item.ident(),
             "23A1B4246052E5BBB7AED65EDD759EBB03EF314DB055C109716D0301F9AC8E19"
         );
+    }
+
+    #[test]
+    fn test_storage_is_object_safe() {
+        #[allow(dead_code)]
+        fn dummy(_: Box<dyn Storage>) {}
     }
 
     #[test]

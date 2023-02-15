@@ -9,7 +9,7 @@
 
 pub mod base;
 pub mod filesystem;
+pub mod readonly;
 mod simple_component;
 pub mod util;
 pub mod webcal;
-pub mod readonly;

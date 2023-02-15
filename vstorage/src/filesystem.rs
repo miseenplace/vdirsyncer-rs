@@ -1,6 +1,7 @@
 //! Implements reading/writing entries from a local filesystem [`vdir`].
 //!
 //! [`vdir`]: https://vdirsyncer.pimutils.org/en/stable/vdir.html
+use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{
@@ -8,7 +9,6 @@ use std::{
     io::{Error, ErrorKind, Result},
     os::unix::prelude::MetadataExt,
 };
-use async_trait::async_trait;
 use tokio::fs::{
     create_dir, metadata, read_dir, read_to_string, remove_dir_all, DirEntry, File, OpenOptions,
 };
@@ -16,7 +16,7 @@ use tokio::io::AsyncWriteExt;
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_stream::StreamExt;
 
-use crate::base::{Collection, Etag, Href, Item, ItemRef, MetadataKind, Storage};
+use crate::base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage};
 
 // TODO: atomic writes
 
@@ -30,15 +30,6 @@ pub struct FilesystemStorage {
 
 #[async_trait]
 impl Storage for FilesystemStorage {
-    type Definition = FilesystemDefinition;
-    type Collection = FilesystemCollection;
-
-    fn new(definition: FilesystemDefinition) -> Result<Self> {
-        Ok(FilesystemStorage {
-            definition: Arc::from(definition),
-        })
-    }
-
     async fn check(&self) -> Result<()> {
         let meta = metadata(&self.definition.path).await?;
 
@@ -49,10 +40,10 @@ impl Storage for FilesystemStorage {
         }
     }
 
-    async fn discover_collections(&self) -> Result<Vec<FilesystemCollection>> {
+    async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
         let mut entries = read_dir(&self.definition.path).await?;
 
-        let mut collections = Vec::new();
+        let mut collections = Vec::<Box<dyn Collection>>::new();
         while let Ok(entry) = entries.next_entry().await {
             let entry = entry.unwrap();
 
@@ -67,20 +58,25 @@ impl Storage for FilesystemStorage {
                 })?
                 .to_owned();
 
-            collections.push(FilesystemCollection {
+            collections.push(Box::from(FilesystemCollection {
                 dir_name,
                 path: entry.path(),
                 definition: self.definition.clone(),
-            });
+            }));
         }
 
         Ok(collections)
     }
 
-    async fn create_collection(&mut self, href: &str) -> Result<FilesystemCollection> {
-        let collection = self.open_collection(href)?;
-        create_dir(&collection.path).await?;
-        Ok(collection)
+    async fn create_collection(&mut self, href: &str) -> Result<Box<dyn Collection>> {
+        let path = self.join_collection_href(href)?;
+        create_dir(&path).await?;
+
+        Ok(Box::from(FilesystemCollection {
+            dir_name: href.to_owned(),
+            path,
+            definition: self.definition.clone(),
+        }))
     }
 
     async fn destroy_collection(&mut self, href: &str) -> Result<()> {
@@ -88,14 +84,14 @@ impl Storage for FilesystemStorage {
         remove_dir_all(path).await
     }
 
-    fn open_collection(&self, href: &str) -> Result<Self::Collection> {
+    fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
         let path = self.join_collection_href(href)?;
 
-        Ok(FilesystemCollection {
+        Ok(Box::from(FilesystemCollection {
             dir_name: href.to_owned(),
             path,
             definition: self.definition.clone(),
-        })
+        }))
     }
 }
 
@@ -122,6 +118,14 @@ pub struct FilesystemDefinition {
     /// Filename extension for items in a storage. Files with matching extension are treated a
     /// items for a collection, and all other files are ignored.
     pub extension: String,
+}
+
+impl Definition for FilesystemDefinition {
+    fn storage(self) -> Result<Box<dyn Storage>> {
+        Ok(Box::from(FilesystemStorage {
+            definition: Arc::from(self),
+        }))
+    }
 }
 
 /// A collection backed by a filesystem directory.
