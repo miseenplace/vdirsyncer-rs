@@ -6,8 +6,6 @@ triggers:
     condition: failure
     to: Hugo Osvaldo Barrera <hugo@whynothugo.nl>
 tasks:
-  - prepare: |
-      rustup-init
   - build: |
       cd vdirsyncer-rs
       cargo build
