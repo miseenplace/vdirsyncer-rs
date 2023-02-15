@@ -49,7 +49,7 @@ impl Component {
     // XXX: This is ugly and inefficent.
     // The general ideal (as copied from the python edition) is great, but the impl is bad.
     /// Parse a component from a raw string input.
-    pub(crate) fn parse(input: String) -> Result<Component, ComponentError> {
+    pub(crate) fn parse(input: &str) -> Result<Component, ComponentError> {
         let mut root: Option<Component> = None;
         let mut stack = Vec::new();
 
@@ -204,7 +204,7 @@ mod test {
         ]
         .join("\r\n");
 
-        let component = Component::parse(calendar).unwrap();
+        let component = Component::parse(&calendar).unwrap();
 
         assert_eq!(
             component,
@@ -377,7 +377,7 @@ mod test {
         .join("\r\n");
 
         assert_eq!(
-            Component::parse(calendar),
+            Component::parse(&calendar),
             Err(ComponentError::UnterminatedComponent)
         );
     }

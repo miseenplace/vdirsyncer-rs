@@ -143,7 +143,7 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(raw);
+        let calendar = Component::parse(&raw);
         let refs = calendar
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .subcomponents
@@ -172,7 +172,7 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(raw);
+        let calendar = Component::parse(&raw);
         let components = calendar
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .subcomponents;
@@ -201,7 +201,7 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(raw);
+        let calendar = Component::parse(&raw);
         let components = calendar
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .subcomponents;
@@ -229,7 +229,7 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(raw);
+        let calendar = Component::parse(&raw);
         let components = calendar
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .subcomponents;
