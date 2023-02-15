@@ -1,6 +1,8 @@
 //! Implements reading/writing entries from a local filesystem [`vdir`].
 //!
 //! [`vdir`]: https://vdirsyncer.pimutils.org/en/stable/vdir.html
+#![allow(clippy::module_name_repetitions)]
+
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

@@ -3,6 +3,8 @@
 //! Webcal is a de-facto standard, and is basically a single icalendar file hosted via http(s).
 //!
 //! See the [Webcal wikipedia page](https://en.wikipedia.org/wiki/Webcal).
+#![allow(clippy::module_name_repetitions)]
+
 use async_trait::async_trait;
 use reqwest::StatusCode;
 use std::{
