@@ -31,6 +31,11 @@ pub type Href = String;
 /// this like URL or TLS for network-based storages, or path and file extensions for filesystem
 /// based storages.
 pub trait Definition: Sync + Send {
+    /// Creates a new storage instance for this definition.
+    ///
+    /// # Errors
+    ///
+    /// Errors are implementation-dependant; see implementations for details.
     fn storage(self) -> Result<Box<dyn Storage>>;
 }
 
