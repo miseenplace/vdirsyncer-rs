@@ -1,0 +1,20 @@
+image: archlinux
+packages:
+  - rustup
+triggers:
+  - action: email
+    condition: failure
+    to: Hugo Osvaldo Barrera <hugo@whynothugo.nl>
+tasks:
+  - prepare: |
+      rustup-init
+  - build: |
+      cd vdirsyncer-rs
+      cargo build
+  - lint: |
+      cd vdirsyncer-rs
+      cargo clippy
+  - test: |
+      cd vdirsyncer-rs
+      cargo test
+      cargo test --doc
