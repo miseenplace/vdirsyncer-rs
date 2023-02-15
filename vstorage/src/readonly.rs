@@ -14,7 +14,7 @@ use std::io::Result;
 
 /// A wrapper around a [`Storage`] that disallows any write operations.
 ///
-/// Aside from the [`ReadOnlyStorage::new`] method, `from` can be used to create these:
+/// # Example
 ///
 /// ```
 /// # use vstorage::filesystem::FilesystemStorage;
@@ -22,15 +22,16 @@ use std::io::Result;
 /// # use vstorage::filesystem::FilesystemDefinition;
 /// # use std::path::PathBuf;
 /// # use vstorage::readonly::ReadOnlyStorage;
-/// let orig = FilesystemStorage::new(FilesystemDefinition {
+/// # use crate::vstorage::base::Definition;
+/// let orig = FilesystemDefinition {
 ///     path: PathBuf::from("/path/to/storage/"),
 ///     extension: String::from("ics"),
-/// }).unwrap();
+/// }.storage().unwrap();
 ///
 /// let read_only = ReadOnlyStorage::from(orig);
 /// ```
-pub struct ReadOnlyStorage<S: Storage> {
-    inner: S,
+pub struct ReadOnlyStorage {
+    inner: Box<dyn Storage>,
 }
 
 /// A wrapper around a [`Collection`] that disallows any write operations.
@@ -39,7 +40,7 @@ pub struct ReadOnlyCollection {
 }
 
 #[async_trait]
-impl<S: Storage> Storage for ReadOnlyStorage<S> {
+impl Storage for ReadOnlyStorage {
     async fn check(&self) -> Result<()> {
         self.inner.check().await
     }
@@ -124,8 +125,8 @@ impl Collection for ReadOnlyCollection {
     }
 }
 
-impl<S: Storage> From<S> for ReadOnlyStorage<S> {
-    fn from(value: S) -> Self {
+impl From<Box<dyn Storage>> for ReadOnlyStorage {
+    fn from(value: Box<dyn Storage>) -> Self {
         Self { inner: value }
     }
 }
