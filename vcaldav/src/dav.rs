@@ -123,6 +123,27 @@ pub(crate) struct CalendarHomeSet {
     pub href: String,
 }
 
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct ResourceTypeProp {
+    pub resourcetype: ResourceType,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct ResourceType {
+    // Unused (for now?):
+    // pub collection: Option<Collection>,
+
+    // FIXME: this doesn't care about the namespace
+    // E.g.: assumes xmlns:C="urn:ietf:params:xml:ns:caldav"
+    pub calendar: Option<Calendar>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct Collection {}
+
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct Calendar {}
+
 #[cfg(test)]
 mod tests {
     use quick_xml::de as xml;

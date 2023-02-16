@@ -3,7 +3,7 @@ use reqwest::{Client, IntoUrl, Method, RequestBuilder, StatusCode};
 use serde::Deserialize;
 use url::Url;
 
-use crate::dav::{CurrentUserPrincipalProp, Multistatus};
+use crate::dav::{CurrentUserPrincipalProp, Multistatus, ResourceTypeProp};
 
 pub mod dav;
 
@@ -141,7 +141,7 @@ impl CalDavClient {
     }
 
     async fn query_current_user_principal(&self, url: Url) -> Result<Option<Url>, DavError> {
-        self.propfind::<CurrentUserPrincipalProp>(url.clone(), "", "<current-user-principal />")
+        self.propfind::<CurrentUserPrincipalProp>(url.clone(), "", "<current-user-principal />", 0)
             .await?
             .responses
             .first()
@@ -156,6 +156,7 @@ impl CalDavClient {
             url.clone(),
             r#"xmlns:c="urn:ietf:params:xml:ns:caldav""#,
             "<c:calendar-home-set />",
+            0,
         )
         .await?
         .responses
@@ -166,12 +167,31 @@ impl CalDavClient {
         .transpose()
     }
 
+    pub async fn find_calendars(&self, url: Url) -> Result<Vec<String>, DavError> {
+        Ok(self
+            .propfind::<ResourceTypeProp>(url.clone(), "", "<resourcetype />", 1)
+            .await?
+            .responses
+            .into_iter()
+            // TODO: I'm ignoring the status code.
+            .filter(|response| {
+                response
+                    .propstat
+                    .first()
+                    .map(|propstat| propstat.prop.resourcetype.calendar.is_some())
+                    .unwrap_or(false)
+            })
+            .map(|response| response.href)
+            .collect())
+    }
+
     /// Sends a `PROPFIND` request and parses the result.
     async fn propfind<T: for<'a> Deserialize<'a> + Default>(
         &self,
         url: Url,
         extra_ns: &str,
         prop: &str,
+        depth: u8,
     ) -> Result<Multistatus<T>, DavError> {
         let response = self
             .request(
@@ -179,7 +199,7 @@ impl CalDavClient {
                 url,
             )
             .header("Content-Type", "application/xml; charset=utf-8")
-            .header("Depth", "0")
+            .header("Depth", format!("{depth}"))
             .body(format!(
                 r#"
                 <propfind xmlns="DAV:" {extra_ns}>
