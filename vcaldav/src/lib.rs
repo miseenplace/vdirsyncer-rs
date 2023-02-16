@@ -1,4 +1,4 @@
-use dav::{CalendarHomeSetProp, DavError};
+use dav::{CalendarHomeSetProp, DavError, DisplayNameProp};
 use reqwest::{Client, IntoUrl, Method, RequestBuilder, StatusCode};
 use serde::Deserialize;
 use url::Url;
@@ -183,6 +183,18 @@ impl CalDavClient {
                     })
                     .map(|response| response.href)
                     .collect()
+            })
+    }
+
+    pub async fn get_calendar_displayname(&self, url: Url) -> Result<Option<String>, DavError> {
+        self.propfind::<DisplayNameProp>(url.clone(), "<displayname/>", 0)
+            .await
+            .map(|multi_response| {
+                multi_response
+                    .responses
+                    .first()
+                    .and_then(|res| res.propstat.first())
+                    .map(|propstat| propstat.prop.displayname.to_owned())
             })
     }
 

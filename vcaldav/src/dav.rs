@@ -144,6 +144,11 @@ pub(crate) struct Collection {}
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct Calendar {}
 
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct DisplayNameProp {
+    pub displayname: String,
+}
+
 #[cfg(test)]
 mod tests {
     use quick_xml::de as xml;
