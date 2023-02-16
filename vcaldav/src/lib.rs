@@ -62,7 +62,7 @@ impl CalDavClient {
         Ok(client)
     }
 
-    // TODO: methods to serialise and deserialise (mostly to cache all the data).
+    // TODO: methods to serialise and deserialise (mostly to cache all discovery data).
 
     /// Returns a request with the proper `Authorization` header set.
     fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
