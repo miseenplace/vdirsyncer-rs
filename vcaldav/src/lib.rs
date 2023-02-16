@@ -23,9 +23,17 @@ pub struct CalDavClient {
     base_url: Url,
     auth: Auth,
     client: Client,
-    context_path: Option<Url>,
-    principal: Option<Url>,
-    calendar_home_set: Option<Url>, // TODO: timeouts
+    /// URL to be used for all requests. This may be (due to bootstrapping discovery)
+    /// a path than the one provided as `base_url`.
+    /// See: https://www.rfc-editor.org/rfc/rfc6764#section-1
+    pub context_path: Option<Url>,
+    /// URL to a principal resource corresponding to the currently authenticated user.
+    /// See: https://www.rfc-editor.org/rfc/rfc5397#section-3
+    pub principal: Option<Url>,
+    /// URL of collections that are either calendar collections or ordinary collections
+    /// that have child or descendant calendar collections owned by the principal.
+    /// See: https://www.rfc-editor.org/rfc/rfc4791#section-6.2.1
+    pub calendar_home_set: Option<Url>, // TODO: timeouts
 }
 
 impl CalDavClient {
@@ -134,7 +142,7 @@ impl CalDavClient {
         // ... Otherwise, try querying the root path.
         let mut root = self.base_url.clone();
         root.set_path("/");
-        self.query_current_user_principal(root).await // This can be Ok(None)
+        self.query_current_user_principal(root).await // Hint: This can be Ok(None)
 
         // NOTE: If not principal is resolved, it needs to be provided interactively
         //       by the user. We should use base_url in our case maybe...?
@@ -166,6 +174,14 @@ impl CalDavClient {
         .transpose()
     }
 
+    // FIXME: other APIs here return a URL, but this just returns a relative path.
+    //        need to figure out which is best. Probably returning the String, since joining the
+    //        URL might be work that's not needed.
+    // TODO: Make argument Option<Url>. If none is passed, use the `calendar_home_set`.
+    /// Find calendars collections under the given `url`.
+    ///
+    /// Generally, this method should be called with this collection's `calendar_home_set`
+    /// to find the current user's calendars..
     pub async fn find_calendars(&self, url: Url) -> Result<Vec<String>, DavError> {
         self.propfind::<ResourceTypeProp>(url.clone(), "<resourcetype />", 1)
             .await
@@ -179,7 +195,7 @@ impl CalDavClient {
                             .propstat
                             .first()
                             .map(|propstat| propstat.prop.resourcetype.calendar.is_some())
-                            .unwrap_or(false)
+                            .unwrap_or(false) // Should not actually happen.
                     })
                     .map(|response| response.href)
                     .collect()
