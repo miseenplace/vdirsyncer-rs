@@ -141,7 +141,7 @@ impl CalDavClient {
     }
 
     async fn query_current_user_principal(&self, url: Url) -> Result<Option<Url>, DavError> {
-        self.propfind::<CurrentUserPrincipalProp>(url.clone(), "", "<current-user-principal />", 0)
+        self.propfind::<CurrentUserPrincipalProp>(url.clone(), "<current-user-principal />", 0)
             .await?
             .responses
             .first()
@@ -154,8 +154,7 @@ impl CalDavClient {
     async fn query_calendar_home_set(&self, url: Url) -> Result<Option<Url>, DavError> {
         self.propfind::<CalendarHomeSetProp>(
             url.clone(),
-            r#"xmlns:c="urn:ietf:params:xml:ns:caldav""#,
-            "<c:calendar-home-set />",
+            "<calendar-home-set xmlns=\"urn:ietf:params:xml:ns:caldav\"/>",
             0,
         )
         .await?
@@ -169,7 +168,7 @@ impl CalDavClient {
 
     pub async fn find_calendars(&self, url: Url) -> Result<Vec<String>, DavError> {
         Ok(self
-            .propfind::<ResourceTypeProp>(url.clone(), "", "<resourcetype />", 1)
+            .propfind::<ResourceTypeProp>(url.clone(), "<resourcetype />", 1)
             .await?
             .responses
             .into_iter()
@@ -189,7 +188,6 @@ impl CalDavClient {
     async fn propfind<T: for<'a> Deserialize<'a> + Default>(
         &self,
         url: Url,
-        extra_ns: &str,
         prop: &str,
         depth: u8,
     ) -> Result<Multistatus<T>, DavError> {
@@ -202,7 +200,7 @@ impl CalDavClient {
             .header("Depth", format!("{depth}"))
             .body(format!(
                 r#"
-                <propfind xmlns="DAV:" {extra_ns}>
+                <propfind xmlns="DAV:">
                     <prop>
                         {prop}
                     </prop>
