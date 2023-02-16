@@ -91,9 +91,12 @@ impl CalDavClient {
         // > clients MUST properly handle HTTP redirect responses for the request
         self.principal = self.resolve_current_user_principal().await?;
 
-        // If there's no principal, it's unclear where to query for the calendar home set.
+        // NOTE: If obtaining a principal fails, we should query the user.
+        //       We assume here that the provided `base_url` is exactly that.
         if let Some(principal) = &self.principal {
             self.calendar_home_set = self.query_calendar_home_set(principal.clone()).await?;
+        } else {
+            self.calendar_home_set = self.query_calendar_home_set(self.base_url.clone()).await?;
         }
 
         // TODO: use the user principal url to exec PROPFIND and discover calendars.
