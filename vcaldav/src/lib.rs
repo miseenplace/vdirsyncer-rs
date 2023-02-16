@@ -167,21 +167,23 @@ impl CalDavClient {
     }
 
     pub async fn find_calendars(&self, url: Url) -> Result<Vec<String>, DavError> {
-        Ok(self
-            .propfind::<ResourceTypeProp>(url.clone(), "<resourcetype />", 1)
-            .await?
-            .responses
-            .into_iter()
-            // TODO: I'm ignoring the status code.
-            .filter(|response| {
-                response
-                    .propstat
-                    .first()
-                    .map(|propstat| propstat.prop.resourcetype.calendar.is_some())
-                    .unwrap_or(false)
+        self.propfind::<ResourceTypeProp>(url.clone(), "<resourcetype />", 1)
+            .await
+            .map(|multi_response| {
+                multi_response
+                    .responses
+                    .into_iter()
+                    // TODO: I'm ignoring the status code.
+                    .filter(|response| {
+                        response
+                            .propstat
+                            .first()
+                            .map(|propstat| propstat.prop.resourcetype.calendar.is_some())
+                            .unwrap_or(false)
+                    })
+                    .map(|response| response.href)
+                    .collect()
             })
-            .map(|response| response.href)
-            .collect())
     }
 
     /// Sends a `PROPFIND` request and parses the result.
