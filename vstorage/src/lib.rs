@@ -3,9 +3,6 @@
 //! entries.
 
 #![feature(io_error_more)]
-#![feature(iterator_try_collect)]
-// XXX: Hopefully this'll be stabilised before our first stable release
-#![feature(async_fn_in_trait)]
 
 pub mod base;
 pub mod filesystem;
