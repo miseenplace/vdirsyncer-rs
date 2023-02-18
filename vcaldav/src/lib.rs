@@ -1,4 +1,4 @@
-use dav::{CalendarHomeSetProp, DavError, DisplayNameProp};
+use dav::{CalendarHomeSetProp, DavError, DisplayNameProp, ColourProp};
 use reqwest::{Client, IntoUrl, Method, RequestBuilder, StatusCode};
 use serde::Deserialize;
 use url::Url;
@@ -222,6 +222,26 @@ impl CalDavClient {
                     .map(|propstat| propstat.prop.displayname.to_owned())
             })
     }
+
+    /// Returns the colour for a calendar
+    ///
+    /// This is not a formally standardised property, but is relatively widespread.
+    pub async fn get_calendar_colour(&self, url: Url) -> Result<Option<String>, DavError> {
+        self.propfind::<ColourProp>(url.clone(), "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>", 0)
+            .await
+            .map(|multi_response| {
+                multi_response
+                    .responses
+                    .first()
+                    .and_then(|res| res.propstat.first())
+                    .map(|propstat| propstat.prop.color.to_owned())
+            })
+    }
+
+    // TODO: get_calendar_description ("calendar-description", "urn:ietf:params:xml:ns:caldav")
+    // TODO: get_calendar_order ("calendar-order", "http://apple.com/ns/ical/")
+    // TODO: DRY: the above methods are super repetitive.
+    //       Maybe all these props impl a single trait, so the API could be `get_prop<T>(url)`?
 
     /// Sends a `PROPFIND` request and parses the result.
     async fn propfind<T: for<'a> Deserialize<'a> + Default>(

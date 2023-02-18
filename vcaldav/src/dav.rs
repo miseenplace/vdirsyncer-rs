@@ -149,6 +149,12 @@ pub(crate) struct DisplayNameProp {
     pub displayname: String,
 }
 
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct ColourProp {
+    #[serde(rename = "calendar-color")]
+    pub color: String,
+}
+
 #[cfg(test)]
 mod tests {
     use quick_xml::de as xml;
