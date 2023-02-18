@@ -56,6 +56,10 @@ impl CalDavClient {
     //       The Url crate seems to support this.
 
     /// Returns a bootstrapped client.
+    ///
+    /// `base_url` will be used to auto-discover a context path and user principals. If discovering
+    /// the context path fails (e.g.: the server is not configured with well-known paths nor TXT
+    /// records) then `base_url` is assumed to be the context path itself.
     pub async fn bootstrapped(base_url: Url, auth: Auth) -> Result<Self, DavError> {
         let mut client = Self::raw_client(base_url, auth);
         client.bootstrap().await?;
