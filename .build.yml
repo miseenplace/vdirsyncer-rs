@@ -1,6 +1,8 @@
 image: archlinux
 packages:
   - rustup
+environment:
+  CARGO_TERM_COLOR: always
 triggers:
   - action: email
     condition: failure
