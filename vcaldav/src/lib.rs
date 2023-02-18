@@ -85,13 +85,13 @@ impl CalDavClient {
 
         // NOTE: context path may have been defined via TXT record!
         //       (though if it errors, we should still resolve via well-known.
-        self.context_path = Some(self.resolve_context_path().await?);
+        self.context_path = self.resolve_context_path().await?;
 
         // From https://www.rfc-editor.org/rfc/rfc6764#section-6, subsection 5:
         // > clients MUST properly handle HTTP redirect responses for the request
         self.principal = self.resolve_current_user_principal().await?;
 
-        // NOTE: If obtaining a principal fails, we should query the user.
+        // NOTE: If obtaining a principal fails, the specification says we should query the user.
         //       We assume here that the provided `base_url` is exactly that.
         let principal_url = self.principal.as_ref().unwrap_or(&self.base_url).clone();
         self.calendar_home_set = self.query_calendar_home_set(principal_url).await?;
@@ -102,18 +102,25 @@ impl CalDavClient {
     /// Resolve the default context path with the well-known URL.
     ///
     /// See: https://www.rfc-editor.org/rfc/rfc6764#section-5
-    pub async fn resolve_context_path(&self) -> Result<Url, reqwest::Error> {
+    pub async fn resolve_context_path(&self) -> Result<Option<Url>, reqwest::Error> {
         let mut url = self.base_url.clone();
         url.set_path("/.well-known/caldav");
 
         // From https://www.rfc-editor.org/rfc/rfc6764#section-5:
         // > [...] the server MAY require authentication when a client tries to
         // > access the ".well-known" URI
-        self.request(Method::GET, url)
+        let final_url = self
+            .request(Method::GET, url)
             .send()
             .await
-            .map(|resp| resp.url().to_owned())
-        // FIXME: if the URL is the same, we have no context path
+            .map(|resp| resp.url().to_owned())?;
+
+        // If the response was a redirection, then we treat that as context path.
+        if final_url != self.base_url {
+            Ok(Some(final_url))
+        } else {
+            Ok(None)
+        }
         // TODO: Should actually check that we've gotten 301, 303 or 307.
         //       The main issue is that reqwest does not allow changing this on a per-request basis.
         //       Maybe hyper is more adequate here?
