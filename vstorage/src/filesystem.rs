@@ -271,7 +271,7 @@ impl Collection for FilesystemCollection {
     }
 
     fn id(&self) -> &str {
-        self.dir_name.as_str()
+        &self.dir_name
     }
 
     fn href(&self) -> &str {
