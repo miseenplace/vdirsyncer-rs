@@ -137,8 +137,8 @@ impl CalDavClient {
         // > clients MUST properly handle HTTP redirect responses for the request
         client.principal = client.resolve_current_user_principal().await?;
 
-        // NOTE: If obtaining a principal fails, the specification says we should query the user.
-        //       We assume here that the provided `base_url` is exactly that.
+        // If obtaining a principal fails, the specification says we should query the user. This
+        // tries to use the `base_url` first, since the user might have provided it for a reason.
         let principal_url = client
             .principal
             .as_ref()
