@@ -1,3 +1,5 @@
+use std::io;
+
 use dav::{CalendarHomeSetProp, ColourProp, DavError, DisplayNameProp};
 use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
 use domain::base::Dname;
@@ -56,6 +58,18 @@ pub enum BootstrapError {
 
     #[error(transparent)]
     DavError(#[from] DavError),
+}
+
+impl From<BootstrapError> for io::Error {
+    fn from(value: BootstrapError) -> Self {
+        match value {
+            BootstrapError::InvalidUrl => io::Error::new(io::ErrorKind::InvalidInput, value),
+            BootstrapError::DnsError => io::Error::new(io::ErrorKind::Other, value),
+            BootstrapError::BadSrv(_) => io::Error::new(io::ErrorKind::InvalidData, value),
+            BootstrapError::TxtError(_) => todo!(),
+            BootstrapError::DavError(dav) => io::Error::from(dav),
+        }
+    }
 }
 
 // TODO: Minimal input from a user would consist of a calendar user address and a password.  A

@@ -1,6 +1,7 @@
 //! Helpers for DNS-based discovery.
 
 use std::cmp::Ordering;
+use std::io;
 use std::string::FromUtf8Error;
 
 use domain::base::name::FromStrError;
@@ -59,7 +60,7 @@ pub async fn resolve_srv_record<T: std::convert::AsRef<[u8]>>(
 #[derive(thiserror::Error, Debug)]
 pub enum TxtError {
     #[error("I/O error performing DNS request")]
-    Network(#[from] std::io::Error),
+    Network(#[from] io::Error),
 
     #[error("failed to parse domain name for DNS query")]
     InvalidDomain(#[from] FromStrError),
@@ -72,6 +73,18 @@ pub enum TxtError {
 
     #[error("data in txt record does no have the right syntax")]
     BadTxt,
+}
+
+impl From<TxtError> for io::Error {
+    fn from(value: TxtError) -> Self {
+        match value {
+            TxtError::Network(err) => err,
+            TxtError::InvalidDomain(_) => io::Error::new(io::ErrorKind::InvalidInput, value),
+            TxtError::ParseError(_) => io::Error::new(io::ErrorKind::InvalidData, value),
+            TxtError::NotUtf8Error(_) => io::Error::new(io::ErrorKind::InvalidData, value),
+            TxtError::BadTxt => io::Error::new(io::ErrorKind::InvalidData, value),
+        }
+    }
 }
 
 /// Resolves a context path via TXT records.

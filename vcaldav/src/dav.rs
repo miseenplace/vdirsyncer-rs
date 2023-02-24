@@ -1,3 +1,5 @@
+use std::io;
+
 // A lot of the code is derived from cardamom:
 // https://github.com/soywod/cardamom/
 //
@@ -35,6 +37,16 @@ pub enum DavError {
 
     #[error("failed to parse a URL returned by the server")]
     BadUrl(#[from] url::ParseError),
+}
+
+impl From<DavError> for io::Error {
+    fn from(value: DavError) -> Self {
+        match value {
+            DavError::Network(_) => io::Error::new(io::ErrorKind::Other, value),
+            DavError::Data(_) => io::Error::new(io::ErrorKind::InvalidData, value),
+            DavError::BadUrl(_) => io::Error::new(io::ErrorKind::InvalidInput, value),
+        }
+    }
 }
 
 impl<T: for<'a> Deserialize<'a> + Default> Multistatus<T> {
