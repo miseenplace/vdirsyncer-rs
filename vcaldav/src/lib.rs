@@ -258,8 +258,16 @@ impl CalDavClient {
             })
     }
 
-    pub async fn get_calendar_displayname(&self, url: Url) -> Result<Option<String>, DavError> {
-        self.propfind::<DisplayNameProp>(url.clone(), "<displayname/>", 0)
+    /// Returns the `displayname` for the calendar at path `href`.
+    ///
+    /// # Errors
+    ///
+    /// If the HTTP call fails or parsing the XML response fails.
+    pub async fn get_calendar_displayname(&self, href: &str) -> Result<Option<String>, DavError> {
+        let mut url = self.context_path.as_ref().unwrap_or(&self.base_url).clone();
+        url.set_path(href);
+
+        self.propfind::<DisplayNameProp>(url, "<displayname/>", 0)
             .await
             .map(|multi_response| {
                 multi_response
@@ -270,16 +278,19 @@ impl CalDavClient {
             })
     }
 
-    /// Returns the colour for a calendar
+    /// Returns the colour for the calendar at path `href`.
     ///
     /// This is not a formally standardised property, but is relatively widespread.
     ///
     /// # Errors
     ///
     /// If the network request fails, or if the response cannot be parsed.
-    pub async fn get_calendar_colour(&self, url: Url) -> Result<Option<String>, DavError> {
+    pub async fn get_calendar_colour(&self, href: &str) -> Result<Option<String>, DavError> {
+        let mut url = self.context_path.as_ref().unwrap_or(&self.base_url).clone();
+        url.set_path(href);
+
         self.propfind::<ColourProp>(
-            url.clone(),
+            url,
             "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>",
             0,
         )
