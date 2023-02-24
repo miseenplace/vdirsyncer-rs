@@ -1,11 +1,14 @@
-use dav::{CalendarHomeSetProp, DavError, DisplayNameProp, ColourProp};
+use dav::{CalendarHomeSetProp, ColourProp, DavError, DisplayNameProp};
+use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
+use domain::base::Dname;
 use reqwest::{Client, IntoUrl, Method, RequestBuilder, StatusCode};
 use serde::Deserialize;
-use url::Url;
+use url::{ParseError, Url};
 
 use crate::dav::{CurrentUserPrincipalProp, Multistatus, ResourceTypeProp};
 
 pub mod dav;
+pub mod dns;
 
 #[non_exhaustive]
 #[derive(Debug)]
@@ -36,6 +39,25 @@ pub struct CalDavClient {
     pub calendar_home_set: Option<Url>, // TODO: timeouts
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum BootstrapError {
+    #[error("the input URL is not valid")]
+    InvalidUrl,
+
+    // FIXME: See: https://github.com/NLnetLabs/domain/pull/183
+    #[error("error resolving DNS SRV records")]
+    DnsError,
+
+    #[error("SRV records returned domain/port pair that failed to parse")]
+    BadSrv(#[from] ParseError),
+
+    #[error("error resolving context path via TXT records")]
+    TxtError(#[from] TxtError),
+
+    #[error(transparent)]
+    DavError(#[from] DavError),
+}
+
 impl CalDavClient {
     /// Returns a client without any automatic bootstrapping.
     ///
@@ -60,7 +82,7 @@ impl CalDavClient {
     /// `base_url` will be used to auto-discover a context path and user principals. If discovering
     /// the context path fails (e.g.: the server is not configured with well-known paths nor TXT
     /// records) then `base_url` is assumed to be the context path itself.
-    pub async fn bootstrapped(base_url: Url, auth: Auth) -> Result<Self, DavError> {
+    pub async fn bootstrapped(base_url: Url, auth: Auth) -> Result<Self, BootstrapError> {
         let mut client = Self::raw_client(base_url, auth);
         client.bootstrap().await?;
         Ok(client)
@@ -79,17 +101,44 @@ impl CalDavClient {
 
     /// Bootstrap this client
     ///
-    /// Determines the real URL and path of the CalDav resources for a server.
+    /// Determines the real URL and path of the CalDav resources for a server, following the
+    /// discovery mechanism described in [rfc6764].
     ///
-    /// See: https://www.rfc-editor.org/rfc/rfc6764
-    pub async fn bootstrap(&mut self) -> Result<(), DavError> {
-        // TODO: check DNS-SD service labels: https://www.rfc-editor.org/rfc/rfc6764#section-3 (_caldavs._tcp)
-        // TODO: check DNS-SD service labels: https://www.rfc-editor.org/rfc/rfc6764#section-3 (_caldav._tcp)
-        // TODO: check TXT records: https://www.rfc-editor.org/rfc/rfc6764#section-4
+    /// [rfc6764]: https://www.rfc-editor.org/rfc/rfc6764
+    ///
+    /// # Errors
+    ///
+    /// On any error in the underlying DNS and HTTP transports.
+    pub async fn bootstrap(&mut self) -> Result<(), BootstrapError> {
+        let domain = self.base_url.domain().ok_or(BootstrapError::InvalidUrl)?;
+        let port = self.base_url.port_or_known_default().unwrap_or(443);
 
-        // NOTE: context path may have been defined via TXT record!
-        //       (though if it errors, we should still resolve via well-known.
-        self.context_path = self.resolve_context_path().await?;
+        // FIXME: wrap the srv error when this is merged: https://github.com/NLnetLabs/domain/pull/183
+        let dname = Dname::bytes_from_str(domain).map_err(|_| BootstrapError::InvalidUrl)?;
+        let mut candidates = resolve_srv_record(dname, port)
+            .await
+            .map_err(|_| BootstrapError::DnsError)?;
+
+        // If none of the SRV candidates work, try the domain/port in the provided URI.
+        candidates.push((domain.to_string(), port));
+
+        if let Some(path) = find_context_path_via_txt_records(domain).await? {
+            let mut ctx_path_url = self.base_url.clone();
+            ctx_path_url.set_path(&path);
+            // TODO: validate that the path works?
+            self.context_path = Some(ctx_path_url);
+        };
+
+        if self.context_path.is_none() {
+            for candidate in candidates {
+                let url = Url::parse(&format!("https://{}:{}", candidate.0, candidate.1))?;
+
+                if let Ok(Some(path)) = self.resolve_context_path(Some(url)).await {
+                    self.context_path = Some(path);
+                    break;
+                }
+            }
+        }
 
         // From https://www.rfc-editor.org/rfc/rfc6764#section-6, subsection 5:
         // > clients MUST properly handle HTTP redirect responses for the request
@@ -106,8 +155,11 @@ impl CalDavClient {
     /// Resolve the default context path with the well-known URL.
     ///
     /// See: https://www.rfc-editor.org/rfc/rfc6764#section-5
-    pub async fn resolve_context_path(&self) -> Result<Option<Url>, reqwest::Error> {
-        let mut url = self.base_url.clone();
+    pub async fn resolve_context_path(
+        &self,
+        url: Option<Url>,
+    ) -> Result<Option<Url>, reqwest::Error> {
+        let mut url = url.unwrap_or(self.base_url.clone());
         url.set_path("/.well-known/caldav");
 
         // From https://www.rfc-editor.org/rfc/rfc6764#section-5:
