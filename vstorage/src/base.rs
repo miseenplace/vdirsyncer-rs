@@ -197,6 +197,10 @@ impl Item {
     }
 
     /// Returns a new copy of this Item with the supplied UID.
+    ///
+    /// # Panics
+    ///
+    /// This function is not yet implemented.
     #[must_use]
     pub fn with_uid(&self, _new_uid: String) -> Self {
         // The logic in vdirsyncer/vobject.py::Item.with_uid seems pretty solid.

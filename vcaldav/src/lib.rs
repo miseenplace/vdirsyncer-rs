@@ -58,11 +58,15 @@ pub enum BootstrapError {
     DavError(#[from] DavError),
 }
 
+// TODO: Minimal input from a user would consist of a calendar user address and a password.  A
+// calendar user address is defined by iCalendar [RFC5545] to be a URI [RFC3986].
+// https://www.rfc-editor.org/rfc/rfc6764#section-6
 impl CalDavClient {
     /// Returns a client without any automatic bootstrapping.
     ///
     /// It is generally advised to use [`bootstrapped`].
     pub fn raw_client(base_url: Url, auth: Auth) -> Self {
+        // TODO: check that the URL is http or https (or mailto:?).
         Self {
             base_url,
             auth,
@@ -72,10 +76,6 @@ impl CalDavClient {
             calendar_home_set: None,
         }
     }
-
-    // TODO: using only a `mailto:` as input would be compliant:
-    //       See: https://www.rfc-editor.org/rfc/rfc6764#section-6
-    //       The Url crate seems to support this.
 
     /// Returns a bootstrapped client.
     ///
@@ -90,7 +90,7 @@ impl CalDavClient {
 
     // TODO: methods to serialise and deserialise (mostly to cache all discovery data).
 
-    /// Returns a request with the proper `Authorization` header set.
+    /// Returns a request builder with the proper `Authorization` header set.
     fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
         let request = self.client.request(method, url);
         match &self.auth {
@@ -278,6 +278,10 @@ impl CalDavClient {
     /// Returns the colour for a calendar
     ///
     /// This is not a formally standardised property, but is relatively widespread.
+    ///
+    /// # Errors
+    ///
+    /// If the network request fails, or if the response cannot be parsed.
     pub async fn get_calendar_colour(&self, url: Url) -> Result<Option<String>, DavError> {
         self.propfind::<ColourProp>(url.clone(), "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>", 0)
             .await
