@@ -202,7 +202,7 @@ impl Item {
     ///
     /// This function is not yet implemented.
     #[must_use]
-    pub fn with_uid(&self, _new_uid: String) -> Self {
+    pub fn with_uid(&self, _new_uid: &str) -> Self {
         // The logic in vdirsyncer/vobject.py::Item.with_uid seems pretty solid.
         // TODO: this really needs to be done, although its absence only blocks syncing broken items.
         todo!()
