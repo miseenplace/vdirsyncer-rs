@@ -232,14 +232,14 @@ impl CalDavClient {
         .transpose()
     }
 
-    // FIXME: other APIs here return a URL, but this just returns a relative path.
-    //        need to figure out which is best. Probably returning the String, since joining the
-    //        URL might be work that's not needed.
-    // TODO: Make argument Option<Url>. If none is passed, use the `calendar_home_set`.
     /// Find calendars collections under the given `url`.
     ///
-    /// Generally, this method should be called with this collection's `calendar_home_set`
-    /// to find the current user's calendars..
+    /// Returns absolute paths to each calendar. This method should be called
+    /// the `calendar_home_set` URL to find the current user's calendars.
+    ///
+    /// # Errors
+    ///
+    /// If the HTTP call fails or parsing the XML response fails.
     pub async fn find_calendars(&self, url: Url) -> Result<Vec<String>, DavError> {
         self.propfind::<ResourceTypeProp>(url.clone(), "<resourcetype />", 1)
             .await
@@ -249,11 +249,9 @@ impl CalDavClient {
                     .into_iter()
                     // TODO: I'm ignoring the status code.
                     .filter(|response| {
-                        response
-                            .propstat
-                            .first()
-                            .map(|propstat| propstat.prop.resourcetype.calendar.is_some())
-                            .unwrap_or(false) // Should not actually happen.
+                        response.propstat.first().map_or(false, |propstat| {
+                            propstat.prop.resourcetype.calendar.is_some()
+                        })
                     })
                     .map(|response| response.href)
                     .collect()
