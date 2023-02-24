@@ -139,7 +139,11 @@ impl CalDavClient {
 
         // NOTE: If obtaining a principal fails, the specification says we should query the user.
         //       We assume here that the provided `base_url` is exactly that.
-        let principal_url = client.principal.as_ref().unwrap_or(&client.base_url).clone();
+        let principal_url = client
+            .principal
+            .as_ref()
+            .unwrap_or(&client.base_url)
+            .clone();
         client.calendar_home_set = client.query_calendar_home_set(principal_url).await?;
 
         Ok(client)
@@ -276,15 +280,19 @@ impl CalDavClient {
     ///
     /// If the network request fails, or if the response cannot be parsed.
     pub async fn get_calendar_colour(&self, url: Url) -> Result<Option<String>, DavError> {
-        self.propfind::<ColourProp>(url.clone(), "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>", 0)
-            .await
-            .map(|multi_response| {
-                multi_response
-                    .responses
-                    .first()
-                    .and_then(|res| res.propstat.first())
-                    .map(|propstat| propstat.prop.color.to_owned())
-            })
+        self.propfind::<ColourProp>(
+            url.clone(),
+            "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>",
+            0,
+        )
+        .await
+        .map(|multi_response| {
+            multi_response
+                .responses
+                .first()
+                .and_then(|res| res.propstat.first())
+                .map(|propstat| propstat.prop.color.to_owned())
+        })
     }
 
     // TODO: get_calendar_description ("calendar-description", "urn:ietf:params:xml:ns:caldav")
