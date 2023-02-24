@@ -121,7 +121,7 @@ pub trait Collection: Sync + Send {
     async fn set_meta(&mut self, meta: MetadataKind, value: &str) -> Result<()>;
 
     /// Returns the value of a property for this collection.
-    async fn get_meta(&self, meta: MetadataKind) -> Result<String>;
+    async fn get_meta(&self, meta: MetadataKind) -> Result<Option<String>>;
 
     // collections should have non-pub cache of UID->hrefs
     // can this be implemented for Collection?

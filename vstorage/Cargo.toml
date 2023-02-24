@@ -19,3 +19,6 @@ tokio = { version = "1.21.2", features = ["full"] }
 thiserror = "1.0.37"
 tokio-stream = { version = "0.1.11", default-features = false, features = ["fs"] }
 async-trait = "0.1.64"
+
+[dev-dependencies]
+tempfile = "3.3.0"

@@ -274,7 +274,8 @@ impl Collection for WebCalCollection {
     }
 
     /// Unsupported for this storage type.
-    async fn get_meta(&self, _: MetadataKind) -> Result<String> {
+    async fn get_meta(&self, _: MetadataKind) -> Result<Option<String>> {
+        // TODO: return None?
         Err(Error::new(
             ErrorKind::Unsupported,
             "getting metadata via webcal is not supported",

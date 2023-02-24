@@ -120,7 +120,7 @@ impl Collection for ReadOnlyCollection {
         Err(io::ErrorKind::ReadOnlyFilesystem.into())
     }
 
-    async fn get_meta(&self, meta: crate::base::MetadataKind) -> Result<String> {
+    async fn get_meta(&self, meta: crate::base::MetadataKind) -> Result<Option<String>> {
         self.inner.get_meta(meta).await
     }
 }

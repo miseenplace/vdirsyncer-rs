@@ -215,13 +215,17 @@ impl Collection for FilesystemCollection {
         Ok(())
     }
 
-    async fn get_meta(&self, meta: MetadataKind) -> Result<String> {
+    async fn get_meta(&self, meta: MetadataKind) -> Result<Option<String>> {
         let filename = filename_for_collection_meta(meta);
 
         let path = self.path.join(filename);
-        let value = read_to_string(path).await?;
+        let value = match read_to_string(path).await {
+            Ok(data) => data,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e),
+        };
 
-        Ok(value)
+        Ok(Some(value))
     }
 
     async fn add(&mut self, item: &Item) -> Result<ItemRef> {
@@ -296,7 +300,27 @@ fn filename_for_collection_meta(kind: MetadataKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    // TODO: helper to create storage in tmpdir (auto-delete on drop? Is there a dedicated helper?)
+    use super::FilesystemDefinition;
+    use crate::base::Definition;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_missing_displayname() {
+        let dir = tempdir().unwrap();
+        let definition = FilesystemDefinition {
+            path: dir.path().to_path_buf(),
+            extension: "ics".to_string(),
+        };
+
+        let mut storage = definition.storage().await.unwrap();
+        let collection = storage.create_collection("test").await.unwrap();
+        let displayname = collection
+            .get_meta(crate::base::MetadataKind::DisplayName)
+            .await
+            .unwrap();
+
+        assert!(displayname.is_none())
+    }
 
     // #[test]
     // fn test_write_read_meta_name() {
