@@ -30,13 +30,14 @@ pub type Href = String;
 /// This type carries any configuration required to define a storage instances. This include
 /// this like URL or TLS for network-based storages, or path and file extensions for filesystem
 /// based storages.
+#[async_trait]
 pub trait Definition: Sync + Send {
     /// Creates a new storage instance for this definition.
     ///
     /// # Errors
     ///
     /// Errors are implementation-dependant; see implementations for details.
-    fn storage(self) -> Result<Box<dyn Storage>>;
+    async fn storage(self) -> Result<Box<dyn Storage>>;
 }
 
 /// A storage is the highest level abstraction where items can be stored. It can be a remote CalDav

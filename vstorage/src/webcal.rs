@@ -40,11 +40,12 @@ pub struct WebCalDefinition {
     pub collection_name: String,
 }
 
+#[async_trait]
 impl Definition for WebCalDefinition {
     /// Create a new storage instance.
     ///
     /// Unlike other [`Storage`] implementations, this one allows only a single collection.
-    fn storage(self) -> Result<Box<dyn Storage>> {
+    async fn storage(self) -> Result<Box<dyn Storage>> {
         // NOTE: It would be nice to support `webcal://` here, but the Url crate won't allow
         // changing the scheme of such a Url.
         if !["http", "https"].contains(&self.url.scheme()) {
@@ -329,7 +330,7 @@ mod test {
             url: Url::parse("https://www.officeholidays.com/ics/netherlands").unwrap(),
             collection_name: "holidays".to_string(),
         };
-        let storage = metdata.storage().unwrap();
+        let storage = metdata.storage().await.unwrap();
         storage.check().await.unwrap();
         let collection = &storage.open_collection("holidays").unwrap();
         let discovery = &storage.discover_collections().await.unwrap();

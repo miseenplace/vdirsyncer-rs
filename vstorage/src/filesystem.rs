@@ -122,8 +122,9 @@ pub struct FilesystemDefinition {
     pub extension: String,
 }
 
+#[async_trait]
 impl Definition for FilesystemDefinition {
-    fn storage(self) -> Result<Box<dyn Storage>> {
+    async fn storage(self) -> Result<Box<dyn Storage>> {
         Ok(Box::from(FilesystemStorage {
             definition: Arc::from(self),
         }))

@@ -33,12 +33,14 @@ async fn main() {
         collection_name: String::from("holidays_nl"),
     }
     .storage()
+    .await
     .expect("can create webcal storage");
     let mut fs = FilesystemDefinition {
         path,
         extension: String::from("ics"),
     }
     .storage()
+    .await
     .expect("can create fs storage");
 
     let webcal_collection = webcal
