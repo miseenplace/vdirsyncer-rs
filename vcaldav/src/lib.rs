@@ -64,7 +64,7 @@ pub enum BootstrapError {
 impl CalDavClient {
     /// Returns a client without any automatic bootstrapping.
     ///
-    /// It is generally advised to use [`bootstrapped`].
+    /// It is generally advised to use [`auto_bootstrap`] instead.
     pub fn raw_client(base_url: Url, auth: Auth) -> Self {
         // TODO: check that the URL is http or https (or mailto:?).
         Self {
@@ -75,17 +75,6 @@ impl CalDavClient {
             principal: None,
             calendar_home_set: None,
         }
-    }
-
-    /// Returns a bootstrapped client.
-    ///
-    /// `base_url` will be used to auto-discover a context path and user principals. If discovering
-    /// the context path fails (e.g.: the server is not configured with well-known paths nor TXT
-    /// records) then `base_url` is assumed to be the context path itself.
-    pub async fn bootstrapped(base_url: Url, auth: Auth) -> Result<Self, BootstrapError> {
-        let mut client = Self::raw_client(base_url, auth);
-        client.bootstrap().await?;
-        Ok(client)
     }
 
     // TODO: methods to serialise and deserialise (mostly to cache all discovery data).
@@ -99,19 +88,24 @@ impl CalDavClient {
         }
     }
 
-    /// Bootstrap this client
+    /// Auto-bootstrap a new client.
     ///
-    /// Determines the real URL and path of the CalDav resources for a server, following the
-    /// discovery mechanism described in [rfc6764].
+    /// Determines the CalDav server's real host and the context path of the resources for a
+    /// server, following the discovery mechanism described in [rfc6764].
     ///
     /// [rfc6764]: https://www.rfc-editor.org/rfc/rfc6764
     ///
     /// # Errors
     ///
-    /// On any error in the underlying DNS and HTTP transports.
-    pub async fn bootstrap(&mut self) -> Result<(), BootstrapError> {
-        let domain = self.base_url.domain().ok_or(BootstrapError::InvalidUrl)?;
-        let port = self.base_url.port_or_known_default().unwrap_or(443);
+    /// If any of the underlying DNS or HTTP requests fail, or if any of the responses fail to
+    /// parse.
+    ///
+    /// Does not return an error if DNS records as missing, only if they contain invalid data.
+    pub async fn auto_bootstrap(base_url: Url, auth: Auth) -> Result<Self, BootstrapError> {
+        let mut client = Self::raw_client(base_url, auth);
+
+        let domain = client.base_url.domain().ok_or(BootstrapError::InvalidUrl)?;
+        let port = client.base_url.port_or_known_default().unwrap_or(443);
 
         // FIXME: wrap the srv error when this is merged: https://github.com/NLnetLabs/domain/pull/183
         let dname = Dname::bytes_from_str(domain).map_err(|_| BootstrapError::InvalidUrl)?;
@@ -123,18 +117,18 @@ impl CalDavClient {
         candidates.push((domain.to_string(), port));
 
         if let Some(path) = find_context_path_via_txt_records(domain).await? {
-            let mut ctx_path_url = self.base_url.clone();
+            let mut ctx_path_url = client.base_url.clone();
             ctx_path_url.set_path(&path);
             // TODO: validate that the path works?
-            self.context_path = Some(ctx_path_url);
+            client.context_path = Some(ctx_path_url);
         };
 
-        if self.context_path.is_none() {
+        if client.context_path.is_none() {
             for candidate in candidates {
                 let url = Url::parse(&format!("https://{}:{}", candidate.0, candidate.1))?;
 
-                if let Ok(Some(path)) = self.resolve_context_path(Some(url)).await {
-                    self.context_path = Some(path);
+                if let Ok(Some(path)) = client.resolve_context_path(Some(url)).await {
+                    client.context_path = Some(path);
                     break;
                 }
             }
@@ -142,14 +136,14 @@ impl CalDavClient {
 
         // From https://www.rfc-editor.org/rfc/rfc6764#section-6, subsection 5:
         // > clients MUST properly handle HTTP redirect responses for the request
-        self.principal = self.resolve_current_user_principal().await?;
+        client.principal = client.resolve_current_user_principal().await?;
 
         // NOTE: If obtaining a principal fails, the specification says we should query the user.
         //       We assume here that the provided `base_url` is exactly that.
-        let principal_url = self.principal.as_ref().unwrap_or(&self.base_url).clone();
-        self.calendar_home_set = self.query_calendar_home_set(principal_url).await?;
+        let principal_url = client.principal.as_ref().unwrap_or(&client.base_url).clone();
+        client.calendar_home_set = client.query_calendar_home_set(principal_url).await?;
 
-        Ok(())
+        Ok(client)
     }
 
     /// Resolve the default context path with the well-known URL.
