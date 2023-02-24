@@ -100,7 +100,9 @@ impl Storage for FilesystemStorage {
 impl FilesystemStorage {
     // Joins an href to the collection's path.
     //
-    // Errors if the resulting path is not a child of the storage's directory.
+    // # Errors
+    //
+    // If the resulting path is not a child of the storage's directory.
     fn join_collection_href(&self, href: &str) -> Result<PathBuf> {
         let path = self.definition.path.join(href);
         if path.parent() != Some(&self.definition.path) {
