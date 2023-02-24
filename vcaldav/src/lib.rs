@@ -107,7 +107,6 @@ impl CalDavClient {
         let domain = client.base_url.domain().ok_or(BootstrapError::InvalidUrl)?;
         let port = client.base_url.port_or_known_default().unwrap_or(443);
 
-        // FIXME: wrap the srv error when this is merged: https://github.com/NLnetLabs/domain/pull/183
         let dname = Dname::bytes_from_str(domain).map_err(|_| BootstrapError::InvalidUrl)?;
         let mut candidates = resolve_srv_record(dname, port)
             .await
