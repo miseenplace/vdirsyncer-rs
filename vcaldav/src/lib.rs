@@ -166,7 +166,7 @@ impl CalDavClient {
             .request(Method::GET, url)
             .send()
             .await
-            .map(|resp| resp.url().to_owned())?;
+            .map(|resp| resp.url().clone())?;
 
         // If the response was a redirection, then we treat that as context path.
         if final_url != self.base_url {
@@ -212,7 +212,7 @@ impl CalDavClient {
             .responses
             .first()
             .and_then(|res| res.propstat.first())
-            .map(|propstat| propstat.prop.current_user_principal.href.to_owned())
+            .map(|propstat| propstat.prop.current_user_principal.href.clone())
             .map(|principal| url.join(principal.as_ref()).map_err(DavError::BadUrl))
             .transpose()
     }
@@ -227,7 +227,7 @@ impl CalDavClient {
         .responses
         .first()
         .and_then(|res| res.propstat.first())
-        .map(|propstat| propstat.prop.calendar_home_set.href.to_owned())
+        .map(|propstat| propstat.prop.calendar_home_set.href.clone())
         .map(|principal| url.join(principal.as_ref()).map_err(DavError::BadUrl))
         .transpose()
     }
@@ -266,7 +266,7 @@ impl CalDavClient {
                     .responses
                     .first()
                     .and_then(|res| res.propstat.first())
-                    .map(|propstat| propstat.prop.displayname.to_owned())
+                    .map(|propstat| propstat.prop.displayname.clone())
             })
     }
 
@@ -289,7 +289,7 @@ impl CalDavClient {
                 .responses
                 .first()
                 .and_then(|res| res.propstat.first())
-                .map(|propstat| propstat.prop.color.to_owned())
+                .map(|propstat| propstat.prop.color.clone())
         })
     }
 
