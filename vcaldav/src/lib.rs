@@ -393,6 +393,6 @@ impl CalDavClient {
 
         let response = response.error_for_status()?;
         let body = response.text().await?;
-        xml::parse_multistatus(&body).map_err(DavError::from)
+        xml::parse_multistatus(&body, ()).map_err(DavError::from)
     }
 }
