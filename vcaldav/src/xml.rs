@@ -66,7 +66,7 @@ impl FromXml for ItemDetails {
 
         #[derive(Debug)]
         enum State {
-            Root,
+            Response,
             Href,
             PropStat,
             Prop,
@@ -75,7 +75,7 @@ impl FromXml for ItemDetails {
             GetEtag,
             Status,
         }
-        let mut state = State::Root;
+        let mut state = State::Response;
         let mut href = Option::<String>::None;
         let mut content_type = Option::<String>::None;
         let mut etag = Option::<String>::None;
@@ -87,8 +87,8 @@ impl FromXml for ItemDetails {
             match (&state, reader.read_resolved_event_into(&mut buf)?) {
                 (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Root, DAV, b"href") => state = State::Href,
-                        (State::Root, DAV, b"propstat") => state = State::PropStat,
+                        (State::Response, DAV, b"href") => state = State::Href,
+                        (State::Response, DAV, b"propstat") => state = State::PropStat,
                         (State::PropStat, DAV, b"prop") => state = State::Prop,
                         (State::PropStat, DAV, b"status") => state = State::Status,
                         (State::Prop, DAV, b"resourcetype") => state = State::ResourceType,
@@ -103,9 +103,9 @@ impl FromXml for ItemDetails {
                 }
                 (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Root, DAV, b"response") => break,
-                        (State::Href, DAV, b"href") => state = State::Root,
-                        (State::PropStat, DAV, b"propstat") => state = State::Root,
+                        (State::Response, DAV, b"response") => break,
+                        (State::Href, DAV, b"href") => state = State::Response,
+                        (State::PropStat, DAV, b"propstat") => state = State::Response,
                         (State::Prop, DAV, b"prop") => state = State::PropStat,
                         (State::ResourceType, DAV, b"resourcetype") => state = State::Prop,
                         (State::GetContentType, DAV, b"getcontenttype") => state = State::Prop,
