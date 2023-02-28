@@ -140,7 +140,7 @@ impl CalDavClient {
             for candidate in candidates {
                 let url = Url::parse(&format!("https://{}:{}", candidate.0, candidate.1))?;
 
-                if let Ok(Some(path)) = client.resolve_context_path(Some(url)).await {
+                if let Ok(Some(path)) = client.resolve_context_path(url).await {
                     client.context_path = Some(path);
                     break;
                 }
@@ -166,11 +166,8 @@ impl CalDavClient {
     /// Resolve the default context path with the well-known URL.
     ///
     /// See: https://www.rfc-editor.org/rfc/rfc6764#section-5
-    pub async fn resolve_context_path(
-        &self,
-        url: Option<Url>,
-    ) -> Result<Option<Url>, reqwest::Error> {
-        let mut url = url.unwrap_or(self.base_url.clone());
+    pub async fn resolve_context_path(&self, url: Url) -> Result<Option<Url>, reqwest::Error> {
+        let mut url = url.clone();
         url.set_path("/.well-known/caldav");
 
         // From https://www.rfc-editor.org/rfc/rfc6764#section-5:
