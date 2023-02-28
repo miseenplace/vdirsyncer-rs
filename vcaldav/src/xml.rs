@@ -200,7 +200,11 @@ pub(crate) fn parse_multistatus<F: FromXml>(
             (State::Root, (_, Event::Eof)) => return Err(Error::MissingData("multistatus")),
             (State::Multistatus, (ResolveResult::Bound(namespace), Event::Start(element))) => {
                 if namespace.as_ref() == DAV && element.local_name().as_ref() == b"response" {
-                    items.push(F::from_xml(reader, &data));
+                    let item = F::from_xml(reader, &data);
+                    if item.is_err() {
+                        reader.read_to_end(QName("response".as_bytes()))?;
+                    }
+                    items.push(item);
                 } else {
                     return Err(Error::UnexpectedXml(format!("{namespace:?} {element:?}")));
                 };
