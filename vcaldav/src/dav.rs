@@ -35,6 +35,9 @@ pub enum DavError {
     #[error("cannot parse dav response")]
     Data(#[from] quick_xml::de::DeError),
 
+    #[error("failure parsing XML response")]
+    Xml(#[from] crate::xml::Error),
+
     #[error("failed to parse a URL returned by the server")]
     BadUrl(#[from] url::ParseError),
 }
@@ -45,6 +48,7 @@ impl From<DavError> for io::Error {
             DavError::Network(_) => io::Error::new(io::ErrorKind::Other, value),
             DavError::Data(_) => io::Error::new(io::ErrorKind::InvalidData, value),
             DavError::BadUrl(_) => io::Error::new(io::ErrorKind::InvalidInput, value),
+            DavError::Xml(e) => io::Error::new(io::ErrorKind::InvalidData, e),
         }
     }
 }

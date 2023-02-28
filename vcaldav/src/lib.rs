@@ -6,11 +6,13 @@ use domain::base::Dname;
 use reqwest::{Client, IntoUrl, Method, RequestBuilder, StatusCode};
 use serde::Deserialize;
 use url::{ParseError, Url};
+use xml::ListResult;
 
 use crate::dav::{CurrentUserPrincipalProp, Multistatus, ResourceTypeProp};
 
 pub mod dav;
 pub mod dns;
+pub mod xml;
 
 #[non_exhaustive]
 #[derive(Debug)]
@@ -347,5 +349,50 @@ impl CalDavClient {
             .await?;
 
         Multistatus::<T>::from_response(response).await
+    }
+
+    fn server_url(&self) -> &Url {
+        self.context_path.as_ref().unwrap_or(&self.base_url)
+    }
+
+    /// Enumerates entries in a collection
+    ///
+    /// Returns an array of results. Because the server can return a non-ok status for individual
+    /// entries, some of them may be `Err`, while other are `Ok(ItemDetails)`.
+    ///
+    /// # Errors
+    ///
+    /// If there are network errors executing the request or parsing the XML response.
+    pub async fn list_collection(
+        &self,
+        collection_href: &str,
+    ) -> Result<Vec<ListResult>, DavError> {
+        let mut url = self.server_url().clone();
+        url.set_path(collection_href);
+        let response = self
+            .request(
+                Method::from_bytes(b"PROPFIND").expect("API for HTTP methods is stupid"),
+                url,
+            )
+            .header("Content-Type", "application/xml; charset=utf-8")
+            .header("Depth", 1)
+            .body(
+                r#"
+                <propfind xmlns="DAV:">
+                    <prop>
+                        <resourcetype/>
+                        <getcontenttype/>
+                        <getetag/>
+                    </prop>
+                </propfind>
+                "#
+                .to_string(),
+            )
+            .send()
+            .await?;
+
+        let response = response.error_for_status()?;
+        let body = response.text().await?;
+        Ok(xml::parse_list(&body)?)
     }
 }
