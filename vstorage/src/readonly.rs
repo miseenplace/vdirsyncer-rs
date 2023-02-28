@@ -26,7 +26,7 @@ use std::io::Result;
 /// let orig = FilesystemDefinition {
 ///     path: PathBuf::from("/path/to/storage/"),
 ///     extension: String::from("ics"),
-/// }.storage().unwrap();
+/// }.storage().await.unwrap();
 ///
 /// let read_only = ReadOnlyStorage::from(orig);
 /// ```
