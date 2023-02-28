@@ -6,7 +6,7 @@ use domain::base::Dname;
 use reqwest::{Client, IntoUrl, Method, RequestBuilder, StatusCode};
 use serde::Deserialize;
 use url::{ParseError, Url};
-use xml::ListResult;
+use xml::ItemDetails;
 
 use crate::dav::{CurrentUserPrincipalProp, Multistatus, ResourceTypeProp};
 
@@ -366,7 +366,7 @@ impl CalDavClient {
     pub async fn list_collection(
         &self,
         collection_href: &str,
-    ) -> Result<Vec<ListResult>, DavError> {
+    ) -> Result<Vec<Result<ItemDetails, crate::xml::Error>>, DavError> {
         let mut url = self.server_url().clone();
         url.set_path(collection_href);
         let response = self
@@ -393,6 +393,6 @@ impl CalDavClient {
 
         let response = response.error_for_status()?;
         let body = response.text().await?;
-        xml::parse_list(&body).map_err(DavError::from)
+        xml::parse_multistatus(&body).map_err(DavError::from)
     }
 }

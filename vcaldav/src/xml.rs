@@ -23,15 +23,16 @@ pub enum Error {
     #[error("unexpected structure in XML")]
     UnexpectedXml(String),
 
-    #[error("error parsing XML")]
+    #[error(transparent)]
     Parser(#[from] quick_xml::Error),
 
     #[error("status code is not 200")]
     BadStatus(String),
 }
 
-/// Result of parsing a single item.
-pub type ListResult = Result<ItemDetails, Error>;
+pub trait FromXml: Sized {
+    fn from_xml<R: BufRead>(reader: &mut NsReader<R>) -> Result<Self, Error>;
+}
 
 /// Details of a single item that are returned when listing them.
 ///
@@ -46,7 +47,7 @@ pub struct ItemDetails {
     pub is_address_book: bool,
 }
 
-impl ItemDetails {
+impl FromXml for ItemDetails {
     /// Parse a list item using an XML reader.
     ///
     /// The reader is expected to have consumed the start tag for the `response`
@@ -169,7 +170,7 @@ impl ItemDetails {
 /// - If parsing the XML fails in any way.
 /// - If any necessary fields are missing.
 /// - If any unexpected XML nodes are found.
-pub(crate) fn parse_list(raw: &str) -> Result<Vec<ListResult>, Error> {
+pub(crate) fn parse_multistatus<F: FromXml>(raw: &str) -> Result<Vec<Result<F, Error>>, Error> {
     //TODO: Use an async reader instead (this is mostly a Poc).
     let reader = &mut NsReader::from_str(raw);
     reader.trim_text(true);
@@ -189,13 +190,12 @@ pub(crate) fn parse_list(raw: &str) -> Result<Vec<ListResult>, Error> {
             (State::Root, (ResolveResult::Bound(namespace), Event::Start(element))) => {
                 if namespace.as_ref() == DAV && element.local_name().as_ref() == b"multistatus" {
                     state = State::Multistatus;
-                    // return parse_multistatus(reader);
                 }
             }
             (State::Root, (_, Event::Eof)) => return Err(Error::MissingData("multistatus")),
             (State::Multistatus, (ResolveResult::Bound(namespace), Event::Start(element))) => {
                 if namespace.as_ref() == DAV && element.local_name().as_ref() == b"response" {
-                    items.push(ItemDetails::from_xml(reader));
+                    items.push(F::from_xml(reader));
                 } else {
                     return Err(Error::UnexpectedXml(format!("{namespace:?} {element:?}")));
                 };
@@ -256,7 +256,7 @@ mod more_tests {
   </response>
 </multistatus>"#;
 
-        let parsed = parse_list(raw).unwrap();
+        let parsed = parse_multistatus::<ItemDetails>(raw).unwrap();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0].as_ref().unwrap(), &ItemDetails {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/".to_string(),
