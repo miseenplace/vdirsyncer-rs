@@ -1,14 +1,12 @@
 use std::io;
 
-use dav::{CalendarHomeSetProp, ColourProp, DisplayNameProp};
 use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
 use domain::base::Dname;
 use reqwest::{Client, IntoUrl, Method, RequestBuilder, StatusCode};
-use serde::Deserialize;
 use url::{ParseError, Url};
-use xml::ItemDetails;
-
-use crate::dav::{CurrentUserPrincipalProp, Multistatus, ResourceTypeProp};
+use xml::{
+    FromXml, HrefProperty, ItemDetails, SimplePropertyMeta, ResponseWithProp, StringProperty, DAV,
+};
 
 mod dav;
 pub mod dns;
@@ -225,29 +223,52 @@ impl CalDavClient {
     }
 
     async fn query_current_user_principal(&self, url: Url) -> Result<Option<Url>, DavError> {
-        self.propfind::<CurrentUserPrincipalProp>(url.clone(), "<current-user-principal />", 0)
-            .await?
-            .responses
-            .first()
-            .and_then(|res| res.propstat.first())
-            .map(|propstat| propstat.prop.current_user_principal.href.clone())
-            .map(|principal| url.join(principal.as_ref()).map_err(DavError::BadUrl))
-            .transpose()
+        let property_data = SimplePropertyMeta {
+            name: b"current-user-principal".to_vec(),
+            namespace: xml::DAV.to_vec(),
+        };
+
+        self.find_href_prop(url, "<current-user-principal/>", property_data)
+            .await
     }
 
     async fn query_calendar_home_set(&self, url: Url) -> Result<Option<Url>, DavError> {
-        self.propfind::<CalendarHomeSetProp>(
-            url.clone(),
+        let property_data = SimplePropertyMeta {
+            name: b"calendar-home-set".to_vec(),
+            namespace: xml::CALDAV.to_vec(),
+        };
+
+        self.find_href_prop(
+            url,
             "<calendar-home-set xmlns=\"urn:ietf:params:xml:ns:caldav\"/>",
-            0,
+            property_data,
         )
-        .await?
-        .responses
-        .first()
-        .and_then(|res| res.propstat.first())
-        .map(|propstat| propstat.prop.calendar_home_set.href.clone())
-        .map(|principal| url.join(principal.as_ref()).map_err(DavError::BadUrl))
-        .transpose()
+        .await
+    }
+
+    /// Helper to find an `href` property
+    ///
+    /// Very specific, but de-duplicates two identical methods above.
+    async fn find_href_prop(
+        &self,
+        url: Url,
+        prop: &str,
+        prop_type: SimplePropertyMeta,
+    ) -> Result<Option<Url>, DavError> {
+        let maybe_href = match self
+            .propfind::<ResponseWithProp<HrefProperty>>(url.clone(), prop, 0, prop_type)
+            .await?
+            .pop()
+            .transpose()?
+        {
+            Some(prop) => prop.into_maybe_string(),
+            None => return Ok(None),
+        };
+
+        maybe_href
+            .map(|href| url.join(&href))
+            .transpose()
+            .map_err(DavError::BadUrl)
     }
 
     /// Find calendars collections under the given `url`.
@@ -259,21 +280,27 @@ impl CalDavClient {
     ///
     /// If the HTTP call fails or parsing the XML response fails.
     pub async fn find_calendars(&self, url: Url) -> Result<Vec<String>, DavError> {
-        self.propfind::<ResourceTypeProp>(url.clone(), "<resourcetype />", 1)
+        Ok(self
+            // XXX: depth 1 or infinity?
+            .propfind::<ResponseWithProp<ItemDetails>>(
+                url.clone(),
+                "<resourcetype/><getetag/>",
+                1,
+                (),
+            )
             .await
-            .map(|multi_response| {
-                multi_response
-                    .responses
-                    .into_iter()
-                    // TODO: I'm ignoring the status code.
-                    .filter(|response| {
-                        response.propstat.first().map_or(false, |propstat| {
-                            propstat.prop.resourcetype.calendar.is_some()
-                        })
-                    })
-                    .map(|response| response.href)
-                    .collect()
+            .map_err(DavError::from)?
+            .into_iter()
+            .filter(|c| {
+                if let Ok(cal) = c {
+                    cal.prop.is_calendar
+                } else {
+                    true
+                }
             })
+            // FIXME: silently ignores collections with any issues:
+            .filter_map(|r| r.map(|c| c.href).ok())
+            .collect())
     }
 
     /// Returns the `displayname` for the calendar at path `href`.
@@ -282,18 +309,25 @@ impl CalDavClient {
     ///
     /// If the HTTP call fails or parsing the XML response fails.
     pub async fn get_calendar_displayname(&self, href: &str) -> Result<Option<String>, DavError> {
-        let mut url = self.context_path.as_ref().unwrap_or(&self.base_url).clone();
+        let mut url = self.server_url().clone();
         url.set_path(href);
 
-        self.propfind::<DisplayNameProp>(url, "<displayname/>", 0)
-            .await
-            .map(|multi_response| {
-                multi_response
-                    .responses
-                    .first()
-                    .and_then(|res| res.propstat.first())
-                    .map(|propstat| propstat.prop.displayname.clone())
-            })
+        let property_data = SimplePropertyMeta {
+            name: b"displayname".to_vec(),
+            namespace: DAV.to_vec(),
+        };
+
+        self.propfind::<ResponseWithProp<StringProperty>>(
+            url.clone(),
+            "<displayname/>",
+            0,
+            property_data,
+        )
+        .await?
+        .pop()
+        .ok_or(xml::Error::MissingData("dispayname"))?
+        .map(Option::<String>::from)
+        .map_err(DavError::from)
     }
 
     /// Returns the colour for the calendar at path `href`.
@@ -304,22 +338,26 @@ impl CalDavClient {
     ///
     /// If the network request fails, or if the response cannot be parsed.
     pub async fn get_calendar_colour(&self, href: &str) -> Result<Option<String>, DavError> {
-        let mut url = self.context_path.as_ref().unwrap_or(&self.base_url).clone();
+        let mut url = self.server_url().clone();
         url.set_path(href);
 
-        self.propfind::<ColourProp>(
-            url,
+        let property_data = SimplePropertyMeta {
+            name: b"calendar-color".to_vec(),
+            // XXX: prop_namespace: b"http://apple.com/ns/ical/".to_vec(),
+            namespace: b"DAV:".to_vec(),
+        };
+
+        self.propfind::<ResponseWithProp<StringProperty>>(
+            url.clone(),
             "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>",
             0,
+            property_data,
         )
-        .await
-        .map(|multi_response| {
-            multi_response
-                .responses
-                .first()
-                .and_then(|res| res.propstat.first())
-                .map(|propstat| propstat.prop.color.clone())
-        })
+        .await?
+        .pop()
+        .ok_or(xml::Error::MissingData("calendar-color"))?
+        .map(Option::<String>::from)
+        .map_err(DavError::from)
     }
 
     // TODO: get_calendar_description ("calendar-description", "urn:ietf:params:xml:ns:caldav")
@@ -328,12 +366,13 @@ impl CalDavClient {
     //       Maybe all these props impl a single trait, so the API could be `get_prop<T>(url)`?
 
     /// Sends a `PROPFIND` request and parses the result.
-    async fn propfind<T: for<'a> Deserialize<'a> + Default>(
+    async fn propfind<T: FromXml>(
         &self,
         url: Url,
         prop: &str,
         depth: u8,
-    ) -> Result<Multistatus<T>, DavError> {
+        data: T::Data,
+    ) -> Result<Vec<Result<T, xml::Error>>, DavError> {
         let response = self
             .request(
                 Method::from_bytes(b"PROPFIND").expect("API for HTTP methods is stupid"),
@@ -352,8 +391,10 @@ impl CalDavClient {
             ))
             .send()
             .await?;
+        let response = response.error_for_status()?;
+        let body = response.text().await?;
 
-        Multistatus::<T>::from_response(response).await
+        xml::parse_multistatus::<T>(&body, data).map_err(DavError::from)
     }
 
     fn server_url(&self) -> &Url {
@@ -371,33 +412,17 @@ impl CalDavClient {
     pub async fn list_collection(
         &self,
         collection_href: &str,
-    ) -> Result<Vec<Result<ItemDetails, crate::xml::Error>>, DavError> {
+    ) -> Result<Vec<Result<ResponseWithProp<ItemDetails>, crate::xml::Error>>, DavError> {
         let mut url = self.server_url().clone();
         url.set_path(collection_href);
-        let response = self
-            .request(
-                Method::from_bytes(b"PROPFIND").expect("API for HTTP methods is stupid"),
-                url,
-            )
-            .header("Content-Type", "application/xml; charset=utf-8")
-            .header("Depth", 1)
-            .body(
-                r#"
-                <propfind xmlns="DAV:">
-                    <prop>
-                        <resourcetype/>
-                        <getcontenttype/>
-                        <getetag/>
-                    </prop>
-                </propfind>
-                "#
-                .to_string(),
-            )
-            .send()
-            .await?;
 
-        let response = response.error_for_status()?;
-        let body = response.text().await?;
-        xml::parse_multistatus(&body, ()).map_err(DavError::from)
+        self.propfind::<ResponseWithProp<ItemDetails>>(
+            url,
+            "<resourcetype/><getcontenttype/><getetag/>",
+            1,
+            (),
+        )
+        .await
+        // TODO: map to a cleaner public type
     }
 }
