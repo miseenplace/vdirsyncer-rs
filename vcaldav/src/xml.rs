@@ -241,7 +241,10 @@ impl From<ResponseWithProp<StringProperty>> for Option<String> {
 impl FromXml for StringProperty {
     type Data = SimplePropertyMeta;
 
-    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &SimplePropertyMeta) -> Result<Self, Error> {
+    fn from_xml<R: BufRead>(
+        reader: &mut NsReader<R>,
+        data: &SimplePropertyMeta,
+    ) -> Result<Self, Error> {
         let mut buf = Vec::new();
 
         #[derive(Debug)]
@@ -315,7 +318,10 @@ impl From<ResponseWithProp<HrefProperty>> for Option<String> {
 impl FromXml for HrefProperty {
     type Data = SimplePropertyMeta;
 
-    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &SimplePropertyMeta) -> Result<Self, Error> {
+    fn from_xml<R: BufRead>(
+        reader: &mut NsReader<R>,
+        data: &SimplePropertyMeta,
+    ) -> Result<Self, Error> {
         let mut buf = Vec::new();
 
         #[derive(Debug)]
