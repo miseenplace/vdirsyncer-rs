@@ -23,12 +23,14 @@ use std::io::Result;
 /// # use std::path::PathBuf;
 /// # use vstorage::readonly::ReadOnlyStorage;
 /// # use crate::vstorage::base::Definition;
+/// # tokio::runtime::Runtime::new().unwrap().block_on(async {
 /// let orig = FilesystemDefinition {
 ///     path: PathBuf::from("/path/to/storage/"),
 ///     extension: String::from("ics"),
 /// }.storage().await.unwrap();
 ///
 /// let read_only = ReadOnlyStorage::from(orig);
+/// # })
 /// ```
 pub struct ReadOnlyStorage {
     inner: Box<dyn Storage>,
