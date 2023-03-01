@@ -30,8 +30,14 @@ pub enum Error {
     BadStatus(String),
 }
 
+/// A type that can be built by parsing XML.
 pub trait FromXml: Sized {
     type Data;
+    /// Builds a new instance by parsing the XML reader.
+    ///
+    /// The opening tag for this type is expected to have been consumed prior
+    /// to calling this method.
+    // TODO: on failure, the reader should be moved to the end of the matching end node.
     fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &Self::Data) -> Result<Self, Error>;
 }
 

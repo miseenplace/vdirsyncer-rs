@@ -20,7 +20,7 @@ use domain::{
 ///
 /// # Errors
 ///
-/// - If the underlying DNS request fails or the SRV record cannot be parsed.
+/// If the underlying DNS request fails or the SRV record cannot be parsed.
 ///
 /// # See also
 ///
@@ -57,6 +57,7 @@ pub async fn resolve_srv_record<T: std::convert::AsRef<[u8]>>(
         .collect())
 }
 
+/// Error returned by [`find_context_path_via_txt_records`].
 #[derive(thiserror::Error, Debug)]
 pub enum TxtError {
     #[error("I/O error performing DNS request")]
@@ -97,6 +98,10 @@ impl From<TxtError> for io::Error {
 /// # Errors
 ///
 /// See [`TxtError`]
+///
+/// # See also
+///
+/// <https://www.rfc-editor.org/rfc/rfc6764>
 pub async fn find_context_path_via_txt_records(domain: &str) -> Result<Option<String>, TxtError> {
     let resolver = StubResolver::new();
     // TODO: use methods on Dname to construct this this record and avoid creating a String here:

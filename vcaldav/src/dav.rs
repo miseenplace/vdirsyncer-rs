@@ -27,6 +27,7 @@ pub struct Multistatus<T> {
     pub responses: Vec<Response<T>>,
 }
 
+/// A generic error for `WebDav` operations.
 #[derive(thiserror::Error, Debug)]
 pub enum DavError {
     #[error("http error executing request")]

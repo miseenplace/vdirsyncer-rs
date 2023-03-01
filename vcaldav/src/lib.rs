@@ -1,6 +1,6 @@
 use std::io;
 
-use dav::{CalendarHomeSetProp, ColourProp, DavError, DisplayNameProp};
+use dav::{CalendarHomeSetProp, ColourProp, DisplayNameProp};
 use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
 use domain::base::Dname;
 use reqwest::{Client, IntoUrl, Method, RequestBuilder, StatusCode};
@@ -10,10 +10,13 @@ use xml::ItemDetails;
 
 use crate::dav::{CurrentUserPrincipalProp, Multistatus, ResourceTypeProp};
 
-pub mod dav;
+mod dav;
 pub mod dns;
 pub mod xml;
 
+pub use dav::DavError;
+
+/// Authentication schemes supported by [`CalDavClient`].
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum Auth {
@@ -24,6 +27,7 @@ pub enum Auth {
     },
 }
 
+/// A client to communicate with a CalDav server.
 // TODO FIXME: Need to figure out how to reuse as much as possible for carddav and caldav.
 #[derive(Debug)]
 pub struct CalDavClient {
@@ -43,6 +47,7 @@ pub struct CalDavClient {
     pub calendar_home_set: Option<Url>, // TODO: timeouts
 }
 
+/// An error automatically bootstrapping a new client.
 #[derive(thiserror::Error, Debug)]
 pub enum BootstrapError {
     #[error("the input URL is not valid")]
