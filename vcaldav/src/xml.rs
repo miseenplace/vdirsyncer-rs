@@ -301,6 +301,35 @@ impl FromXml for StringProperty {
 }
 
 /// A property with a single `href` node.
+///
+/// This example:
+///
+/// ```xml
+/// <?xml version="1.0" encoding="utf-8"?>
+/// <multistatus xmlns="DAV:">
+///   <response>
+///     <href>/dav/calendars</href>
+///     <propstat>
+///       <prop>
+///         <current-user-principal>
+///           <href>/dav/principals/user/vdirsyncer@example.com/</href>
+///         </current-user-principal>
+///       </prop>
+///       <status>HTTP/1.1 200 OK</status>
+///     </propstat>
+///   </response>
+/// </multistatus>
+/// ```
+///
+/// Can be parsed with the following [`SimplePropertyMeta`]:
+///
+/// ```rust
+/// # use vcaldav::xml::SimplePropertyMeta;;
+/// let property_data = SimplePropertyMeta {
+///     name: b"current-user-principal".to_vec(),
+///     namespace: b"DAV:".to_vec(),
+/// };
+/// ```
 pub struct HrefProperty(Option<String>);
 
 impl ResponseWithProp<HrefProperty> {
