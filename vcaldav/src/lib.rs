@@ -32,14 +32,14 @@ pub struct CalDavClient {
     client: Client,
     /// URL to be used for all requests. This may be (due to bootstrapping discovery)
     /// a path than the one provided as `base_url`.
-    /// See: https://www.rfc-editor.org/rfc/rfc6764#section-1
+    /// See: <https://www.rfc-editor.org/rfc/rfc6764#section-1>
     pub context_path: Option<Url>,
     /// URL to a principal resource corresponding to the currently authenticated user.
-    /// See: https://www.rfc-editor.org/rfc/rfc5397#section-3
+    /// See: <https://www.rfc-editor.org/rfc/rfc5397#section-3>
     pub principal: Option<Url>,
     /// URL of collections that are either calendar collections or ordinary collections
     /// that have child or descendant calendar collections owned by the principal.
-    /// See: https://www.rfc-editor.org/rfc/rfc4791#section-6.2.1
+    /// See: <https://www.rfc-editor.org/rfc/rfc4791#section-6.2.1>
     pub calendar_home_set: Option<Url>, // TODO: timeouts
 }
 
@@ -167,7 +167,7 @@ impl CalDavClient {
 
     /// Resolve the default context path with the well-known URL.
     ///
-    /// See: https://www.rfc-editor.org/rfc/rfc6764#section-5
+    /// See: <https://www.rfc-editor.org/rfc/rfc6764#section-5>
     pub async fn resolve_context_path(&self, url: Url) -> Result<Option<Url>, reqwest::Error> {
         let mut url = url.clone();
         url.set_path("/.well-known/caldav");
@@ -194,7 +194,7 @@ impl CalDavClient {
 
     /// Resolves the current user's principal resource.
     ///
-    /// See: https://www.rfc-editor.org/rfc/rfc5397
+    /// See: <https://www.rfc-editor.org/rfc/rfc5397>
     pub async fn resolve_current_user_principal(&self) -> Result<Option<Url>, DavError> {
         // Try querying the provided base url...
         if let Some(context_path) = &self.context_path {
