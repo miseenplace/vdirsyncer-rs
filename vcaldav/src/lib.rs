@@ -80,7 +80,7 @@ impl From<BootstrapError> for io::Error {
 impl CalDavClient {
     /// Returns a client without any automatic bootstrapping.
     ///
-    /// It is generally advised to use [`auto_bootstrap`] instead.
+    /// It is generally advised to use [`CalDavClient::auto_bootstrap`] instead.
     pub fn raw_client(base_url: Url, auth: Auth) -> Self {
         // TODO: check that the URL is http or https (or mailto:?).
         Self {
