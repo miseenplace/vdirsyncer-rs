@@ -5,9 +5,9 @@
 #![feature(io_error_more)]
 
 pub mod base;
+pub mod caldav;
 pub mod filesystem;
 pub mod readonly;
 mod simple_component;
 pub mod util;
 pub mod webcal;
-pub mod caldav;

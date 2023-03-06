@@ -5,7 +5,7 @@ use domain::base::Dname;
 use reqwest::{Client, IntoUrl, Method, RequestBuilder, StatusCode};
 use url::{ParseError, Url};
 use xml::{
-    FromXml, HrefProperty, ItemDetails, SimplePropertyMeta, ResponseWithProp, StringProperty, DAV,
+    FromXml, HrefProperty, ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty, DAV,
 };
 
 mod dav;
