@@ -51,10 +51,8 @@ impl Storage for CalDavStorage {
     /// to [`CalDavStorage::open_collection`].
     async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
         let client = self.client.read().await;
-        // TODO: FIXME: unwrap will likely panic; need to use base_url as fallback!
-        let url = client.context_path.as_ref().unwrap().clone();
         let x = client
-            .find_calendars(url)
+            .find_calendars(client.context_path().clone())
             .await?
             .into_iter()
             .map(|href| {

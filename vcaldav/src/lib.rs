@@ -39,13 +39,14 @@ impl Auth {
 // TODO FIXME: Need to figure out how to reuse as much as possible for carddav and caldav.
 #[derive(Debug)]
 pub struct CalDavClient {
+    /// Base URL to be used for all requests.
+    ///
+    /// This may be (due to bootstrapping discovery) a path than the one provided as input.
+    ///
+    /// See: <https://www.rfc-editor.org/rfc/rfc6764#section-1>
     base_url: Url,
     auth: Auth,
     client: Client,
-    /// URL to be used for all requests. This may be (due to bootstrapping discovery)
-    /// a path than the one provided as `base_url`.
-    /// See: <https://www.rfc-editor.org/rfc/rfc6764#section-1>
-    pub context_path: Option<Url>,
     /// URL to a principal resource corresponding to the currently authenticated user.
     /// See: <https://www.rfc-editor.org/rfc/rfc5397#section-3>
     pub principal: Option<Url>,
@@ -100,7 +101,6 @@ impl CalDavClient {
             base_url,
             auth,
             client: Client::new(),
-            context_path: None,
             principal: None,
             calendar_home_set: None,
         }
@@ -147,18 +147,15 @@ impl CalDavClient {
         };
 
         if let Some(path) = find_context_path_via_txt_records(domain).await? {
-            let mut ctx_path_url = client.base_url.clone();
-            ctx_path_url.set_path(&path);
-            // TODO: validate that the path works?
-            client.context_path = Some(ctx_path_url);
-        };
-
-        if client.context_path.is_none() {
+            // FIXME: This completely ignores result from the SRV lookup.
+            // TODO: validate that the path works (HEAD?)
+            client.base_url.set_path(&path);
+        } else {
             for candidate in candidates {
                 let url = Url::parse(&format!("https://{}:{}", candidate.0, candidate.1))?;
 
-                if let Ok(Some(path)) = client.resolve_context_path(url).await {
-                    client.context_path = Some(path);
+                if let Ok(Some(url)) = client.resolve_context_path(url).await {
+                    client.base_url = url;
                     break;
                 }
             }
@@ -178,6 +175,11 @@ impl CalDavClient {
         client.calendar_home_set = client.query_calendar_home_set(principal_url).await?;
 
         Ok(client)
+    }
+
+    /// Returns a URL pointing to the server's context path.
+    pub fn context_path(&self) -> &Url {
+        &self.base_url
     }
 
     /// Resolve the default context path with the well-known URL.
@@ -212,18 +214,16 @@ impl CalDavClient {
     /// See: <https://www.rfc-editor.org/rfc/rfc5397>
     pub async fn resolve_current_user_principal(&self) -> Result<Option<Url>, DavError> {
         // Try querying the provided base url...
-        if let Some(context_path) = &self.context_path {
-            let maybe_principal = self
-                .query_current_user_principal(context_path.clone())
-                .await;
+        let maybe_principal = self
+            .query_current_user_principal(self.base_url.clone())
+            .await;
 
-            match maybe_principal {
-                Err(DavError::Network(err)) if err.status() == Some(StatusCode::NOT_FOUND) => {}
-                Err(err) => return Err(err),
-                Ok(Some(p)) => return Ok(Some(p)),
-                Ok(None) => {}
-            };
-        }
+        match maybe_principal {
+            Err(DavError::Network(err)) if err.status() == Some(StatusCode::NOT_FOUND) => {}
+            Err(err) => return Err(err),
+            Ok(Some(p)) => return Ok(Some(p)),
+            Ok(None) => {}
+        };
 
         // ... Otherwise, try querying the root path.
         let mut root = self.base_url.clone();
@@ -321,7 +321,7 @@ impl CalDavClient {
     ///
     /// If the HTTP call fails or parsing the XML response fails.
     pub async fn get_calendar_displayname(&self, href: &str) -> Result<Option<String>, DavError> {
-        let mut url = self.server_url().clone();
+        let mut url = self.base_url.clone();
         url.set_path(href);
 
         let property_data = SimplePropertyMeta {
@@ -350,7 +350,7 @@ impl CalDavClient {
     ///
     /// If the network request fails, or if the response cannot be parsed.
     pub async fn get_calendar_colour(&self, href: &str) -> Result<Option<String>, DavError> {
-        let mut url = self.server_url().clone();
+        let mut url = self.base_url.clone();
         url.set_path(href);
 
         let property_data = SimplePropertyMeta {
@@ -409,10 +409,6 @@ impl CalDavClient {
         xml::parse_multistatus::<T>(&body, data).map_err(DavError::from)
     }
 
-    fn server_url(&self) -> &Url {
-        self.context_path.as_ref().unwrap_or(&self.base_url)
-    }
-
     /// Enumerates entries in a collection
     ///
     /// Returns an array of results. Because the server can return a non-ok status for individual
@@ -425,7 +421,7 @@ impl CalDavClient {
         &self,
         collection_href: &str,
     ) -> Result<Vec<Result<ResponseWithProp<ItemDetails>, crate::xml::Error>>, DavError> {
-        let mut url = self.server_url().clone();
+        let mut url = self.base_url.clone();
         url.set_path(collection_href);
 
         self.propfind::<ResponseWithProp<ItemDetails>>(
