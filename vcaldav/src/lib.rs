@@ -26,6 +26,7 @@ pub enum Auth {
 }
 
 impl Auth {
+    /// Apply this authentication to a request builder.
     fn apply(&self, request: RequestBuilder) -> RequestBuilder {
         match self {
             Auth::None => request,
@@ -133,12 +134,17 @@ impl CalDavClient {
         let port = client.base_url.port_or_known_default().unwrap_or(443);
 
         let dname = Dname::bytes_from_str(domain).map_err(|_| BootstrapError::InvalidUrl)?;
-        let mut candidates = resolve_srv_record(dname, port)
-            .await
-            .map_err(|_| BootstrapError::DnsError)?;
+        let candidates = {
+            let mut candidates = resolve_srv_record(dname, port)
+                .await
+                .map_err(|_| BootstrapError::DnsError)?;
 
-        // If none of the SRV candidates work, try the domain/port in the provided URI.
-        candidates.push((domain.to_string(), port));
+            // If there are no SRV records, try the domain/port in the provided URI.
+            if candidates.is_empty() {
+                candidates.push((domain.to_string(), port));
+            }
+            candidates
+        };
 
         if let Some(path) = find_context_path_via_txt_records(domain).await? {
             let mut ctx_path_url = client.base_url.clone();
