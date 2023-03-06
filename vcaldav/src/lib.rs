@@ -147,8 +147,14 @@ impl CalDavClient {
         };
 
         if let Some(path) = find_context_path_via_txt_records(domain).await? {
-            // FIXME: This completely ignores result from the SRV lookup.
-            // TODO: validate that the path works (HEAD?)
+            // TODO: validate that the path works on the chosen server.
+            let candidate = &candidates[0];
+            client.base_url.set_host(Some(candidate.0.as_ref()))?;
+            client
+                .base_url
+                .set_port(Some(candidate.1))
+                .map_err(|_| BootstrapError::DnsError)?;
+
             client.base_url.set_path(&path);
         } else {
             for candidate in candidates {
