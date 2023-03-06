@@ -25,6 +25,15 @@ pub enum Auth {
     },
 }
 
+impl Auth {
+    fn apply(&self, request: RequestBuilder) -> RequestBuilder {
+        match self {
+            Auth::None => request,
+            Auth::Basic { username, password } => request.basic_auth(username, password.as_ref()),
+        }
+    }
+}
+
 /// A client to communicate with a CalDav server.
 // TODO FIXME: Need to figure out how to reuse as much as possible for carddav and caldav.
 #[derive(Debug)]
@@ -101,10 +110,7 @@ impl CalDavClient {
     /// Returns a request builder with the proper `Authorization` header set.
     fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
         let request = self.client.request(method, url);
-        match &self.auth {
-            Auth::None => request,
-            Auth::Basic { username, password } => request.basic_auth(username, password.as_ref()),
-        }
+        self.auth.apply(request)
     }
 
     /// Auto-bootstrap a new client.
