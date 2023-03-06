@@ -418,11 +418,11 @@ impl FromXml for HrefProperty {
 /// - If any necessary fields are missing.
 /// - If any unexpected XML nodes are found.
 pub(crate) fn parse_multistatus<F: FromXml>(
-    raw: &str,
+    raw: &[u8],
     data: F::Data,
 ) -> Result<Vec<Result<F, Error>>, Error> {
     //TODO: Use an async reader instead (this is mostly a Poc).
-    let reader = &mut NsReader::from_str(raw);
+    let reader = &mut NsReader::from_reader(raw);
     reader.trim_text(true);
 
     #[derive(Debug)]
@@ -480,7 +480,7 @@ mod more_tests {
 
     #[test]
     fn test_parse_list_result() {
-        let raw = r#"
+        let raw = br#"
 <?xml version="1.0" encoding="utf-8"?>
 <multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/">
   <response>
@@ -537,14 +537,14 @@ mod more_tests {
     }
     #[test]
     fn test_empty_response() {
-        let raw = r#"<multistatus xmlns="DAV:" />"#;
+        let raw = br#"<multistatus xmlns="DAV:" />"#;
         let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, ()).unwrap();
         assert_eq!(parsed.len(), 0);
     }
 
     #[test]
     fn test_single_propstat() {
-        let raw = r#"
+        let raw = br#"
             <multistatus xmlns="DAV:">
                 <response>
                     <href>/path</href>

@@ -4,14 +4,14 @@
 use std::{io::Result, sync::Arc};
 
 use async_trait::async_trait;
-use reqwest::Url;
+use http::Uri;
 use tokio::sync::RwLock;
 use vcaldav::{Auth, CalDavClient};
 
 use crate::base::{Collection, Definition, MetadataKind, Storage};
 
 pub struct CalDavDefinition {
-    pub url: Url,
+    pub url: Uri,
     pub auth: Auth,
 }
 

@@ -20,6 +20,7 @@ thiserror = "1.0.37"
 tokio-stream = { version = "0.1.11", default-features = false, features = ["fs"] }
 async-trait = "0.1.64"
 vcaldav = { version = "0.1.0", path = "../vcaldav" }
+http = "0.2.9"
 
 [dev-dependencies]
 tempfile = "3.3.0"

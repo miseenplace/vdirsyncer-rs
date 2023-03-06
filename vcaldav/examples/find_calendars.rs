@@ -14,8 +14,7 @@
 //! Href and Etag for components in calendar:
 //! - /dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/395b00a0-eebc-40fd-a98e-176a06367c82.ics, "e7577ff2b0924fe8e9a91d3fb2eb9072598bf9fb"
 //! ```
-
-use url::Url;
+use http::Uri;
 use vcaldav::Auth;
 use vcaldav::CalDavClient;
 
@@ -25,7 +24,7 @@ async fn main() {
     arguments
         .next()
         .expect("binary has been called with a name");
-    let base_url: Url = arguments
+    let base_url: Uri = arguments
         .next()
         .expect("$1 is defined")
         .parse()
