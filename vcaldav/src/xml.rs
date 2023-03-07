@@ -339,6 +339,7 @@ impl FromXml for StringProperty {
 pub struct HrefProperty(Option<String>);
 
 impl ResponseWithProp<HrefProperty> {
+    #[must_use]
     pub fn into_maybe_string(self) -> Option<String> {
         self.prop.0
     }
