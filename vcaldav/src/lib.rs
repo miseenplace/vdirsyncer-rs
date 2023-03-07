@@ -1,21 +1,22 @@
-use std::io;
-
-use base64::{prelude::BASE64_STANDARD, write::EncoderWriter};
-use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
-use domain::base::Dname;
-use http::{HeaderValue, Method, Request, StatusCode};
-use hyper::{client::HttpConnector, Body, Client, Uri};
-use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use std::io::Write;
-use xml::{
-    FromXml, HrefProperty, ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty, DAV,
+use std::{
+    io,
+    ops::{Deref, DerefMut},
 };
 
-mod dav;
+use base64::{prelude::BASE64_STANDARD, write::EncoderWriter};
+use dav::DavClient;
+use dav::DavError;
+use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
+use domain::base::Dname;
+use http::{HeaderValue, Method, Request};
+use hyper::{Client, Uri};
+use hyper_rustls::HttpsConnectorBuilder;
+use std::io::Write;
+use xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty, DAV};
+
+pub mod dav;
 pub mod dns;
 pub mod xml;
-
-pub use dav::DavError;
 
 /// Authentication schemes supported by [`CalDavClient`].
 #[non_exhaustive]
@@ -64,26 +65,32 @@ impl Auth {
 }
 
 /// A client to communicate with a CalDav server.
+///
+/// Wraps around a [`DavClient`], which provides the underlying webdav functionality.
 // TODO FIXME: Need to figure out how to reuse as much as possible for carddav and caldav.
 #[derive(Debug)]
 pub struct CalDavClient {
-    /// Base URL to be used for all requests.
-    ///
-    /// This may be (due to bootstrapping discovery) a path than the one provided as input.
+    /// The `base_url` may be (due to bootstrapping discovery) different to the one provided as input.
     ///
     /// See: <https://www.rfc-editor.org/rfc/rfc6764#section-1>
-    base_url: Uri,
-    auth: Auth,
-    // TODO: we can eventually use a generic connector to allow explicitly
-    // using caldav or caldavs.
-    http_client: Client<HttpsConnector<HttpConnector>>,
-    /// URL to a principal resource corresponding to the currently authenticated user.
-    /// See: <https://www.rfc-editor.org/rfc/rfc5397#section-3>
-    pub principal: Option<Uri>,
+    dav_client: DavClient,
     /// URL of collections that are either calendar collections or ordinary collections
     /// that have child or descendant calendar collections owned by the principal.
     /// See: <https://www.rfc-editor.org/rfc/rfc4791#section-6.2.1>
     pub calendar_home_set: Option<Uri>, // TODO: timeouts
+}
+
+impl Deref for CalDavClient {
+    type Target = DavClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.dav_client
+    }
+}
+impl DerefMut for CalDavClient {
+    fn deref_mut(&mut self) -> &mut dav::DavClient {
+        &mut self.dav_client
+    }
 }
 
 /// An error automatically bootstrapping a new client.
@@ -153,34 +160,17 @@ impl CalDavClient {
             .build();
 
         Self {
-            base_url,
-            auth,
-            http_client: Client::builder().build(https),
-            principal: None,
+            dav_client: DavClient {
+                base_url,
+                auth,
+                http_client: Client::builder().build(https),
+                principal: None,
+            },
             calendar_home_set: None,
         }
     }
 
     // TODO: methods to serialise and deserialise (mostly to cache all discovery data).
-
-    /// Returns a request builder with the proper `Authorization` header set.
-    fn request(&self) -> Result<http::request::Builder, AuthError> {
-        self.auth.new_request()
-    }
-
-    /// Returns the default port to try and use.
-    ///
-    /// If the `base_url` has an explicit port, use that one. Use `443` for https,
-    /// `80` for http, and `443` as a fallback for anything else.
-    fn default_port(&self) -> u16 {
-        self.base_url
-            .port_u16()
-            .unwrap_or_else(|| match self.base_url.scheme() {
-                Some(scheme) if scheme == "https" => 443,
-                Some(scheme) if scheme == "http" => 80,
-                _ => 443,
-            })
-    }
 
     /// Auto-bootstrap a new client.
     ///
@@ -254,22 +244,6 @@ impl CalDavClient {
         Ok(client)
     }
 
-    /// Returns a URL pointing to the server's context path.
-    pub fn context_path(&self) -> &Uri {
-        &self.base_url
-    }
-
-    /// Returns a new URI relative to the server's context path.
-    ///
-    /// # Errors
-    ///
-    /// If constructing a new URI fails.
-    pub fn relative_uri(&self, path: &str) -> Result<Uri, http::Error> {
-        let mut parts = self.base_url.clone().into_parts();
-        parts.path_and_query = Some(path.try_into().map_err(http::Error::from)?);
-        Uri::from_parts(parts).map_err(http::Error::from)
-    }
-
     /// Resolve the default context path with the well-known URL.
     ///
     /// See: <https://www.rfc-editor.org/rfc/rfc6764#section-5>
@@ -309,40 +283,6 @@ impl CalDavClient {
         Ok(Some(Uri::try_from(location.as_bytes())?))
     }
 
-    /// Resolves the current user's principal resource.
-    ///
-    /// See: <https://www.rfc-editor.org/rfc/rfc5397>
-    pub async fn resolve_current_user_principal(&self) -> Result<Option<Uri>, DavError> {
-        // Try querying the provided base url...
-        let maybe_principal = self
-            .query_current_user_principal(self.base_url.clone())
-            .await;
-
-        match maybe_principal {
-            Err(DavError::BadStatusCode(StatusCode::NOT_FOUND)) => {}
-            Err(err) => return Err(err),
-            Ok(Some(p)) => return Ok(Some(p)),
-            Ok(None) => {}
-        };
-
-        // ... Otherwise, try querying the root path.
-        let root = self.relative_uri("/")?;
-        self.query_current_user_principal(root).await // Hint: This can be Ok(None)
-
-        // NOTE: If no principal is resolved, it needs to be provided interactively
-        //       by the user. We use `base_url` as a fallback.
-    }
-
-    async fn query_current_user_principal(&self, url: Uri) -> Result<Option<Uri>, DavError> {
-        let property_data = SimplePropertyMeta {
-            name: b"current-user-principal".to_vec(),
-            namespace: xml::DAV.to_vec(),
-        };
-
-        self.find_href_prop_as_uri(url, "<current-user-principal/>", property_data)
-            .await
-    }
-
     async fn query_calendar_home_set(&self, url: Uri) -> Result<Option<Uri>, DavError> {
         let property_data = SimplePropertyMeta {
             name: b"calendar-home-set".to_vec(),
@@ -355,40 +295,6 @@ impl CalDavClient {
             property_data,
         )
         .await
-    }
-
-    /// Internal helper to find an `href` property
-    ///
-    /// Very specific, but de-duplicates two identical methods above.
-    async fn find_href_prop_as_uri(
-        &self,
-        url: Uri,
-        prop: &str,
-        prop_type: SimplePropertyMeta,
-    ) -> Result<Option<Uri>, DavError> {
-        let maybe_href = match self
-            .propfind::<ResponseWithProp<HrefProperty>>(url.clone(), prop, 0, prop_type)
-            .await?
-            .pop()
-            .transpose()?
-        {
-            Some(prop) => prop.into_maybe_string(),
-            None => return Ok(None),
-        };
-
-        if let Some(href) = maybe_href {
-            let path = href
-                .try_into()
-                .map_err(|e| DavError::InvalidResponse(Box::from(e)))?;
-
-            let mut parts = url.into_parts();
-            parts.path_and_query = Some(path);
-            Some(Uri::from_parts(parts))
-                .transpose()
-                .map_err(|e| DavError::InvalidResponse(Box::from(e)))
-        } else {
-            Ok(None)
-        }
     }
 
     /// Find calendars collections under the given `url`.
@@ -482,39 +388,6 @@ impl CalDavClient {
     // TODO: get_calendar_order ("calendar-order", "http://apple.com/ns/ical/")
     // TODO: DRY: the above methods are super repetitive.
     //       Maybe all these props impl a single trait, so the API could be `get_prop<T>(url)`?
-
-    /// Sends a `PROPFIND` request and parses the result.
-    async fn propfind<T: FromXml>(
-        &self,
-        url: Uri,
-        prop: &str,
-        depth: u8,
-        data: T::Data,
-    ) -> Result<Vec<Result<T, xml::Error>>, DavError> {
-        let request = self
-            .request()?
-            .method(Method::from_bytes(b"PROPFIND").expect("API for HTTP methods is stupid"))
-            .uri(url)
-            .header("Content-Type", "application/xml; charset=utf-8")
-            .header("Depth", format!("{depth}"))
-            .body(Body::from(format!(
-                r#"
-                <propfind xmlns="DAV:">
-                    <prop>
-                        {prop}
-                    </prop>
-                </propfind>
-                "#
-            )))?;
-        let response = self.http_client.request(request).await?;
-        let (head, body) = response.into_parts();
-        if !head.status.is_success() {
-            return Err(DavError::BadStatusCode(head.status));
-        }
-
-        let body = hyper::body::to_bytes(body).await?;
-        xml::parse_multistatus::<T>(&body, data).map_err(DavError::from)
-    }
 
     /// Enumerates entries in a collection
     ///
