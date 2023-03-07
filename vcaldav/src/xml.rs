@@ -72,8 +72,6 @@ impl FromXml for ItemDetails {
     /// - If a `response` object has a status code different to 200.
     /// - If any unexpected XML nodes are found.
     fn from_xml<R: BufRead>(reader: &mut NsReader<R>, _: &()) -> Result<ItemDetails, Error> {
-        let mut buf = Vec::new();
-
         #[derive(Debug)]
         enum State {
             Prop,
@@ -81,6 +79,8 @@ impl FromXml for ItemDetails {
             GetContentType,
             GetEtag,
         }
+
+        let mut buf = Vec::new();
         let mut state = State::Prop;
         let mut content_type = Option::<String>::None;
         let mut etag = Option::<String>::None;
@@ -167,8 +167,6 @@ where
     type Data = T::Data;
 
     fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &T::Data) -> Result<Self, Error> {
-        let mut buf = Vec::new();
-
         #[derive(Debug)]
         enum State {
             Response,
@@ -176,6 +174,8 @@ where
             PropStat,
             Status,
         }
+
+        let mut buf = Vec::new();
         let mut state = State::Response;
         let mut href = Option::<String>::None;
         let mut status = Option::<String>::None;
@@ -251,13 +251,13 @@ impl FromXml for StringProperty {
         reader: &mut NsReader<R>,
         data: &SimplePropertyMeta,
     ) -> Result<Self, Error> {
-        let mut buf = Vec::new();
-
         #[derive(Debug)]
         enum State {
             Prop,
             Inner,
         }
+
+        let mut buf = Vec::new();
         let mut state = State::Prop;
         let mut value = Option::<String>::None;
 
@@ -358,14 +358,14 @@ impl FromXml for HrefProperty {
         reader: &mut NsReader<R>,
         data: &SimplePropertyMeta,
     ) -> Result<Self, Error> {
-        let mut buf = Vec::new();
-
         #[derive(Debug)]
         enum State {
             Prop,
             Inner,
             Href,
         }
+
+        let mut buf = Vec::new();
         let mut state = State::Prop;
         let mut value = Option::<String>::None;
 
@@ -428,15 +428,16 @@ pub(crate) fn parse_multistatus<F: FromXml>(
     raw: &[u8],
     data: &F::Data,
 ) -> Result<Vec<Result<F, Error>>, Error> {
-    //TODO: Use an async reader instead (this is mostly a Poc).
-    let reader = &mut NsReader::from_reader(raw);
-    reader.trim_text(true);
-
     #[derive(Debug)]
     enum State {
         Root,
         Multistatus,
     }
+
+    //TODO: Use an async reader instead (this is mostly a Poc).
+    let reader = &mut NsReader::from_reader(raw);
+    reader.trim_text(true);
+
     let mut state = State::Root;
     let mut buf = Vec::new();
     let mut items = Vec::new();
