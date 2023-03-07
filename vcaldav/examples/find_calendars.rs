@@ -61,7 +61,7 @@ async fn main() {
             .await
             .unwrap()
             .into_iter()
-            .map(|i| i.unwrap())
+            .map(Result::unwrap)
             .filter(|i| !i.prop.is_collection);
         println!("Href and Etag for components in calendar:");
         for item in items {

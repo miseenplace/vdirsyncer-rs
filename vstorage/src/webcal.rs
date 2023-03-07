@@ -53,7 +53,7 @@ impl Definition for WebCalDefinition {
     /// Unlike other [`Storage`] implementations, this one allows only a single collection.
     async fn storage(self) -> Result<Box<dyn Storage>> {
         match &self.url.scheme().map(Scheme::as_str) {
-            Some("http") | Some("https") => {}
+            Some("http" | "https") => {}
             // TODO: support webcal and webcals
             Some(_) => {
                 return Err(Error::new(
@@ -360,7 +360,7 @@ mod test {
         }
 
         let hrefs: Vec<&str> = item_refs.iter().map(|r| r.href.as_ref()).collect();
-        let many = collection.get_many(&hrefs.to_owned()).await.unwrap();
+        let many = collection.get_many(&hrefs.clone()).await.unwrap();
 
         assert_eq!(many.len(), hrefs.len());
         assert_eq!(many.len(), item_refs.len());
