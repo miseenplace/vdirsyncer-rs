@@ -2,7 +2,10 @@
 //!
 //! XXX: WARNING: This module is VERY INCOMPLETE!
 
-use std::{io::Result, sync::Arc};
+use std::{
+    io::{Error, Result},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use http::Uri;
@@ -157,6 +160,6 @@ impl Collection for CalDavCollection {
             MetadataKind::Colour => client.get_calendar_colour(&self.href).await,
         };
 
-        result.map_err(|e| e.into())
+        result.map_err(Error::from)
     }
 }

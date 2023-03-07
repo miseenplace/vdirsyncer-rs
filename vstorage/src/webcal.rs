@@ -6,7 +6,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
-use http::{StatusCode, Uri};
+use http::{uri::Scheme, StatusCode, Uri};
 use hyper::{client::HttpConnector, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use std::{
@@ -52,7 +52,7 @@ impl Definition for WebCalDefinition {
     ///
     /// Unlike other [`Storage`] implementations, this one allows only a single collection.
     async fn storage(self) -> Result<Box<dyn Storage>> {
-        match &self.url.scheme().map(|s| s.as_str()) {
+        match &self.url.scheme().map(Scheme::as_str) {
             Some("http") => {}
             Some("https") => {}
             // TODO: support webcal and webcals

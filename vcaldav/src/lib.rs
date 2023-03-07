@@ -12,7 +12,7 @@ use dav::DavError;
 use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
 use domain::base::Dname;
 use http::Method;
-use hyper::{Client, Uri};
+use hyper::{Body, Client, Uri};
 use hyper_rustls::HttpsConnectorBuilder;
 use xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty, DAV};
 
@@ -230,7 +230,7 @@ impl CalDavClient {
             .request()?
             .method(Method::GET)
             .uri(url)
-            .body(Default::default())?;
+            .body(Body::default())?;
 
         // From https://www.rfc-editor.org/rfc/rfc6764#section-5:
         // > [...] the server MAY require authentication when a client tries to
