@@ -366,6 +366,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
 
 [[package]]
+name = "libdav"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "domain",
+ "http",
+ "hyper",
+ "hyper-rustls",
+ "quick-xml",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -837,20 +851,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
-name = "vcaldav"
-version = "0.1.0"
-dependencies = [
- "base64",
- "domain",
- "http",
- "hyper",
- "hyper-rustls",
- "quick-xml",
- "thiserror",
- "tokio",
-]
-
-[[package]]
 name = "vdirsyncer"
 version = "0.0.1"
 
@@ -868,13 +868,13 @@ dependencies = [
  "http",
  "hyper",
  "hyper-rustls",
+ "libdav",
  "log",
  "sha2",
  "tempfile",
  "thiserror",
  "tokio",
  "tokio-stream",
- "vcaldav",
 ]
 
 [[package]]

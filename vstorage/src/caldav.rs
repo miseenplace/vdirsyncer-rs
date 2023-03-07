@@ -9,9 +9,9 @@ use std::{
 
 use async_trait::async_trait;
 use http::Uri;
+use libdav::auth::Auth;
+use libdav::CalDavClient;
 use tokio::sync::RwLock;
-use vcaldav::auth::Auth;
-use vcaldav::CalDavClient;
 
 use crate::base::{Collection, Definition, MetadataKind, Storage};
 

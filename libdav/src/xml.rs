@@ -333,7 +333,7 @@ impl FromXml for StringProperty {
 /// Can be parsed with the following [`SimplePropertyMeta`]:
 ///
 /// ```rust
-/// # use vcaldav::xml::SimplePropertyMeta;;
+/// # use libdav::xml::SimplePropertyMeta;;
 /// let property_data = SimplePropertyMeta {
 ///     name: b"current-user-principal".to_vec(),
 ///     namespace: b"DAV:".to_vec(),

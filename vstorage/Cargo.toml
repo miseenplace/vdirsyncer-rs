@@ -17,7 +17,7 @@ tokio = { version = "1.21.2", features = ["full"] }
 thiserror = "1.0.37"
 tokio-stream = { version = "0.1.11", default-features = false, features = ["fs"] }
 async-trait = "0.1.64"
-vcaldav = { version = "0.1.0", path = "../vcaldav" }
+libdav = { version = "0.1.0", path = "../libdav" }
 http = "0.2.9"
 hyper = "0.14.24"
 hyper-rustls = "0.23.2"
