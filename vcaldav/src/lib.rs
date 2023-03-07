@@ -1,3 +1,6 @@
+//! This library contains CalDav and CardDav clients.
+//!
+//! See [`CalDavClient`] as a useful entry point.
 use std::{
     io,
     ops::{Deref, DerefMut},

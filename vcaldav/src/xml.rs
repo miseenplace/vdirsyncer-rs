@@ -1,4 +1,4 @@
-//! Helpers for parsing XML responses returned by CalDav servers.
+//! Helpers for parsing XML responses returned by WebDav/CalDav/CardDav servers.
 //!
 //! This mostly uses the low-level [`NsReader`] API from `quick-xml`, which
 //! supports namespaces and properties with details defined at runtime.

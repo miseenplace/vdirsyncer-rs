@@ -45,6 +45,7 @@ impl From<DavError> for io::Error {
     }
 }
 
+/// A generic webdav client.
 #[derive(Debug)]
 pub struct DavClient {
     /// Base URL to be used for all requests.
@@ -54,7 +55,14 @@ pub struct DavClient {
     // using caldav or caldavs.
     pub(crate) http_client: Client<HttpsConnector<HttpConnector>>,
     /// URL to a principal resource corresponding to the currently authenticated user.
-    /// See: <https://www.rfc-editor.org/rfc/rfc5397#section-3>
+    ///
+    /// In order to determine the principal, see [`query_current_user_principal`].
+    ///
+    /// [`query_current_user_principal`]: (DavClient::query_current_user_principal).
+    ///
+    /// # See also
+    ///
+    /// - <https://www.rfc-editor.org/rfc/rfc5397#section-3>
     pub principal: Option<Uri>,
 }
 
