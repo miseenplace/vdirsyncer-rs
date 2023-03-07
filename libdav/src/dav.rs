@@ -3,7 +3,7 @@ use std::io;
 
 use http::{Method, StatusCode, Uri};
 use hyper::{client::HttpConnector, Body, Client};
-use hyper_rustls::HttpsConnector;
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::{
     xml::{self, FromXml, HrefProperty, ResponseWithProp, SimplePropertyMeta},
@@ -68,6 +68,21 @@ pub struct DavClient {
 }
 
 impl DavClient {
+    /// Builds a new webdav client.
+    pub fn new(base_url: Uri, auth: Auth) -> DavClient {
+        let https = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only()
+            .enable_http1()
+            .build();
+        DavClient {
+            base_url,
+            auth,
+            http_client: Client::builder().build(https),
+            principal: None,
+        }
+    }
+
     /// Returns a request builder with the proper `Authorization` header set.
     pub(crate) fn request(&self) -> Result<http::request::Builder, AuthError> {
         // TODO: this isn't a great API. Maybe a `BuilderExt` trait would be a better pattern?

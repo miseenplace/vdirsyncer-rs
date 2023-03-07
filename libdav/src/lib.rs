@@ -12,8 +12,7 @@ use dav::DavError;
 use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
 use domain::base::Dname;
 use http::Method;
-use hyper::{Body, Client, Uri};
-use hyper_rustls::HttpsConnectorBuilder;
+use hyper::{Body, Uri};
 use xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty, DAV};
 
 pub mod auth;
@@ -111,19 +110,8 @@ impl CalDavClient {
     pub fn raw_client(base_url: Uri, auth: Auth) -> Self {
         // TODO: check that the URL is http or https (or mailto:?).
 
-        let https = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_only()
-            .enable_http1()
-            .build();
-
         Self {
-            dav_client: DavClient {
-                base_url,
-                auth,
-                http_client: Client::builder().build(https),
-                principal: None,
-            },
+            dav_client: DavClient::new(base_url, auth),
             calendar_home_set: None,
         }
     }
