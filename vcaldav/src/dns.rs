@@ -15,8 +15,8 @@ use domain::{
 
 /// Resolves SRV to locate the caldav server.
 ///
-/// Returns a vector of host/ports, in the order in which they should be tried. Returns an empty
-/// list if no SRV records were found.
+/// Returns a `Vec` of host/ports, in the order in which they should be tried.
+/// Returns an empty list if no SRV records were found.
 ///
 /// # Errors
 ///

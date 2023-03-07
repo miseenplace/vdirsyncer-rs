@@ -107,7 +107,17 @@ impl DavClient {
 
     /// Resolves the current user's principal resource.
     ///
-    /// See: <https://www.rfc-editor.org/rfc/rfc5397>
+    /// Returns `None` if the response's status code is 404 or if no principal was found.
+    ///
+    /// # Errors
+    ///
+    /// - If the underlying HTTP request fails.
+    /// - If the response status code is neither success nor 404.
+    /// - If parsing the XML response fails.
+    ///
+    /// # See also
+    ///
+    /// - <https://www.rfc-editor.org/rfc/rfc5397>
     pub async fn resolve_current_user_principal(&self) -> Result<Option<Uri>, DavError> {
         // Try querying the provided base url...
         let maybe_principal = self
