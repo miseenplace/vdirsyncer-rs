@@ -9,7 +9,7 @@ use std::{
 use crate::auth::{Auth, AuthError};
 use dav::DavClient;
 use dav::DavError;
-use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
+use dns::{find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, TxtError};
 use domain::base::Dname;
 use http::Method;
 use hyper::{Body, Uri};
@@ -139,7 +139,7 @@ impl CalDavClient {
 
         let dname = Dname::bytes_from_str(domain).map_err(|_| BootstrapError::InvalidUrl)?;
         let candidates = {
-            let mut candidates = resolve_srv_record(dname, port)
+            let mut candidates = resolve_srv_record(DiscoverableService::CalDavs, &dname, port)
                 .await
                 .map_err(|_| BootstrapError::DnsError)?;
 
@@ -152,7 +152,9 @@ impl CalDavClient {
 
         // FIXME: this all always assumes "https". We don't yet query plain-text SRV records, so
         //        that's kinda fine, but this might break for exotic setups.
-        if let Some(path) = find_context_path_via_txt_records(domain).await? {
+        if let Some(path) =
+            find_context_path_via_txt_records(DiscoverableService::CalDavs, &dname).await?
+        {
             // TODO: validate that the path works on the chosen server.
             let candidate = &candidates[0];
 

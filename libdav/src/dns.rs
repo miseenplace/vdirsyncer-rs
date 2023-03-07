@@ -4,14 +4,36 @@ use std::cmp::Ordering;
 use std::io;
 use std::string::FromUtf8Error;
 
-use domain::base::name::FromStrError;
+use domain::base::name::LongChainError;
 use domain::base::octets::ParseError;
+use domain::base::ToRelativeDname;
 use domain::resolv::lookup::srv::SrvError;
 use domain::{
     base::{Dname, Question, RelativeDname, Rtype},
     rdata::Txt,
     resolv::StubResolver,
 };
+
+#[derive(Debug, Clone, Copy)]
+pub enum DiscoverableService {
+    CalDavs,
+    CalDav,
+    CardDavs,
+    CardDav,
+}
+
+impl DiscoverableService {
+    /// Return a relative domain suitable for querying this service type.
+    pub fn relative_domain(self) -> &'static RelativeDname<[u8]> {
+        match self {
+            DiscoverableService::CalDavs => RelativeDname::from_slice(b"\x08_caldavs\x04_tcp"),
+            DiscoverableService::CalDav => RelativeDname::from_slice(b"\x07_caldav\x04_tcp"),
+            DiscoverableService::CardDavs => RelativeDname::from_slice(b"\x09_carddavs\x04_tcp"),
+            DiscoverableService::CardDav => RelativeDname::from_slice(b"\x08_carddav\x04_tcp"),
+        }
+        .expect("well known relative prefix is valid")
+    }
+}
 
 /// Resolves SRV to locate the caldav server.
 ///
@@ -27,14 +49,13 @@ use domain::{
 /// - <https://www.rfc-editor.org/rfc/rfc2782>
 /// - <https://www.rfc-editor.org/rfc/rfc6764>
 pub async fn resolve_srv_record<T: std::convert::AsRef<[u8]>>(
-    domain: Dname<T>,
+    service: DiscoverableService,
+    domain: &Dname<T>,
     port: u16,
 ) -> Result<Vec<(String, u16)>, SrvError> {
-    let resolver = StubResolver::new();
-    let reldname = RelativeDname::from_slice(b"\x08_caldavs\x04_tcp")
-        .expect("well known relative prefix is valid");
-
-    let response = resolver.lookup_srv(reldname, domain, port).await?;
+    let response = StubResolver::new()
+        .lookup_srv(service.relative_domain(), domain, port)
+        .await?;
 
     let mut srvs: Vec<_> = match response {
         Some(s) => s.into_srvs().collect(),
@@ -63,8 +84,8 @@ pub enum TxtError {
     #[error("I/O error performing DNS request")]
     Network(#[from] io::Error),
 
-    #[error("failed to parse domain name for DNS query")]
-    InvalidDomain(#[from] FromStrError),
+    #[error("the domain name is too long and cannot be queried")]
+    DomainTooLong(#[from] LongChainError),
 
     #[error("error parsing DNS response")]
     ParseError(#[from] ParseError),
@@ -80,7 +101,7 @@ impl From<TxtError> for io::Error {
     fn from(value: TxtError) -> Self {
         match value {
             TxtError::Network(err) => err,
-            TxtError::InvalidDomain(_) => io::Error::new(io::ErrorKind::InvalidInput, value),
+            TxtError::DomainTooLong(_) => io::Error::new(io::ErrorKind::InvalidInput, value),
             TxtError::ParseError(_) | TxtError::NotUtf8Error(_) | TxtError::BadTxt => {
                 io::Error::new(io::ErrorKind::InvalidData, value)
             }
@@ -102,11 +123,13 @@ impl From<TxtError> for io::Error {
 /// # See also
 ///
 /// <https://www.rfc-editor.org/rfc/rfc6764>
-pub async fn find_context_path_via_txt_records(domain: &str) -> Result<Option<String>, TxtError> {
+pub async fn find_context_path_via_txt_records<T: std::convert::AsRef<[u8]>>(
+    service: DiscoverableService,
+    domain: &Dname<T>,
+) -> Result<Option<String>, TxtError> {
     let resolver = StubResolver::new();
-    // TODO: use methods on Dname to construct this this record and avoid creating a String here:
-    let dname = Dname::bytes_from_str(&format!("_caldavs._tcp.{domain}"))?;
-    let question = Question::new_in(dname, Rtype::Txt);
+    let full_domain = service.relative_domain().chain(domain)?;
+    let question = Question::new_in(full_domain, Rtype::Txt);
 
     let response = resolver.query(question).await?;
     let record = match response.answer()?.next() {
