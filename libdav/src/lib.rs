@@ -53,7 +53,7 @@ impl DerefMut for CalDavClient {
 #[derive(thiserror::Error, Debug)]
 pub enum BootstrapError {
     #[error("the input URL is not valid")]
-    InvalidUrl,
+    InvalidUrl(&'static str),
 
     // FIXME: See: https://github.com/NLnetLabs/domain/pull/183
     #[error("error resolving DNS SRV records")]
@@ -72,7 +72,7 @@ pub enum BootstrapError {
 impl From<BootstrapError> for io::Error {
     fn from(value: BootstrapError) -> Self {
         match value {
-            BootstrapError::InvalidUrl => io::Error::new(io::ErrorKind::InvalidInput, value),
+            BootstrapError::InvalidUrl(msg) => io::Error::new(io::ErrorKind::InvalidInput, msg),
             BootstrapError::DnsError | BootstrapError::TxtError(_) => {
                 io::Error::new(io::ErrorKind::Other, value)
             }
@@ -118,6 +118,26 @@ impl CalDavClient {
 
     // TODO: methods to serialise and deserialise (mostly to cache all discovery data).
 
+    /// Returns the default port to try and use.
+    ///
+    /// If the `base_url` has an explicit port, that value is returned. Otherwise,
+    /// returns `443` for https, `80` for http, and `443` as a fallback for
+    /// anything else.
+    fn default_port(&self) -> Result<u16, BootstrapError> {
+        // raise InvaidUrl?
+        if let Some(port) = self.base_url.port_u16() {
+            Ok(port)
+        } else {
+            match self.base_url.scheme() {
+                Some(scheme) if scheme == "https" => Ok(443),
+                Some(scheme) if scheme == "http" => Ok(80),
+                Some(scheme) if scheme == "caldavs" => Ok(443),
+                Some(scheme) if scheme == "caldav" => Ok(80),
+                _ => Err(BootstrapError::InvalidUrl("invalid scheme (and no port)")),
+            }
+        }
+    }
+
     /// Auto-bootstrap a new client.
     ///
     /// Determines the caldav server's real host and the context path of the resources for a
@@ -134,12 +154,26 @@ impl CalDavClient {
     pub async fn auto_bootstrap(base_url: Uri, auth: Auth) -> Result<Self, BootstrapError> {
         let mut client = Self::raw_client(base_url, auth);
 
-        let domain = client.base_url.host().ok_or(BootstrapError::InvalidUrl)?;
-        let port = client.default_port();
+        let scheme = client
+            .base_url
+            .scheme()
+            .ok_or(BootstrapError::InvalidUrl("missing scheme"))?;
+        let domain = client
+            .base_url
+            .host()
+            .ok_or(BootstrapError::InvalidUrl("caldav requires a host"))?;
+        let port = client.default_port()?;
 
-        let dname = Dname::bytes_from_str(domain).map_err(|_| BootstrapError::InvalidUrl)?;
+        let service = match scheme.as_ref() {
+            "https" | "caldavs" => DiscoverableService::CalDavs,
+            "http" | "caldav" => DiscoverableService::CalDav,
+            _ => return Err(BootstrapError::InvalidUrl("scheme is invalid")),
+        };
+
+        let dname = Dname::bytes_from_str(domain)
+            .map_err(|_| BootstrapError::InvalidUrl("invalid domain name"))?;
         let candidates = {
-            let mut candidates = resolve_srv_record(DiscoverableService::CalDavs, &dname, port)
+            let mut candidates = resolve_srv_record(service, &dname, port)
                 .await
                 .map_err(|_| BootstrapError::DnsError)?;
 
@@ -150,16 +184,12 @@ impl CalDavClient {
             candidates
         };
 
-        // FIXME: this all always assumes "https". We don't yet query plain-text SRV records, so
-        //        that's kinda fine, but this might break for exotic setups.
-        if let Some(path) =
-            find_context_path_via_txt_records(DiscoverableService::CalDavs, &dname).await?
-        {
+        if let Some(path) = find_context_path_via_txt_records(service, &dname).await? {
             // TODO: validate that the path works on the chosen server.
             let candidate = &candidates[0];
 
             client.base_url = Uri::builder()
-                .scheme("https")
+                .scheme(service.scheme())
                 .authority(format!("{}:{}", candidate.0, candidate.1))
                 .path_and_query(path)
                 .build()
@@ -167,7 +197,7 @@ impl CalDavClient {
         } else {
             for candidate in candidates {
                 if let Ok(Some(url)) = client
-                    .resolve_context_path("https", &candidate.0, candidate.1)
+                    .resolve_context_path(service.scheme().as_str(), &candidate.0, candidate.1)
                     .await
                 {
                     client.base_url = url;

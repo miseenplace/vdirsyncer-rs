@@ -13,6 +13,7 @@ use domain::{
     rdata::Txt,
     resolv::StubResolver,
 };
+use http::uri::Scheme;
 
 #[derive(Debug, Clone, Copy)]
 pub enum DiscoverableService {
@@ -32,6 +33,15 @@ impl DiscoverableService {
             DiscoverableService::CardDav => RelativeDname::from_slice(b"\x08_carddav\x04_tcp"),
         }
         .expect("well known relative prefix is valid")
+    }
+
+    pub fn scheme(self) -> Scheme {
+        match self {
+            DiscoverableService::CalDavs => Scheme::HTTPS,
+            DiscoverableService::CalDav => Scheme::HTTP,
+            DiscoverableService::CardDavs => Scheme::HTTPS,
+            DiscoverableService::CardDav => Scheme::HTTP,
+        }
     }
 }
 

@@ -92,21 +92,6 @@ impl DavClient {
         self.auth.new_request()
     }
 
-    /// Returns the default port to try and use.
-    ///
-    /// If the `base_url` has an explicit port, that value is returned. Otherwise,
-    /// returns `443` for https, `80` for http, and `443` as a fallback for
-    /// anything else.
-    pub fn default_port(&self) -> u16 {
-        self.base_url
-            .port_u16()
-            .unwrap_or_else(|| match self.base_url.scheme() {
-                Some(scheme) if scheme == "https" => 443,
-                Some(scheme) if scheme == "http" => 80,
-                _ => 443,
-            })
-    }
-
     /// Returns a URL pointing to the server's context path.
     pub fn context_path(&self) -> &Uri {
         &self.base_url
