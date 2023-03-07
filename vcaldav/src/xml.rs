@@ -103,9 +103,9 @@ impl FromXml for ItemDetails {
                 (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
                         (State::Prop, DAV, b"prop") => break,
-                        (State::ResourceType, DAV, b"resourcetype") => state = State::Prop,
-                        (State::GetContentType, DAV, b"getcontenttype") => state = State::Prop,
-                        (State::GetEtag, DAV, b"getetag") => state = State::Prop,
+                        (State::ResourceType, DAV, b"resourcetype")
+                        | (State::GetContentType, DAV, b"getcontenttype")
+                        | (State::GetEtag, DAV, b"getetag") => state = State::Prop,
                         (_, _, _) => {
                             // TODO: log unknown/unhandled node
                         }
@@ -199,8 +199,9 @@ where
                 (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
                         (State::Response, DAV, b"response") => break,
-                        (State::Href, DAV, b"href") => state = State::Response,
-                        (State::PropStat, DAV, b"propstat") => state = State::Response,
+                        (State::Href, DAV, b"href") | (State::PropStat, DAV, b"propstat") => {
+                            state = State::Response
+                        }
                         (State::Status, DAV, b"status") => state = State::PropStat,
                         (_, _, _) => {
                             // TODO: log unknown/unhandled node

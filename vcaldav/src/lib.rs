@@ -74,9 +74,10 @@ impl From<BootstrapError> for io::Error {
     fn from(value: BootstrapError) -> Self {
         match value {
             BootstrapError::InvalidUrl => io::Error::new(io::ErrorKind::InvalidInput, value),
-            BootstrapError::DnsError => io::Error::new(io::ErrorKind::Other, value),
+            BootstrapError::DnsError | BootstrapError::TxtError(_) => {
+                io::Error::new(io::ErrorKind::Other, value)
+            }
             BootstrapError::BadSrv(_) => io::Error::new(io::ErrorKind::InvalidData, value),
-            BootstrapError::TxtError(_) => io::Error::new(io::ErrorKind::Other, value),
             BootstrapError::DavError(dav) => io::Error::from(dav),
         }
     }

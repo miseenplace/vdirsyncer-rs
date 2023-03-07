@@ -53,8 +53,7 @@ impl Definition for WebCalDefinition {
     /// Unlike other [`Storage`] implementations, this one allows only a single collection.
     async fn storage(self) -> Result<Box<dyn Storage>> {
         match &self.url.scheme().map(Scheme::as_str) {
-            Some("http") => {}
-            Some("https") => {}
+            Some("http") | Some("https") => {}
             // TODO: support webcal and webcals
             Some(_) => {
                 return Err(Error::new(

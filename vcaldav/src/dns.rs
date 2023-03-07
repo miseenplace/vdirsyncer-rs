@@ -81,9 +81,9 @@ impl From<TxtError> for io::Error {
         match value {
             TxtError::Network(err) => err,
             TxtError::InvalidDomain(_) => io::Error::new(io::ErrorKind::InvalidInput, value),
-            TxtError::ParseError(_) => io::Error::new(io::ErrorKind::InvalidData, value),
-            TxtError::NotUtf8Error(_) => io::Error::new(io::ErrorKind::InvalidData, value),
-            TxtError::BadTxt => io::Error::new(io::ErrorKind::InvalidData, value),
+            TxtError::ParseError(_) | TxtError::NotUtf8Error(_) | TxtError::BadTxt => {
+                io::Error::new(io::ErrorKind::InvalidData, value)
+            }
         }
     }
 }

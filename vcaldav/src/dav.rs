@@ -37,9 +37,10 @@ impl From<DavError> for io::Error {
         match value {
             DavError::Network(e) => io::Error::new(io::ErrorKind::Other, e),
             DavError::Xml(e) => io::Error::new(io::ErrorKind::InvalidData, e),
-            DavError::BadStatusCode(_) => io::Error::new(io::ErrorKind::Other, value),
+            DavError::BadStatusCode(_) | DavError::Auth(_) => {
+                io::Error::new(io::ErrorKind::Other, value)
+            }
             DavError::InvalidInput(e) => io::Error::new(io::ErrorKind::InvalidInput, e),
-            DavError::Auth(_) => io::Error::new(io::ErrorKind::Other, value),
             DavError::InvalidResponse(e) => io::Error::new(io::ErrorKind::InvalidData, e),
         }
     }
@@ -114,10 +115,9 @@ impl DavClient {
             .await;
 
         match maybe_principal {
-            Err(DavError::BadStatusCode(StatusCode::NOT_FOUND)) => {}
+            Err(DavError::BadStatusCode(StatusCode::NOT_FOUND)) | Ok(None) => {}
             Err(err) => return Err(err),
             Ok(Some(p)) => return Ok(Some(p)),
-            Ok(None) => {}
         };
 
         // ... Otherwise, try querying the root path.
