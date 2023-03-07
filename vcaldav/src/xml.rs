@@ -200,7 +200,7 @@ where
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
                         (State::Response, DAV, b"response") => break,
                         (State::Href, DAV, b"href") | (State::PropStat, DAV, b"propstat") => {
-                            state = State::Response
+                            state = State::Response;
                         }
                         (State::Status, DAV, b"status") => state = State::PropStat,
                         (_, _, _) => {
@@ -209,10 +209,10 @@ where
                     }
                 }
                 (State::Href, (ResolveResult::Unbound, Event::Text(text))) => {
-                    href = Some(text.unescape()?.to_string())
+                    href = Some(text.unescape()?.to_string());
                 }
                 (State::Status, (ResolveResult::Unbound, Event::Text(text))) => {
-                    status = Some(text.unescape()?.to_string())
+                    status = Some(text.unescape()?.to_string());
                 }
                 (_, (_, _)) => {
                     // TODO: log unknown/unhandled event
@@ -267,7 +267,7 @@ impl FromXml for StringProperty {
                     if namespace.as_ref() == data.namespace
                         && element.local_name().as_ref() == data.name =>
                 {
-                    state = State::Inner
+                    state = State::Inner;
                 }
                 (State::Prop, (ResolveResult::Bound(namespace), Event::End(element)))
                     if namespace.as_ref() == DAV && element.local_name().as_ref() == b"prop" =>
@@ -374,7 +374,7 @@ impl FromXml for HrefProperty {
                     if namespace.as_ref() == data.namespace
                         && element.local_name().as_ref() == data.name =>
                 {
-                    state = State::Inner
+                    state = State::Inner;
                 }
                 (State::Prop, (ResolveResult::Bound(namespace), Event::End(element)))
                     if namespace.as_ref() == DAV && element.local_name().as_ref() == b"prop" =>
