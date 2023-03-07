@@ -268,7 +268,7 @@ impl CalDavClient {
     /// Find calendars collections under the given `url`.
     ///
     /// Returns absolute paths to each calendar. This method should be called
-    /// the `calendar_home_set` URL to find the current user's calendars.
+    /// with the `calendar_home_set` URL to find the current user's calendars.
     ///
     /// # Errors
     ///

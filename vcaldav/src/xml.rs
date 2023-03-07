@@ -13,6 +13,9 @@ use quick_xml::{
 };
 use std::io::BufRead;
 
+/// Namespace for properties defined in webdav specifications.
+///
+/// See: <https://www.rfc-editor.org/rfc/rfc3744>
 pub(crate) const DAV: &[u8] = b"DAV:";
 pub(crate) const CALDAV: &[u8] = b"urn:ietf:params:xml:ns:caldav";
 pub(crate) const CARDDAV: &[u8] = b"urn:ietf:params:xml:ns:carddav";

@@ -98,7 +98,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// If constructing a new URI fails.
+    /// If this client's `base_url` is invalid or the provided `path` is not an acceptable path.
     pub fn relative_uri(&self, path: &str) -> Result<Uri, http::Error> {
         let mut parts = self.base_url.clone().into_parts();
         parts.path_and_query = Some(path.try_into().map_err(http::Error::from)?);
