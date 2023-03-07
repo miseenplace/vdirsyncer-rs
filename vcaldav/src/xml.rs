@@ -425,7 +425,7 @@ impl FromXml for HrefProperty {
 /// - If any unexpected XML nodes are found.
 pub(crate) fn parse_multistatus<F: FromXml>(
     raw: &[u8],
-    data: F::Data,
+    data: &F::Data,
 ) -> Result<Vec<Result<F, Error>>, Error> {
     //TODO: Use an async reader instead (this is mostly a Poc).
     let reader = &mut NsReader::from_reader(raw);
@@ -457,7 +457,7 @@ pub(crate) fn parse_multistatus<F: FromXml>(
             (State::Multistatus, (ResolveResult::Bound(namespace), Event::Start(element)))
                 if namespace.as_ref() == DAV && element.local_name().as_ref() == b"response" =>
             {
-                let item = F::from_xml(reader, &data);
+                let item = F::from_xml(reader, data);
                 // FIXME: HACK: missing data doesn't leave the reader inconsistent.
                 if let Err(ref err) = item {
                     if let Error::MissingData(_) = err {
@@ -516,7 +516,7 @@ mod more_tests {
   </response>
 </multistatus>"#;
 
-        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, ()).unwrap();
+        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &()).unwrap();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0].as_ref().unwrap(), &ResponseWithProp {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/".to_string(),
@@ -544,7 +544,7 @@ mod more_tests {
     #[test]
     fn test_empty_response() {
         let raw = br#"<multistatus xmlns="DAV:" />"#;
-        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, ()).unwrap();
+        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &()).unwrap();
         assert_eq!(parsed.len(), 0);
     }
 
@@ -568,7 +568,7 @@ mod more_tests {
             namespace: DAV.to_vec(),
         };
         let parsed =
-            parse_multistatus::<ResponseWithProp<StringProperty>>(raw, property_data).unwrap();
+            parse_multistatus::<ResponseWithProp<StringProperty>>(raw, &property_data).unwrap();
         assert_eq!(parsed.len(), 1);
         assert_eq!(
             parsed[0].as_ref().unwrap(),

@@ -222,6 +222,6 @@ impl DavClient {
         }
 
         let body = hyper::body::to_bytes(body).await?;
-        xml::parse_multistatus::<T>(&body, data).map_err(DavError::from)
+        xml::parse_multistatus::<T>(&body, &data).map_err(DavError::from)
     }
 }
