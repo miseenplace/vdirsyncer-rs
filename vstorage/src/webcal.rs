@@ -6,12 +6,13 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
-use reqwest::StatusCode;
+use http::{StatusCode, Uri};
+use hyper::{client::HttpConnector, Client};
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use std::{
     io::{Error, ErrorKind, Result},
     sync::Arc,
 };
-use url::Url;
 
 use crate::{
     base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage},
@@ -27,17 +28,22 @@ use crate::{
 /// This storage is a bit of an odd one (since in reality, there's no concept of collections in
 /// webcal. The extra abstraction layer is here merely to match the format of other storages.
 pub struct WebCalStorage {
-    definition: Arc<WebCalDefinition>,
-    client: reqwest::Client,
+    inner: Arc<WebCalInner>,
 }
 
 /// Definition for a [`WebCalStorage`].
 #[derive(Debug, PartialEq)]
 pub struct WebCalDefinition {
     /// The URL of the remote icalendar resource. Must be HTTP or HTTPS.
-    pub url: Url,
+    pub url: Uri,
     /// The name to be given to the single collection available.
     pub collection_name: String,
+}
+
+/// A holder of data shared across the storage and its collections.
+struct WebCalInner {
+    definition: Arc<WebCalDefinition>,
+    http_client: Client<HttpsConnector<HttpConnector>>,
 }
 
 #[async_trait]
@@ -46,17 +52,28 @@ impl Definition for WebCalDefinition {
     ///
     /// Unlike other [`Storage`] implementations, this one allows only a single collection.
     async fn storage(self) -> Result<Box<dyn Storage>> {
-        // NOTE: It would be nice to support `webcal://` here, but the Url crate won't allow
-        // changing the scheme of such a Url.
-        if !["http", "https"].contains(&self.url.scheme()) {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                "URL scheme must be http or https",
-            ));
-        };
+        match &self.url.scheme().map(|s| s.as_str()) {
+            Some("http") => {}
+            Some("https") => {}
+            // TODO: support webcal and webcals
+            Some(_) => {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "URL scheme must be http or https",
+                ));
+            }
+            None => todo!(),
+        }
+        let https = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only()
+            .enable_http1()
+            .build();
         Ok(Box::from(WebCalStorage {
-            definition: Arc::new(self),
-            client: reqwest::Client::new(),
+            inner: Arc::from(WebCalInner {
+                definition: Arc::new(self),
+                http_client: Client::builder().build(https),
+            }),
         }))
     }
 }
@@ -66,7 +83,7 @@ impl Storage for WebCalStorage {
     /// Checks that the remove resource exists and whether it looks like an icalendar resource.
     async fn check(&self) -> Result<()> {
         // TODO: Should map status codes to io::Error. if 404 -> NotFound, etc.
-        let raw = fetch_raw(&self.client, &self.definition.url).await?;
+        let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
 
         if !raw.starts_with("BEGIN:VCALENDAR") {
             return Err(Error::new(
@@ -80,8 +97,7 @@ impl Storage for WebCalStorage {
     /// Returns a single collection with the name specified in the definition.
     async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
         Ok(vec![Box::from(WebCalCollection {
-            definition: self.definition.clone(),
-            client: self.client.clone(),
+            inner: self.inner.clone(),
         })])
     }
 
@@ -104,15 +120,14 @@ impl Storage for WebCalStorage {
     /// Usable only with the collection name specified in the definition. Any other name will
     /// return [`ErrorKind::NotFound`]
     fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
-        if href != self.definition.collection_name {
+        if href != self.inner.definition.collection_name {
             return Err(Error::new(
                 ErrorKind::NotFound,
                 format!("this storage only contains the '{href}' collection"),
             ));
         }
         Ok(Box::from(WebCalCollection {
-            definition: self.definition.clone(),
-            client: self.client.clone(),
+            inner: self.inner.clone(),
         }))
     }
 }
@@ -125,13 +140,12 @@ impl Storage for WebCalStorage {
 /// The fact that `Href = UID` is a quirk specific to this storage type, and should not be relied
 /// upon in general.
 pub struct WebCalCollection {
-    definition: Arc<WebCalDefinition>,
-    client: reqwest::Client,
+    inner: Arc<WebCalInner>,
 }
 
 impl PartialEq for &WebCalCollection {
     fn eq(&self, other: &Self) -> bool {
-        self.definition.eq(&other.definition)
+        self.inner.definition.eq(&other.inner.definition)
     }
 }
 
@@ -142,7 +156,7 @@ impl Collection for WebCalCollection {
     /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. If some
     /// items need to be read as well, it is generally best to use [`WebCalCollection::get_all`] instead.
     async fn list(&self) -> Result<Vec<ItemRef>> {
-        let raw = fetch_raw(&self.client, &self.definition.url).await?;
+        let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -171,7 +185,7 @@ impl Collection for WebCalCollection {
     ///
     /// [`get_many`]: crate::base::Collection::get_many
     async fn get(&self, href: &str) -> Result<(Item, Etag)> {
-        let raw = fetch_raw(&self.client, &self.definition.url).await?;
+        let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -200,7 +214,7 @@ impl Collection for WebCalCollection {
     /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. It is
     /// generally best to use [`WebCalCollection::get_all`] instead.
     async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Href, Item, Etag)>> {
-        let raw = fetch_raw(&self.client, &self.definition.url).await?;
+        let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -228,7 +242,7 @@ impl Collection for WebCalCollection {
     ///
     /// Performs a single HTTP(s) request to fetch all items.
     async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>> {
-        let raw = fetch_raw(&self.client, &self.definition.url).await?;
+        let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -283,7 +297,7 @@ impl Collection for WebCalCollection {
     }
 
     fn id(&self) -> &str {
-        self.definition.collection_name.as_str()
+        self.inner.definition.collection_name.as_str()
     }
 
     fn href(&self) -> &str {
@@ -295,11 +309,10 @@ impl Collection for WebCalCollection {
 ///
 /// Be warned! This swallows headers (including `Etag`!).
 #[inline]
-async fn fetch_raw(client: &reqwest::Client, url: &Url) -> Result<String> {
+async fn fetch_raw(client: &Client<HttpsConnector<HttpConnector>>, url: &Uri) -> Result<String> {
     let response = client
-        // TODO: upstream should impl IntoURL for &Url
-        .get((*url).clone())
-        .send()
+        // TODO: upstream should impl IntoURL for &Uri
+        .get(url.clone())
         .await
         .map_err(|e| Error::new(ErrorKind::Other, e))?;
 
@@ -307,16 +320,18 @@ async fn fetch_raw(client: &reqwest::Client, url: &Url) -> Result<String> {
         return Err(Error::new(ErrorKind::Other, "request did not return 200"));
     }
 
-    let raw = response
-        .text()
+    // TODO: handle non-UTF-8 data.
+    hyper::body::to_bytes(response)
         .await
-        .map_err(|e| Error::new(ErrorKind::Other, e))?;
-
-    Ok(raw)
+        .map_err(|e| Error::new(ErrorKind::Other, e))
+        .map(|bytes| String::from_utf8(bytes.into()))?
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e))
 }
 
 #[cfg(test)]
 mod test {
+    use http::Uri;
+
     use crate::base::Definition;
 
     // FIXME: only run this test with a dedicated flag for networked test.
@@ -325,10 +340,9 @@ mod test {
     #[tokio::test]
     async fn test_dummy() {
         use crate::webcal::WebCalDefinition;
-        use url::Url;
 
         let metdata = WebCalDefinition {
-            url: Url::parse("https://www.officeholidays.com/ics/netherlands").unwrap(),
+            url: Uri::try_from("https://www.officeholidays.com/ics/netherlands").unwrap(),
             collection_name: "holidays".to_string(),
         };
         let storage = metdata.storage().await.unwrap();

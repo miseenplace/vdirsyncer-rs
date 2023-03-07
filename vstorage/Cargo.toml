@@ -10,17 +10,17 @@ keywords = ["vdir", "filesystem", "icalendar", "caldav"]
 # TODO: license = " MPL-2.0" ?
 
 [dependencies]
-url = "2.2.2"
 sha2 = "0.10.2"
 # TODO: Maybe use camino for UTF8 paths??
 log = "0.4.17"
-reqwest = "0.11.12"
 tokio = { version = "1.21.2", features = ["full"] }
 thiserror = "1.0.37"
 tokio-stream = { version = "0.1.11", default-features = false, features = ["fs"] }
 async-trait = "0.1.64"
 vcaldav = { version = "0.1.0", path = "../vcaldav" }
 http = "0.2.9"
+hyper = "0.14.24"
+hyper-rustls = "0.23.2"
 
 [dev-dependencies]
 tempfile = "3.3.0"
