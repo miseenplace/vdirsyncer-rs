@@ -6,7 +6,8 @@ use std::{io::Result, sync::Arc};
 use async_trait::async_trait;
 use http::Uri;
 use tokio::sync::RwLock;
-use vcaldav::{Auth, CalDavClient};
+use vcaldav::auth::Auth;
+use vcaldav::CalDavClient;
 
 use crate::base::{Collection, Definition, MetadataKind, Storage};
 

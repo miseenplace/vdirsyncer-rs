@@ -6,66 +6,20 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use base64::{prelude::BASE64_STANDARD, write::EncoderWriter};
+use crate::auth::{Auth, AuthError};
 use dav::DavClient;
 use dav::DavError;
 use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
 use domain::base::Dname;
-use http::{HeaderValue, Method, Request};
+use http::Method;
 use hyper::{Client, Uri};
 use hyper_rustls::HttpsConnectorBuilder;
-use std::io::Write;
 use xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty, DAV};
 
+pub mod auth;
 pub mod dav;
 pub mod dns;
 pub mod xml;
-
-/// Authentication schemes supported by [`CalDavClient`].
-#[non_exhaustive]
-#[derive(Debug)]
-pub enum Auth {
-    None,
-    Basic {
-        username: String,
-        password: Option<String>,
-    },
-}
-
-/// Internal error resolving authentication.
-#[derive(thiserror::Error, Debug)]
-#[error(transparent)]
-pub struct AuthError(Box<dyn std::error::Error + Sync + Send>);
-
-impl AuthError {
-    fn from<E: std::error::Error + Sync + Send + 'static>(err: E) -> Self {
-        Self(Box::from(err))
-    }
-}
-
-impl Auth {
-    /// Apply this authentication to a request builder.
-    fn new_request(&self) -> Result<http::request::Builder, AuthError> {
-        let request = Request::builder();
-        match self {
-            Auth::None => Ok(request),
-            Auth::Basic { username, password } => {
-                let mut sequence = b"Basic ".to_vec();
-                let mut encoder = EncoderWriter::new(&mut sequence, &BASE64_STANDARD);
-                if let Some(pwd) = password {
-                    write!(encoder, "{username}:{pwd}").map_err(AuthError::from)?;
-                } else {
-                    write!(encoder, "{username}:").map_err(AuthError::from)?;
-                }
-                drop(encoder); // Releases the mutable borrow for `sequence`.
-
-                let mut header = HeaderValue::from_bytes(&sequence).map_err(AuthError::from)?;
-                header.set_sensitive(true);
-                Ok(request.header(hyper::header::AUTHORIZATION, header.clone()))
-            }
-        }
-    }
-}
 
 /// A client to communicate with a CalDav server.
 ///
