@@ -1,4 +1,5 @@
-//! A CalDavStorage is a single CalDav repository, as specified in rfc4791.
+//! A [`CalDavStorage`] is a single CalDav repository, as specified in rfc4791.
+//!
 //! XXX: WARNING: This module is VERY INCOMPLETE!
 
 use std::{io::Result, sync::Arc};

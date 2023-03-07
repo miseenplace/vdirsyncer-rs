@@ -201,9 +201,19 @@ impl CalDavClient {
         Ok(client)
     }
 
-    /// Resolve the default context path with the well-known URL.
+    /// Resolve the default context path using the well-known path.
     ///
-    /// See: <https://www.rfc-editor.org/rfc/rfc6764#section-5>
+    /// # Errors
+    ///
+    /// - If the provided scheme, host and port cannot be used to construct a valid URL.
+    /// - If there are any network errors.
+    /// - If the response is not an HTTP redirection.
+    /// - If the `Location` header in the response is missing or invalid.
+    ///
+    /// # See also
+    ///
+    /// - <https://www.rfc-editor.org/rfc/rfc6764#section-5>
+    /// - [`ResolveContextPathError`]
     pub async fn resolve_context_path(
         &self,
         scheme: &str,

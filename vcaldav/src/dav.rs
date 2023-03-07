@@ -130,7 +130,17 @@ impl DavClient {
 
     /// Find a URL for the currently authenticated user's principal resource on the server.
     ///
-    /// See: <https://www.rfc-editor.org/rfc/rfc5397>
+    /// Returns `None` if the response is valid but does not contain any `href`.
+    ///
+    /// # Errors
+    ///
+    /// - If there are any network issues.
+    /// - If parsing the XML response fails.
+    /// - If the `href` cannot be parsed into a valid [`Uri`]
+    ///
+    /// # See also
+    ///
+    /// - <https://www.rfc-editor.org/rfc/rfc5397>
     pub async fn query_current_user_principal(&self, url: Uri) -> Result<Option<Uri>, DavError> {
         let property_data = SimplePropertyMeta {
             name: b"current-user-principal".to_vec(),
@@ -176,6 +186,13 @@ impl DavClient {
     }
 
     /// Sends a `PROPFIND` request and parses the result.
+    ///
+    /// # Errors
+    ///
+    /// - If the network request fails.
+    /// - If the response is not successful (e.g.L in the 200-299 range).
+    /// - If parsing the XML fails.
+    /// - If the XML does not match the parametrized type.
     pub async fn propfind<T: FromXml>(
         &self,
         url: Uri,

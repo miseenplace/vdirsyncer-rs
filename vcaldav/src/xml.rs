@@ -31,12 +31,17 @@ pub enum Error {
 }
 
 /// A type that can be built by parsing XML.
+#[allow(clippy::module_name_repetitions)]
 pub trait FromXml: Sized {
     type Data;
     /// Builds a new instance by parsing the XML reader.
     ///
     /// The opening tag for this type is expected to have been consumed prior
     /// to calling this method.
+    ///
+    /// # Errors
+    ///
+    /// If the raw data is not valid XML or does not match the expected format.
     // TODO: on failure, the reader should be moved to the end of the matching end node.
     fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &Self::Data) -> Result<Self, Error>;
 }
