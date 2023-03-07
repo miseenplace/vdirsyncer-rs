@@ -318,28 +318,4 @@ impl CalDavClient {
     // TODO: get_calendar_order ("calendar-order", "http://apple.com/ns/ical/")
     // TODO: DRY: the above methods are super repetitive.
     //       Maybe all these props impl a single trait, so the API could be `get_prop<T>(url)`?
-
-    /// Enumerates entries in a collection
-    ///
-    /// Returns an array of results. Because the server can return a non-ok status for individual
-    /// entries, some of them may be `Err`, while other are `Ok(ItemDetails)`.
-    ///
-    /// # Errors
-    ///
-    /// If there are network errors executing the request or parsing the XML response.
-    pub async fn list_collection(
-        &self,
-        collection_href: &str,
-    ) -> Result<Vec<Result<ResponseWithProp<ItemDetails>, crate::xml::Error>>, DavError> {
-        let url = self.relative_uri(collection_href)?;
-
-        self.propfind::<ResponseWithProp<ItemDetails>>(
-            url,
-            "<resourcetype/><getcontenttype/><getetag/>",
-            1,
-            (),
-        )
-        .await
-        // TODO: map to a cleaner public type
-    }
 }

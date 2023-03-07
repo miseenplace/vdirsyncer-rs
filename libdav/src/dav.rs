@@ -6,7 +6,10 @@ use hyper::{client::HttpConnector, Body, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::{
-    xml::{self, FromXml, HrefProperty, ResponseWithProp, SimplePropertyMeta, StringProperty, DAV},
+    xml::{
+        self, FromXml, HrefProperty, ItemDetails, ResponseWithProp, SimplePropertyMeta,
+        StringProperty, DAV,
+    },
     Auth, AuthError,
 };
 
@@ -278,5 +281,30 @@ impl DavClient {
         .ok_or(xml::Error::MissingData("dispayname"))?
         .map(Option::<String>::from)
         .map_err(DavError::from)
+    }
+
+    /// Enumerates entries in a collection
+    ///
+    /// Returns an array of results. Because the server can return a non-ok status for individual
+    /// entries, some of them may be `Err`, while other are `Ok(ItemDetails)`.
+    ///
+    /// Note that the collection itself is also present as an item.
+    ///
+    /// # Errors
+    ///
+    /// If there are network errors executing the request or parsing the XML response.
+    pub async fn list_collection(
+        &self,
+        collection_href: &str,
+    ) -> Result<Vec<Result<ResponseWithProp<ItemDetails>, crate::xml::Error>>, DavError> {
+        let url = self.relative_uri(collection_href)?;
+
+        self.propfind::<ResponseWithProp<ItemDetails>>(
+            url,
+            "<resourcetype/><getcontenttype/><getetag/>",
+            1,
+            (),
+        )
+        .await
     }
 }
