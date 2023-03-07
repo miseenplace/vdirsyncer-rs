@@ -51,7 +51,7 @@ async fn main() {
 
     for ref calendar in calendars {
         let name = caldav_client
-            .get_calendar_displayname(calendar)
+            .get_collection_displayname(calendar)
             .await
             .unwrap();
         let color = caldav_client.get_calendar_colour(calendar).await.unwrap();

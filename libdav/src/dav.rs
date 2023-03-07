@@ -6,7 +6,7 @@ use hyper::{client::HttpConnector, Body, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::{
-    xml::{self, FromXml, HrefProperty, ResponseWithProp, SimplePropertyMeta},
+    xml::{self, FromXml, HrefProperty, ResponseWithProp, SimplePropertyMeta, StringProperty, DAV},
     Auth, AuthError,
 };
 
@@ -248,5 +248,35 @@ impl DavClient {
 
         let body = hyper::body::to_bytes(body).await?;
         xml::parse_multistatus::<T>(&body, &data).map_err(DavError::from)
+    }
+
+    /// Returns the `displayname` for the collection at path `href`.
+    ///
+    /// From [rfc3744#section-4](https://www.rfc-editor.org/rfc/rfc3744#section-4):
+    ///
+    /// > A principal MUST have a non-empty DAV:displayname property
+    ///
+    /// # Errors
+    ///
+    /// If the HTTP call fails or parsing the XML response fails.
+    pub async fn get_collection_displayname(&self, href: &str) -> Result<Option<String>, DavError> {
+        let url = self.relative_uri(href)?;
+
+        let property_data = SimplePropertyMeta {
+            name: b"displayname".to_vec(),
+            namespace: DAV.to_vec(),
+        };
+
+        self.propfind::<ResponseWithProp<StringProperty>>(
+            url.clone(),
+            "<displayname/>",
+            0,
+            property_data,
+        )
+        .await?
+        .pop()
+        .ok_or(xml::Error::MissingData("dispayname"))?
+        .map(Option::<String>::from)
+        .map_err(DavError::from)
     }
 }

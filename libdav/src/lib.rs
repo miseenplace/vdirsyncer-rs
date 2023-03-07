@@ -13,7 +13,7 @@ use dns::{find_context_path_via_txt_records, resolve_srv_record, TxtError};
 use domain::base::Dname;
 use http::Method;
 use hyper::{Body, Uri};
-use xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty, DAV};
+use xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty};
 
 pub mod auth;
 pub mod dav;
@@ -283,32 +283,6 @@ impl CalDavClient {
             // FIXME: silently ignores collections with any issues:
             .filter_map(|r| r.map(|c| c.href).ok())
             .collect())
-    }
-
-    /// Returns the `displayname` for the calendar at path `href`.
-    ///
-    /// # Errors
-    ///
-    /// If the HTTP call fails or parsing the XML response fails.
-    pub async fn get_calendar_displayname(&self, href: &str) -> Result<Option<String>, DavError> {
-        let url = self.relative_uri(href)?;
-
-        let property_data = SimplePropertyMeta {
-            name: b"displayname".to_vec(),
-            namespace: DAV.to_vec(),
-        };
-
-        self.propfind::<ResponseWithProp<StringProperty>>(
-            url.clone(),
-            "<displayname/>",
-            0,
-            property_data,
-        )
-        .await?
-        .pop()
-        .ok_or(xml::Error::MissingData("dispayname"))?
-        .map(Option::<String>::from)
-        .map_err(DavError::from)
     }
 
     /// Returns the colour for the calendar at path `href`.

@@ -156,7 +156,7 @@ impl Collection for CalDavCollection {
         let client = &self.client.read().await;
 
         let result = match meta {
-            MetadataKind::DisplayName => client.get_calendar_displayname(&self.href).await,
+            MetadataKind::DisplayName => client.get_collection_displayname(&self.href).await,
             MetadataKind::Colour => client.get_calendar_colour(&self.href).await,
         };
 
