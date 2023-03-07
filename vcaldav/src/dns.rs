@@ -13,7 +13,7 @@ use domain::{
     resolv::StubResolver,
 };
 
-/// Resolves SRV to locate the CalDav server.
+/// Resolves SRV to locate the caldav server.
 ///
 /// Returns a vector of host/ports, in the order in which they should be tried. Returns an empty
 /// list if no SRV records were found.

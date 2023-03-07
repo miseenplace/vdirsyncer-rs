@@ -1,4 +1,4 @@
-//! This library contains CalDav and CardDav clients.
+//! This library contains caldav and carddav clients.
 //!
 //! See [`CalDavClient`] as a useful entry point.
 use std::{
@@ -21,7 +21,7 @@ pub mod dav;
 pub mod dns;
 pub mod xml;
 
-/// A client to communicate with a CalDav server.
+/// A client to communicate with a caldav server.
 ///
 /// Wraps around a [`DavClient`], which provides the underlying webdav functionality.
 // TODO FIXME: Need to figure out how to reuse as much as possible for carddav and caldav.
@@ -132,7 +132,7 @@ impl CalDavClient {
 
     /// Auto-bootstrap a new client.
     ///
-    /// Determines the CalDav server's real host and the context path of the resources for a
+    /// Determines the caldav server's real host and the context path of the resources for a
     /// server, following the discovery mechanism described in [rfc6764].
     ///
     /// [rfc6764]: https://www.rfc-editor.org/rfc/rfc6764

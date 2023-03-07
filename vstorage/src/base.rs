@@ -21,7 +21,7 @@ pub type Etag = String;
 
 /// The path to the item inside the collection.
 ///
-/// For example, for CardDav collections this is the path of the entry inside the collection. For
+/// For example, for carddav collections this is the path of the entry inside the collection. For
 /// Filesystem, this the file's relative path, etc. `Href`s MUST be valid UTF-8 sequences.
 pub type Href = String;
 

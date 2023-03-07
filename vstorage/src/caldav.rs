@@ -1,4 +1,4 @@
-//! A [`CalDavStorage`] is a single CalDav repository, as specified in rfc4791.
+//! A [`CalDavStorage`] is a single caldav repository, as specified in rfc4791.
 //!
 //! XXX: WARNING: This module is VERY INCOMPLETE!
 
@@ -30,7 +30,7 @@ impl Definition for CalDavDefinition {
     }
 }
 
-/// A storage backed by a CalDav server.
+/// A storage backed by a caldav server.
 ///
 /// A single storage represents a single server with a specific set of credentials.
 pub struct CalDavStorage {
@@ -88,9 +88,9 @@ impl Storage for CalDavStorage {
     }
 }
 
-/// A CalDav collection
+/// A caldav collection
 ///
-/// The "collection" concept from `vstorage` maps 1:1 with the "collection" concept in CalDav.
+/// The "collection" concept from `vstorage` maps 1:1 with the "collection" concept in caldav.
 pub struct CalDavCollection {
     client: Arc<RwLock<CalDavClient>>,
     href: String,
