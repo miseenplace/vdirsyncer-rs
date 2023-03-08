@@ -1,16 +1,19 @@
 /// A simple component model that only cares about the basic structure.
 ///
-/// This is used to split components and other simple operations where understanding the internal
-/// structure is not relevant.
+/// This is used to split components and other simple operations. However, this
+/// is not a full parser. It won't validate much beyond `BEGIN` and `END`
+/// properly matching. The intent of this parser is not to be validating, but
+/// to be very tolerant with inputs, so as to allow operating on somewhat
+/// invalid inputs.
 ///
 /// # Known Issues
 ///
 /// Works only with iCalendar, but not with vCard.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Component {
-    pub(crate) kind: String,
-    pub(crate) lines: Vec<String>,
-    pub(crate) subcomponents: Vec<Component>,
+pub(crate) struct Component<'a> {
+    pub(crate) kind: &'a str,
+    pub(crate) lines: Vec<&'a str>,
+    pub(crate) subcomponents: Vec<Component<'a>>,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -37,23 +40,20 @@ pub(crate) enum ComponentError {
     DataOutsideBeingEnd,
 }
 
-impl Component {
-    fn new<S: AsRef<str>>(kind: S) -> Self {
+impl<'a> Component<'a> {
+    fn new(kind: &'a str) -> Self {
         Component {
-            kind: kind.as_ref().to_string(),
+            kind,
             lines: Vec::new(),
             subcomponents: Vec::new(),
         }
     }
 
-    // XXX: This is ugly and inefficent.
-    // The general ideal (as copied from the python edition) is great, but the impl is bad.
     /// Parse a component from a raw string input.
     pub(crate) fn parse(input: &str) -> Result<Component, ComponentError> {
         let mut root: Option<Component> = None;
         let mut stack = Vec::new();
 
-        // iterating over [&str] might be more suitable!
         for line in input.lines() {
             if let Some(kind) = line.strip_prefix("BEGIN:") {
                 stack.push(Component::new(kind));
@@ -77,7 +77,7 @@ impl Component {
                     .last_mut()
                     .ok_or(ComponentError::DataOutsideBeingEnd)?
                     .lines
-                    .push(line.to_string());
+                    .push(line);
             }
         }
 
@@ -94,7 +94,9 @@ impl Component {
     //
     // For a calendar with multiple `VEVENT`s and `VTIMEZONE`, it will return individual `VEVENT`
     // with the `VTIMEZONE` duplicated into each one, making them fully standalone components.
-    pub(crate) fn split_collection(self: Component) -> Result<Vec<Component>, ComponentError> {
+    pub(crate) fn split_collection(
+        self: Component<'a>,
+    ) -> Result<Vec<Component<'a>>, ComponentError> {
         let mut inline = Vec::new();
         let mut items = Vec::new();
 
@@ -114,11 +116,11 @@ impl Component {
     /// Subcomponents are split into two groups: those that must be copied inline (e.g.:
     /// `VTIMEZONE`) and those that are free-standing items for [`Collection`]s.
     fn split_inner(
-        self: Component,
-        inline: &mut Vec<Component>,
-        items: &mut Vec<Component>,
+        self: Component<'a>,
+        inline: &mut Vec<Component<'a>>,
+        items: &mut Vec<Component<'a>>,
     ) -> Result<(), ComponentError> {
-        match self.kind.as_ref() {
+        match self.kind {
             "VTIMEZONE" => {
                 inline.push(self);
             }
@@ -136,22 +138,23 @@ impl Component {
         Ok(())
     }
 
+    /// Returns a fully encoded representation of this item.
     pub(crate) fn raw(&self) -> String {
         // FIXME: this is horribly inefficent.
         let mut raw = String::new();
         raw.push_str("BEGIN:");
-        raw.push_str(&self.kind);
+        raw.push_str(self.kind);
         raw.push_str("\r\n");
         for line in &self.lines {
-            raw.push_str(line.as_ref());
+            raw.push_str(line);
             raw.push_str("\r\n");
         }
         for component in &self.subcomponents {
-            raw.push_str(component.raw().as_ref());
+            raw.push_str(&component.raw());
             raw.push_str("\r\n");
         }
         raw.push_str("END:");
-        raw.push_str(&self.kind);
+        raw.push_str(self.kind);
         raw.push_str("\r\n");
 
         raw
@@ -209,59 +212,56 @@ mod test {
         assert_eq!(
             component,
             Component {
-                kind: "VCALENDAR".to_string(),
+                kind: "VCALENDAR",
                 lines: [].to_vec(),
                 subcomponents: vec!(
                     Component {
-                        kind: "VTIMEZONE".to_string(),
-                        lines: vec!(
-                            "TZID:Europe/Rome".to_string(),
-                            "X-LIC-LOCATION:Europe/Rome".to_string()
-                        ),
+                        kind: "VTIMEZONE",
+                        lines: vec!("TZID:Europe/Rome", "X-LIC-LOCATION:Europe/Rome",),
                         subcomponents: vec!(
                             Component {
-                                kind: "DAYLIGHT".to_string(),
+                                kind: "DAYLIGHT",
                                 lines: vec!(
-                                    "TZOFFSETFROM:+0100".to_string(),
-                                    "TZOFFSETTO:+0200".to_string(),
-                                    "TZNAME:CEST".to_string(),
-                                    "DTSTART:19700329T020000".to_string(),
-                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3".to_string(),
+                                    "TZOFFSETFROM:+0100",
+                                    "TZOFFSETTO:+0200",
+                                    "TZNAME:CEST",
+                                    "DTSTART:19700329T020000",
+                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3",
                                 ),
                                 subcomponents: vec!(),
                             },
                             Component {
-                                kind: "STANDARD".to_string(),
+                                kind: "STANDARD",
                                 lines: vec!(
-                                    "TZOFFSETFROM:+0200".to_string(),
-                                    "TZOFFSETTO:+0100".to_string(),
-                                    "TZNAME:CET".to_string(),
-                                    "DTSTART:19701025T030000".to_string(),
-                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10".to_string(),
+                                    "TZOFFSETFROM:+0200",
+                                    "TZOFFSETTO:+0100",
+                                    "TZNAME:CET",
+                                    "DTSTART:19701025T030000",
+                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10",
                                 ),
                                 subcomponents: vec!(),
                             },
                         ),
                     },
                     Component {
-                        kind: "VEVENT".to_string(),
+                        kind: "VEVENT",
                         lines: vec!(
-                            "DTSTART:19970714T170000Z".to_string(),
-                            "DTEND:19970715T035959Z".to_string(),
-                            "SUMMARY:Bastille Day Party".to_string(),
-                            "X-SOMETHING:r".to_string(),
-                            "UID:11bb6bed-c29b-4999-a627-12dee35f8395".to_string(),
+                            "DTSTART:19970714T170000Z",
+                            "DTEND:19970715T035959Z",
+                            "SUMMARY:Bastille Day Party",
+                            "X-SOMETHING:r",
+                            "UID:11bb6bed-c29b-4999-a627-12dee35f8395",
                         ),
                         subcomponents: vec!(),
                     },
                     Component {
-                        kind: "VEVENT".to_string(),
+                        kind: "VEVENT",
                         lines: vec!(
-                            "DTSTART:19970714T170000Z".to_string(),
-                            "DTEND:19970715T035959Z".to_string(),
-                            "SUMMARY:Bastille Day Party (copy)".to_string(),
-                            "X-SOMETHING:s".to_string(),
-                            "UID:b8d52b8b-dd6b-4ef9-9249-0ad7c28f9e5a".to_string(),
+                            "DTSTART:19970714T170000Z",
+                            "DTEND:19970715T035959Z",
+                            "SUMMARY:Bastille Day Party (copy)",
+                            "X-SOMETHING:s",
+                            "UID:b8d52b8b-dd6b-4ef9-9249-0ad7c28f9e5a",
                         ),
                         subcomponents: vec!(),
                     },
@@ -275,40 +275,37 @@ mod test {
             split,
             vec!(
                 Component {
-                    kind: "VEVENT".to_string(),
+                    kind: "VEVENT",
                     lines: vec!(
-                        "DTSTART:19970714T170000Z".to_string(),
-                        "DTEND:19970715T035959Z".to_string(),
-                        "SUMMARY:Bastille Day Party".to_string(),
-                        "X-SOMETHING:r".to_string(),
-                        "UID:11bb6bed-c29b-4999-a627-12dee35f8395".to_string(),
+                        "DTSTART:19970714T170000Z",
+                        "DTEND:19970715T035959Z",
+                        "SUMMARY:Bastille Day Party",
+                        "X-SOMETHING:r",
+                        "UID:11bb6bed-c29b-4999-a627-12dee35f8395",
                     ),
                     subcomponents: vec!(Component {
-                        kind: "VTIMEZONE".to_string(),
-                        lines: vec!(
-                            "TZID:Europe/Rome".to_string(),
-                            "X-LIC-LOCATION:Europe/Rome".to_string(),
-                        ),
+                        kind: "VTIMEZONE",
+                        lines: vec!("TZID:Europe/Rome", "X-LIC-LOCATION:Europe/Rome",),
                         subcomponents: vec!(
                             Component {
-                                kind: "DAYLIGHT".to_string(),
+                                kind: "DAYLIGHT",
                                 lines: vec!(
-                                    "TZOFFSETFROM:+0100".to_string(),
-                                    "TZOFFSETTO:+0200".to_string(),
-                                    "TZNAME:CEST".to_string(),
-                                    "DTSTART:19700329T020000".to_string(),
-                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3".to_string(),
+                                    "TZOFFSETFROM:+0100",
+                                    "TZOFFSETTO:+0200",
+                                    "TZNAME:CEST",
+                                    "DTSTART:19700329T020000",
+                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3",
                                 ),
                                 subcomponents: vec!(),
                             },
                             Component {
-                                kind: "STANDARD".to_string(),
+                                kind: "STANDARD",
                                 lines: vec!(
-                                    "TZOFFSETFROM:+0200".to_string(),
-                                    "TZOFFSETTO:+0100".to_string(),
-                                    "TZNAME:CET".to_string(),
-                                    "DTSTART:19701025T030000".to_string(),
-                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10".to_string(),
+                                    "TZOFFSETFROM:+0200",
+                                    "TZOFFSETTO:+0100",
+                                    "TZNAME:CET",
+                                    "DTSTART:19701025T030000",
+                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10",
                                 ),
                                 subcomponents: vec!(),
                             },
@@ -316,40 +313,37 @@ mod test {
                     },),
                 },
                 Component {
-                    kind: "VEVENT".to_string(),
+                    kind: "VEVENT",
                     lines: vec!(
-                        "DTSTART:19970714T170000Z".to_string(),
-                        "DTEND:19970715T035959Z".to_string(),
-                        "SUMMARY:Bastille Day Party (copy)".to_string(),
-                        "X-SOMETHING:s".to_string(),
-                        "UID:b8d52b8b-dd6b-4ef9-9249-0ad7c28f9e5a".to_string(),
+                        "DTSTART:19970714T170000Z",
+                        "DTEND:19970715T035959Z",
+                        "SUMMARY:Bastille Day Party (copy)",
+                        "X-SOMETHING:s",
+                        "UID:b8d52b8b-dd6b-4ef9-9249-0ad7c28f9e5a",
                     ),
                     subcomponents: vec!(Component {
-                        kind: "VTIMEZONE".to_string(),
-                        lines: vec!(
-                            "TZID:Europe/Rome".to_string(),
-                            "X-LIC-LOCATION:Europe/Rome".to_string(),
-                        ),
+                        kind: "VTIMEZONE",
+                        lines: vec!("TZID:Europe/Rome", "X-LIC-LOCATION:Europe/Rome",),
                         subcomponents: vec!(
                             Component {
-                                kind: "DAYLIGHT".to_string(),
+                                kind: "DAYLIGHT",
                                 lines: vec!(
-                                    "TZOFFSETFROM:+0100".to_string(),
-                                    "TZOFFSETTO:+0200".to_string(),
-                                    "TZNAME:CEST".to_string(),
-                                    "DTSTART:19700329T020000".to_string(),
-                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3".to_string(),
+                                    "TZOFFSETFROM:+0100",
+                                    "TZOFFSETTO:+0200",
+                                    "TZNAME:CEST",
+                                    "DTSTART:19700329T020000",
+                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3",
                                 ),
                                 subcomponents: vec!(),
                             },
                             Component {
-                                kind: "STANDARD".to_string(),
+                                kind: "STANDARD",
                                 lines: vec!(
-                                    "TZOFFSETFROM:+0200".to_string(),
-                                    "TZOFFSETTO:+0100".to_string(),
-                                    "TZNAME:CET".to_string(),
-                                    "DTSTART:19701025T030000".to_string(),
-                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10".to_string(),
+                                    "TZOFFSETFROM:+0200",
+                                    "TZOFFSETTO:+0100",
+                                    "TZNAME:CET",
+                                    "DTSTART:19701025T030000",
+                                    "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10",
                                 ),
                                 subcomponents: vec!(),
                             },
