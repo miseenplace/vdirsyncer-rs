@@ -204,7 +204,7 @@ impl Collection for WebCalCollection {
             })
             .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
 
-        let hash = crate::util::hash(item.raw());
+        let hash = crate::util::hash(item.as_str());
         Ok((item, hash))
     }
 
@@ -228,7 +228,7 @@ impl Collection for WebCalCollection {
                 let raw = c.raw();
                 let item = Item::from(raw);
                 if hrefs.contains(&(item.ident().as_ref())) {
-                    let hash = crate::util::hash(item.raw());
+                    let hash = crate::util::hash(item.as_str());
                     Some(Ok((item.ident(), item, hash)))
                 } else {
                     None

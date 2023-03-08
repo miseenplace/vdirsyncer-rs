@@ -237,7 +237,7 @@ impl Collection for FilesystemCollection {
             .create_new(true)
             .open(&filename)
             .await?;
-        file.write_all(item.raw().as_bytes()).await?;
+        file.write_all(item.as_str().as_bytes()).await?;
 
         let item_ref = ItemRef {
             href,
@@ -260,7 +260,7 @@ impl Collection for FilesystemCollection {
             .create(false)
             .open(&filename)
             .await?;
-        file.write_all(item.raw().as_bytes()).await?;
+        file.write_all(item.as_str().as_bytes()).await?;
 
         let etag = etag_for_path::<PathBuf>(&filename).await?;
         Ok(etag)
