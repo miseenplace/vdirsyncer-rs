@@ -185,6 +185,8 @@ impl Item {
     ///
     /// Please see the details for [`util::hash`]. This is not a generic hashing
     /// function and has some special considerations for our specific use-cases.
+    ///
+    /// [`util::hash`]: crate::util::hash
     #[must_use]
     pub fn hash(&self) -> String {
         // TODO: Need to keep in mind that:
