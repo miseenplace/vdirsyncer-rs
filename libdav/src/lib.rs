@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::auth::{Auth, AuthError};
+use async_trait::async_trait;
 use dav::DavClient;
 use dav::DavError;
 use dns::{find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, TxtError};
@@ -99,26 +100,6 @@ impl CalDavClient {
 
     // TODO: methods to serialise and deserialise (mostly to cache all discovery data).
 
-    /// Returns the default port to try and use.
-    ///
-    /// If the `base_url` has an explicit port, that value is returned. Otherwise,
-    /// returns `443` for https, `80` for http, and `443` as a fallback for
-    /// anything else.
-    fn default_port(&self) -> Result<u16, BootstrapError> {
-        // raise InvaidUrl?
-        if let Some(port) = self.base_url.port_u16() {
-            Ok(port)
-        } else {
-            match self.base_url.scheme() {
-                Some(scheme) if scheme == "https" => Ok(443),
-                Some(scheme) if scheme == "http" => Ok(80),
-                Some(scheme) if scheme == "caldavs" => Ok(443),
-                Some(scheme) if scheme == "caldav" => Ok(80),
-                _ => Err(BootstrapError::InvalidUrl("invalid scheme (and no port)")),
-            }
-        }
-    }
-
     /// Auto-bootstrap a new client.
     ///
     /// Determines the caldav server's real host and the context path of the resources for a
@@ -134,62 +115,7 @@ impl CalDavClient {
     /// Does not return an error if DNS records as missing, only if they contain invalid data.
     pub async fn auto_bootstrap(base_url: Uri, auth: Auth) -> Result<Self, BootstrapError> {
         let mut client = Self::raw_client(base_url, auth);
-
-        let scheme = client
-            .base_url
-            .scheme()
-            .ok_or(BootstrapError::InvalidUrl("missing scheme"))?;
-        let domain = client
-            .base_url
-            .host()
-            .ok_or(BootstrapError::InvalidUrl("caldav requires a host"))?;
-        let port = client.default_port()?;
-
-        let service = match scheme.as_ref() {
-            "https" | "caldavs" => DiscoverableService::CalDavs,
-            "http" | "caldav" => DiscoverableService::CalDav,
-            _ => return Err(BootstrapError::InvalidUrl("scheme is invalid")),
-        };
-
-        let dname = Dname::bytes_from_str(domain)
-            .map_err(|_| BootstrapError::InvalidUrl("invalid domain name"))?;
-        let candidates = {
-            let mut candidates = resolve_srv_record(service, &dname, port)
-                .await
-                .map_err(|_| BootstrapError::DnsError)?;
-
-            // If there are no SRV records, try the domain/port in the provided URI.
-            if candidates.is_empty() {
-                candidates.push((domain.to_string(), port));
-            }
-            candidates
-        };
-
-        if let Some(path) = find_context_path_via_txt_records(service, &dname).await? {
-            // TODO: validate that the path works on the chosen server.
-            let candidate = &candidates[0];
-
-            client.base_url = Uri::builder()
-                .scheme(service.scheme())
-                .authority(format!("{}:{}", candidate.0, candidate.1))
-                .path_and_query(path)
-                .build()
-                .map_err(BootstrapError::BadSrv)?;
-        } else {
-            for candidate in candidates {
-                if let Ok(Some(url)) = client
-                    .resolve_context_path(service, &candidate.0, candidate.1)
-                    .await
-                {
-                    client.base_url = url;
-                    break;
-                }
-            }
-        }
-
-        // From https://www.rfc-editor.org/rfc/rfc6764#section-6, subsection 5:
-        // > clients MUST properly handle HTTP redirect responses for the request
-        client.principal = client.resolve_current_user_principal().await?;
+        client = client.common_bootstrap().await?;
 
         // If obtaining a principal fails, the specification says we should query the user. This
         // tries to use the `base_url` first, since the user might have provided it for a reason.
@@ -282,4 +208,109 @@ impl CalDavClient {
     // TODO: get_calendar_order ("calendar-order", "http://apple.com/ns/ical/")
     // TODO: DRY: the above methods are super repetitive.
     //       Maybe all these props impl a single trait, so the API could be `get_prop<T>(url)`?
+}
+
+#[async_trait]
+impl DavWithAutoDiscovery for CalDavClient {
+    #[inline]
+
+    /// Returns the default port to try and use.
+    ///
+    /// If the `base_url` has an explicit port, that value is returned. Otherwise,
+    /// returns `443` for https, `80` for http, and `443` as a fallback for
+    /// anything else.
+    fn default_port(&self) -> Result<u16, BootstrapError> {
+        // raise InvaidUrl?
+        if let Some(port) = self.base_url.port_u16() {
+            Ok(port)
+        } else {
+            match self.base_url.scheme() {
+                Some(scheme) if scheme == "https" => Ok(443),
+                Some(scheme) if scheme == "http" => Ok(80),
+                Some(scheme) if scheme == "caldavs" => Ok(443),
+                Some(scheme) if scheme == "caldav" => Ok(80),
+                _ => Err(BootstrapError::InvalidUrl("invalid scheme (and no port)")),
+            }
+        }
+    }
+
+    fn service(&self) -> Result<DiscoverableService, BootstrapError> {
+        let scheme = self
+            .base_url
+            .scheme()
+            .ok_or(BootstrapError::InvalidUrl("missing scheme"))?;
+        match scheme.as_ref() {
+            "https" | "caldavs" => Ok(DiscoverableService::CalDavs),
+            "http" | "caldav" => Ok(DiscoverableService::CalDav),
+            _ => Err(BootstrapError::InvalidUrl("scheme is invalid")),
+        }
+    }
+
+    fn set_principal(&mut self, principal: Option<Uri>) {
+        self.principal = principal
+    }
+}
+
+/// Trait implementing some common bits between CardDav and CalDav.
+///
+/// This trait is deliberately made private; it's just a convenient recipe to reuse
+/// some bits of code.
+#[async_trait]
+pub(crate) trait DavWithAutoDiscovery:
+    DerefMut<Target = DavClient> + Sized + Send + Sync
+{
+    fn default_port(&self) -> Result<u16, BootstrapError>;
+    fn service(&self) -> Result<DiscoverableService, BootstrapError>;
+    fn set_principal(&mut self, principal: Option<Uri>);
+
+    /// A big chunk of the bootstrap logic that's shared between both types.
+    ///
+    /// NOTE: This is not public. Both `CalDavClient` and `CardDavClient` wrap this with extra steps.
+    async fn common_bootstrap(mut self) -> Result<Self, BootstrapError> {
+        let domain = self
+            .base_url
+            .host()
+            .ok_or(BootstrapError::InvalidUrl("a host is required"))?;
+        let port = self.default_port()?;
+        let service = self.service()?;
+
+        let dname = Dname::bytes_from_str(domain)
+            .map_err(|_| BootstrapError::InvalidUrl("invalid domain name"))?;
+        let candidates = {
+            let mut candidates = resolve_srv_record(service, &dname, port)
+                .await
+                .map_err(|_| BootstrapError::DnsError)?;
+
+            // If there are no SRV records, try the domain/port in the provided URI.
+            if candidates.is_empty() {
+                candidates.push((domain.to_string(), port));
+            }
+            candidates
+        };
+
+        if let Some(path) = find_context_path_via_txt_records(service, &dname).await? {
+            // TODO: validate that the path works on the chosen server.
+            let candidate = &candidates[0];
+
+            self.base_url = Uri::builder()
+                .scheme(service.scheme())
+                .authority(format!("{}:{}", candidate.0, candidate.1))
+                .path_and_query(path)
+                .build()
+                .map_err(BootstrapError::BadSrv)?;
+        } else {
+            for candidate in candidates {
+                if let Ok(Some(url)) = self
+                    .resolve_context_path(service, &candidate.0, candidate.1)
+                    .await
+                {
+                    self.base_url = url;
+                    break;
+                }
+            }
+        }
+
+        self.set_principal(self.resolve_current_user_principal().await?);
+        Ok(self)
+    }
 }
