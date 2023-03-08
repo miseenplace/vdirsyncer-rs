@@ -11,8 +11,7 @@ use dav::DavClient;
 use dav::DavError;
 use dns::{find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, TxtError};
 use domain::base::Dname;
-use http::Method;
-use hyper::{Body, Uri};
+use hyper::Uri;
 use xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty};
 
 pub mod auth;
@@ -80,24 +79,6 @@ impl From<BootstrapError> for io::Error {
             BootstrapError::DavError(dav) => io::Error::from(dav),
         }
     }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum ResolveContextPathError {
-    #[error("failed to create uri and request with given parameters")]
-    BadInput(#[from] http::Error),
-
-    #[error("network error handling http stream")]
-    Network(#[from] hyper::Error),
-
-    #[error("missing Location header in response")]
-    MissingLocation,
-
-    #[error("error building new Uri with Location from response")]
-    BadLocation(#[from] http::uri::InvalidUri),
-
-    #[error("internal error with specified authentication")]
-    Auth(#[from] AuthError),
 }
 
 // TODO: Minimal input from a user would consist of a calendar user address and a password.  A
@@ -197,7 +178,7 @@ impl CalDavClient {
         } else {
             for candidate in candidates {
                 if let Ok(Some(url)) = client
-                    .resolve_context_path(service.scheme().as_str(), &candidate.0, candidate.1)
+                    .resolve_context_path(service, &candidate.0, candidate.1)
                     .await
                 {
                     client.base_url = url;
@@ -220,55 +201,6 @@ impl CalDavClient {
         client.calendar_home_set = client.query_calendar_home_set(principal_url).await?;
 
         Ok(client)
-    }
-
-    /// Resolve the default context path using the well-known path.
-    ///
-    /// # Errors
-    ///
-    /// - If the provided scheme, host and port cannot be used to construct a valid URL.
-    /// - If there are any network errors.
-    /// - If the response is not an HTTP redirection.
-    /// - If the `Location` header in the response is missing or invalid.
-    ///
-    /// # See also
-    ///
-    /// - <https://www.rfc-editor.org/rfc/rfc6764#section-5>
-    /// - [`ResolveContextPathError`]
-    pub async fn resolve_context_path(
-        &self,
-        scheme: &str,
-        host: &str,
-        port: u16,
-    ) -> Result<Option<Uri>, ResolveContextPathError> {
-        let url = Uri::builder()
-            .scheme(scheme)
-            .authority(format!("{host}:{port}"))
-            .path_and_query("/.well-known/caldav")
-            .build()?;
-
-        let request = self
-            .request()?
-            .method(Method::GET)
-            .uri(url)
-            .body(Body::default())?;
-
-        // From https://www.rfc-editor.org/rfc/rfc6764#section-5:
-        // > [...] the server MAY require authentication when a client tries to
-        // > access the ".well-known" URI
-        let (head, _body) = self.http_client.request(request).await?.into_parts();
-
-        if !head.status.is_redirection() {
-            return Ok(None);
-        }
-
-        // TODO: multiple redirections...?
-        let location = head
-            .headers
-            .get(hyper::header::LOCATION)
-            .ok_or(ResolveContextPathError::MissingLocation)?;
-        // TODO: properly handle RELATIVE urls.
-        Ok(Some(Uri::try_from(location.as_bytes())?))
     }
 
     async fn query_calendar_home_set(&self, url: Uri) -> Result<Option<Uri>, DavError> {

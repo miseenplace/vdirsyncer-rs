@@ -43,6 +43,13 @@ impl DiscoverableService {
             DiscoverableService::CardDav => Scheme::HTTP,
         }
     }
+
+    pub fn well_known_path(self) -> &'static str {
+        match self {
+            DiscoverableService::CalDavs | DiscoverableService::CalDav => "/.well-known/caldav",
+            DiscoverableService::CardDavs | DiscoverableService::CardDav => "/.well-known/carddav",
+        }
+    }
 }
 
 /// Resolves SRV to locate the caldav server.

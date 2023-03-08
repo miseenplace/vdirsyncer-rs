@@ -6,6 +6,7 @@ use hyper::{client::HttpConnector, Body, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::{
+    dns::DiscoverableService,
     xml::{
         self, FromXml, HrefProperty, ItemDetails, ResponseWithProp, SimplePropertyMeta,
         StringProperty, DAV,
@@ -47,6 +48,27 @@ impl From<DavError> for io::Error {
             DavError::InvalidResponse(e) => io::Error::new(io::ErrorKind::InvalidData, e),
         }
     }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ResolveContextPathError {
+    #[error("failed to create uri and request with given parameters")]
+    BadInput(#[from] http::Error),
+
+    #[error("bad scheme in url")]
+    BadScheme,
+
+    #[error("network error handling http stream")]
+    Network(#[from] hyper::Error),
+
+    #[error("missing Location header in response")]
+    MissingLocation,
+
+    #[error("error building new Uri with Location from response")]
+    BadLocation(#[from] http::uri::InvalidUri),
+
+    #[error("internal error with specified authentication")]
+    Auth(#[from] AuthError),
 }
 
 /// A generic webdav client.
@@ -263,9 +285,60 @@ impl DavClient {
         )
         .await?
         .pop()
-        .ok_or(xml::Error::MissingData("dispayname"))?
+        .ok_or(xml::Error::MissingData("displayname"))?
         .map(Option::<String>::from)
         .map_err(DavError::from)
+    }
+
+    /// Resolve the default context path using a well-known path.
+    ///
+    /// This only applies for servers supporting webdav extensions like caldav or carddav.
+    ///
+    /// # Errors
+    ///
+    /// - If the provided scheme, host and port cannot be used to construct a valid URL.
+    /// - If there are any network errors.
+    /// - If the response is not an HTTP redirection.
+    /// - If the `Location` header in the response is missing or invalid.
+    ///
+    /// # See also
+    ///
+    /// - <https://www.rfc-editor.org/rfc/rfc6764#section-5>
+    /// - [`ResolveContextPathError`]
+    pub async fn resolve_context_path(
+        &self,
+        service: DiscoverableService,
+        host: &str,
+        port: u16,
+    ) -> Result<Option<Uri>, ResolveContextPathError> {
+        let url = Uri::builder()
+            .scheme(service.scheme())
+            .authority(format!("{host}:{port}"))
+            .path_and_query(service.well_known_path())
+            .build()?;
+
+        let request = self
+            .request()?
+            .method(Method::GET)
+            .uri(url)
+            .body(Body::default())?;
+
+        // From https://www.rfc-editor.org/rfc/rfc6764#section-5:
+        // > [...] the server MAY require authentication when a client tries to
+        // > access the ".well-known" URI
+        let (head, _body) = self.http_client.request(request).await?.into_parts();
+
+        if !head.status.is_redirection() {
+            return Ok(None);
+        }
+
+        // TODO: multiple redirections...?
+        let location = head
+            .headers
+            .get(hyper::header::LOCATION)
+            .ok_or(ResolveContextPathError::MissingLocation)?;
+        // TODO: properly handle RELATIVE urls.
+        Ok(Some(Uri::try_from(location.as_bytes())?))
     }
 
     /// Enumerates entries in a collection
