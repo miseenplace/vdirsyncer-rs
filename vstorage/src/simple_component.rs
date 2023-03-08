@@ -137,10 +137,11 @@ impl<'a> Component<'a> {
 
         Ok(())
     }
+}
 
+impl ToString for Component<'_> {
     /// Returns a fully encoded representation of this item.
-    pub(crate) fn raw(&self) -> String {
-        // FIXME: this is horribly inefficent.
+    fn to_string(&self) -> String {
         let mut raw = String::new();
         raw.push_str("BEGIN:");
         raw.push_str(self.kind);
@@ -150,7 +151,7 @@ impl<'a> Component<'a> {
             raw.push_str("\r\n");
         }
         for component in &self.subcomponents {
-            raw.push_str(&component.raw());
+            raw.push_str(&component.to_string());
             raw.push_str("\r\n");
         }
         raw.push_str("END:");
