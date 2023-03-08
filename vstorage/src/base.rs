@@ -180,9 +180,13 @@ impl Item {
     }
 
     /// Returns the hash of the raw content.
+    ///
     /// This is usable for etags (and status file).
+    ///
+    /// Please see the details for [`util::hash`]. This is not a generic hashing
+    /// function and has some special considerations for our specific use-cases.
     #[must_use]
-    fn hash(&self) -> String {
+    pub fn hash(&self) -> String {
         // TODO: Need to keep in mind that:
         //  - Timezones may be renamed and that has no meaning.
         //  - Some props may be re-sorted, but the Item is still the same.

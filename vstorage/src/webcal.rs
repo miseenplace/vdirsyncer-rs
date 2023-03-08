@@ -166,10 +166,11 @@ impl Collection for WebCalCollection {
             .iter()
             .map(|c| {
                 let item = Item::from(c.raw());
+                let hash = item.hash();
 
                 ItemRef {
                     href: item.ident(),
-                    etag: crate::util::hash(c.raw()),
+                    etag: hash,
                 }
             })
             .collect();
@@ -204,7 +205,7 @@ impl Collection for WebCalCollection {
             })
             .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
 
-        let hash = crate::util::hash(item.as_str());
+        let hash = item.hash();
         Ok((item, hash))
     }
 
@@ -228,7 +229,7 @@ impl Collection for WebCalCollection {
                 let raw = c.raw();
                 let item = Item::from(raw);
                 if hrefs.contains(&(item.ident().as_ref())) {
-                    let hash = crate::util::hash(item.as_str());
+                    let hash = item.hash();
                     Some(Ok((item.ident(), item, hash)))
                 } else {
                     None
@@ -253,9 +254,8 @@ impl Collection for WebCalCollection {
         components
             .iter()
             .map(|c| {
-                let raw = c.raw();
-                let hash = crate::util::hash(&raw);
-                let item = Item::from(raw);
+                let item = Item::from(c.raw());
+                let hash = item.hash();
 
                 Ok((item.ident(), item, hash))
             })
