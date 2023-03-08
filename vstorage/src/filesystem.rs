@@ -168,9 +168,7 @@ impl Collection for FilesystemCollection {
         let path = self.path.join(href);
         let meta = metadata(&path).await?;
 
-        let item = Item {
-            raw: read_to_string(&path).await?,
-        };
+        let item = Item::from(read_to_string(&path).await?);
         let etag = etag_for_metadata(&meta);
 
         Ok((item, etag))
@@ -198,9 +196,7 @@ impl Collection for FilesystemCollection {
                 .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Filename is not valid UTF-8"))?
                 .into();
             let etag = etag_for_direntry(&entry).await?;
-            let item = Item {
-                raw: read_to_string(&href).await?,
-            };
+            let item = Item::from(read_to_string(&href).await?);
             items.push((href, item, etag));
         }
 
@@ -241,7 +237,7 @@ impl Collection for FilesystemCollection {
             .create_new(true)
             .open(&filename)
             .await?;
-        file.write_all(item.raw.as_bytes()).await?;
+        file.write_all(item.raw().as_bytes()).await?;
 
         let item_ref = ItemRef {
             href,
@@ -264,7 +260,7 @@ impl Collection for FilesystemCollection {
             .create(false)
             .open(&filename)
             .await?;
-        file.write_all(item.raw.as_bytes()).await?;
+        file.write_all(item.raw().as_bytes()).await?;
 
         let etag = etag_for_path::<PathBuf>(&filename).await?;
         Ok(etag)

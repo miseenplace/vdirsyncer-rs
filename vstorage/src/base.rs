@@ -155,7 +155,7 @@ pub enum MetadataKind {
 /// since we want to enable operating on potentially invalid items too.
 #[derive(Debug)]
 pub struct Item {
-    pub(crate) raw: String,
+    raw: String,
 }
 
 impl Item {
@@ -209,10 +209,19 @@ impl Item {
         todo!()
     }
 
+    #[inline]
     #[must_use]
     /// Returns the raw contents of this item.
     pub fn raw(&self) -> &str {
         &self.raw
+    }
+}
+
+impl<S: AsRef<str>> From<S> for Item {
+    fn from(value: S) -> Item {
+        Item {
+            raw: value.as_ref().to_string(),
+        }
     }
 }
 
