@@ -7,7 +7,6 @@ use std::string::FromUtf8Error;
 use domain::base::name::LongChainError;
 use domain::base::octets::ParseError;
 use domain::base::ToRelativeDname;
-use domain::resolv::lookup::srv::SrvError;
 use domain::{
     base::{Dname, Question, RelativeDname, Rtype},
     rdata::Txt,
@@ -52,6 +51,35 @@ impl DiscoverableService {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum SrvError {
+    #[error("domain name is too long")]
+    LongName,
+
+    #[error("the resolver returned a malformed answer")]
+    MalformedAnswer,
+
+    #[error("error executing DNS query")]
+    Query(io::Error),
+
+    /// The service is decidedly not available.
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc2782>, page 4
+    #[error("the service is decidedly not available")]
+    NotAvailable,
+}
+
+// See: https://github.com/NLnetLabs/domain/pull/183
+impl From<domain::resolv::lookup::srv::SrvError> for SrvError {
+    fn from(value: domain::resolv::lookup::srv::SrvError) -> Self {
+        match value {
+            domain::resolv::lookup::srv::SrvError::LongName => SrvError::LongName,
+            domain::resolv::lookup::srv::SrvError::MalformedAnswer => SrvError::MalformedAnswer,
+            domain::resolv::lookup::srv::SrvError::Query(e) => SrvError::Query(e),
+        }
+    }
+}
+
 /// Resolves SRV to locate the caldav server.
 ///
 /// Returns a `Vec` of host/ports, in the order in which they should be tried.
@@ -76,8 +104,14 @@ pub async fn resolve_srv_record<T: std::convert::AsRef<[u8]>>(
 
     let mut srvs: Vec<_> = match response {
         Some(s) => s.into_srvs().collect(),
-        None => return Ok(vec![]), // TODO: what to do if "decidedly not availabe?"
+        None => return Ok(vec![]),
     };
+
+    if let Some(srv) = srvs.first() {
+        if srv.target().as_ref() == b"." {
+            return Err(SrvError::NotAvailable);
+        }
+    }
 
     // A client MUST attempt to contact the target host with the lowest-numbered priority it can reach[...]
     // [...] Larger weights SHOULD be given a proportionately higher probability of being selected. [...]

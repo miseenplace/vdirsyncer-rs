@@ -10,7 +10,9 @@ use crate::auth::{Auth, AuthError};
 use async_trait::async_trait;
 use dav::DavClient;
 use dav::DavError;
-use dns::{find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, TxtError};
+use dns::{
+    find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, SrvError, TxtError,
+};
 use domain::base::Dname;
 use hyper::Uri;
 use xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty};
@@ -55,9 +57,8 @@ pub enum BootstrapError {
     #[error("the input URL is not valid")]
     InvalidUrl(&'static str),
 
-    // FIXME: See: https://github.com/NLnetLabs/domain/pull/183
     #[error("error resolving DNS SRV records")]
-    DnsError,
+    DnsError(SrvError),
 
     #[error("SRV records returned domain/port pair that failed to parse")]
     BadSrv(http::Error),
@@ -73,7 +74,7 @@ impl From<BootstrapError> for io::Error {
     fn from(value: BootstrapError) -> Self {
         match value {
             BootstrapError::InvalidUrl(msg) => io::Error::new(io::ErrorKind::InvalidInput, msg),
-            BootstrapError::DnsError | BootstrapError::TxtError(_) => {
+            BootstrapError::DnsError(_) | BootstrapError::TxtError(_) => {
                 io::Error::new(io::ErrorKind::Other, value)
             }
             BootstrapError::BadSrv(_) => io::Error::new(io::ErrorKind::InvalidData, value),
@@ -439,7 +440,7 @@ pub(crate) trait DavWithAutoDiscovery:
         let candidates = {
             let mut candidates = resolve_srv_record(service, &dname, port)
                 .await
-                .map_err(|_| BootstrapError::DnsError)?;
+                .map_err(BootstrapError::DnsError)?;
 
             // If there are no SRV records, try the domain/port in the provided URI.
             if candidates.is_empty() {
