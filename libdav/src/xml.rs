@@ -235,7 +235,7 @@ where
 #[derive(Debug, PartialEq, Eq)]
 pub struct StringProperty(Option<String>);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SimplePropertyMeta {
     pub name: Vec<u8>,
     pub namespace: Vec<u8>,

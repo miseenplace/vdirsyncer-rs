@@ -471,7 +471,7 @@ pub(crate) trait DavWithAutoDiscovery:
             }
         }
 
-        self.set_principal(self.resolve_current_user_principal().await?);
+        self.set_principal(self.find_current_user_principal().await?);
         Ok(self)
     }
 }

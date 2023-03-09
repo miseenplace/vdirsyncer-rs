@@ -82,9 +82,9 @@ pub struct DavClient {
     pub(crate) http_client: Client<HttpsConnector<HttpConnector>>,
     /// URL to a principal resource corresponding to the currently authenticated user.
     ///
-    /// In order to determine the principal, see [`query_current_user_principal`].
+    /// In order to determine the principal, see [`find_current_user_principal`].
     ///
-    /// [`query_current_user_principal`]: (DavClient::query_current_user_principal).
+    /// [`find_current_user_principal`]: (DavClient::find_current_user_principal).
     ///
     /// # See also
     ///
@@ -139,14 +139,24 @@ impl DavClient {
     /// - If the underlying HTTP request fails.
     /// - If the response status code is neither success nor 404.
     /// - If parsing the XML response fails.
+    /// - If the `href` cannot be parsed into a valid [`Uri`]
     ///
     /// # See also
     ///
     /// - <https://www.rfc-editor.org/rfc/rfc5397>
-    pub async fn resolve_current_user_principal(&self) -> Result<Option<Uri>, DavError> {
+    pub async fn find_current_user_principal(&self) -> Result<Option<Uri>, DavError> {
+        let property_data = SimplePropertyMeta {
+            name: b"current-user-principal".to_vec(),
+            namespace: xml::DAV.to_vec(),
+        };
+
         // Try querying the provided base url...
         let maybe_principal = self
-            .query_current_user_principal(self.base_url.clone())
+            .find_href_prop_as_uri(
+                self.base_url.clone(),
+                "<current-user-principal/>",
+                property_data.clone(),
+            )
             .await;
 
         match maybe_principal {
@@ -157,33 +167,11 @@ impl DavClient {
 
         // ... Otherwise, try querying the root path.
         let root = self.relative_uri("/")?;
-        self.query_current_user_principal(root).await // Hint: This can be Ok(None)
+        self.find_href_prop_as_uri(root, "<current-user-principal/>", property_data)
+            .await // Hint: This can be Ok(None)
 
         // NOTE: If no principal is resolved, it needs to be provided interactively
         //       by the user. We use `base_url` as a fallback.
-    }
-
-    /// Find a URL for the currently authenticated user's principal resource on the server.
-    ///
-    /// Returns `None` if the response is valid but does not contain any `href`.
-    ///
-    /// # Errors
-    ///
-    /// - If there are any network issues.
-    /// - If parsing the XML response fails.
-    /// - If the `href` cannot be parsed into a valid [`Uri`]
-    ///
-    /// # See also
-    ///
-    /// - <https://www.rfc-editor.org/rfc/rfc5397>
-    pub async fn query_current_user_principal(&self, url: Uri) -> Result<Option<Uri>, DavError> {
-        let property_data = SimplePropertyMeta {
-            name: b"current-user-principal".to_vec(),
-            namespace: xml::DAV.to_vec(),
-        };
-
-        self.find_href_prop_as_uri(url, "<current-user-principal/>", property_data)
-            .await
     }
 
     /// Internal helper to find an `href` property
