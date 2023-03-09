@@ -11,10 +11,15 @@ tasks:
   - build: |
       cd vdirsyncer-rs
       cargo build
+      cargo build --examples
   - lint: |
       cd vdirsyncer-rs
+      cargo fmt --check
       cargo clippy
   - test: |
       cd vdirsyncer-rs
       cargo test
       cargo test --doc
+  - doc: |
+      cd vdirsyncer-rs
+      cargo doc
