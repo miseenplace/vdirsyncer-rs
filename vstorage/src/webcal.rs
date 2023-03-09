@@ -159,8 +159,8 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(&raw).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
-        let refs = calendar
+        let refs = Component::parse(&raw)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .into_split_collection()
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .iter()
@@ -189,11 +189,10 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(&raw).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
-        let components = calendar
+        let item = Component::parse(&raw)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .into_split_collection()
-            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
-        let item = components
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .iter()
             .find_map(|c| {
                 let item = Item::from(c.to_string());
@@ -218,16 +217,14 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(&raw).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
-        let components = calendar
-            .into_split_collection()
-            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
-        components
+        Component::parse(&raw)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
+            .into_split_collection()
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .iter()
             .filter_map(|c| {
-                let raw = c.to_string();
-                let item = Item::from(raw);
+                let item = Item::from(c.to_string());
                 if hrefs.contains(&(item.ident().as_ref())) {
                     let hash = item.hash();
                     Some(Ok((item.ident(), item, hash)))
@@ -246,8 +243,8 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(&raw).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
-        let components = calendar
+        let components = Component::parse(&raw)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .into_split_collection()
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
