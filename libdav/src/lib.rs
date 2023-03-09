@@ -139,7 +139,7 @@ impl CalDavClient {
         self.find_href_prop_as_uri(
             url,
             "<calendar-home-set xmlns=\"urn:ietf:params:xml:ns:caldav\"/>",
-            property_data,
+            &property_data,
         )
         .await
     }
@@ -159,7 +159,7 @@ impl CalDavClient {
                 url.clone(),
                 "<resourcetype/><getetag/>",
                 1,
-                (),
+                &(),
             )
             .await
             .map_err(DavError::from)?
@@ -196,7 +196,7 @@ impl CalDavClient {
             url.clone(),
             "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>",
             0,
-            property_data,
+            &property_data,
         )
         .await?
         .pop()
@@ -330,7 +330,7 @@ impl CardDavClient {
         self.find_href_prop_as_uri(
             url,
             "<addressbook-home-set xmlns=\"urn:ietf:params:xml:ns:carddav\"/>",
-            property_data,
+            &property_data,
         )
         .await
     }
@@ -351,7 +351,7 @@ impl CardDavClient {
                 url.clone(),
                 "<resourcetype/><getetag/>",
                 1,
-                (),
+                &(),
             )
             .await
             .map_err(DavError::from)?

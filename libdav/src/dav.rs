@@ -155,7 +155,7 @@ impl DavClient {
             .find_href_prop_as_uri(
                 self.base_url.clone(),
                 "<current-user-principal/>",
-                property_data.clone(),
+                &property_data,
             )
             .await;
 
@@ -167,7 +167,7 @@ impl DavClient {
 
         // ... Otherwise, try querying the root path.
         let root = self.relative_uri("/")?;
-        self.find_href_prop_as_uri(root, "<current-user-principal/>", property_data)
+        self.find_href_prop_as_uri(root, "<current-user-principal/>", &property_data)
             .await // Hint: This can be Ok(None)
 
         // NOTE: If no principal is resolved, it needs to be provided interactively
@@ -181,7 +181,7 @@ impl DavClient {
         &self,
         url: Uri,
         prop: &str,
-        prop_type: SimplePropertyMeta,
+        prop_type: &SimplePropertyMeta,
     ) -> Result<Option<Uri>, DavError> {
         let maybe_href = match self
             .propfind::<ResponseWithProp<HrefProperty>>(url.clone(), prop, 0, prop_type)
@@ -221,7 +221,7 @@ impl DavClient {
         url: Uri,
         prop: &str,
         depth: u8,
-        data: T::Data,
+        data: &T::Data,
     ) -> Result<Vec<Result<T, xml::Error>>, DavError> {
         let request = self
             .request()?
@@ -245,7 +245,7 @@ impl DavClient {
         }
 
         let body = hyper::body::to_bytes(body).await?;
-        xml::parse_multistatus::<T>(&body, &data).map_err(DavError::from)
+        xml::parse_multistatus::<T>(&body, data).map_err(DavError::from)
     }
 
     /// Returns the `displayname` for the collection at path `href`.
@@ -269,7 +269,7 @@ impl DavClient {
             url.clone(),
             "<displayname/>",
             0,
-            property_data,
+            &property_data,
         )
         .await?
         .pop()
@@ -349,7 +349,7 @@ impl DavClient {
             url,
             "<resourcetype/><getcontenttype/><getetag/>",
             1,
-            (),
+            &(),
         )
         .await
     }
