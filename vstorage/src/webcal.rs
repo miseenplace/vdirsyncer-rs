@@ -159,10 +159,10 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(&raw);
+        let calendar = Component::parse(&raw).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
         let refs = calendar
+            .into_split_collection()
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
-            .subcomponents
             .iter()
             .map(|c| {
                 let item = Item::from(c.to_string());
@@ -189,10 +189,10 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(&raw);
+        let calendar = Component::parse(&raw).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
         let components = calendar
-            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
-            .subcomponents;
+            .into_split_collection()
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
         let item = components
             .iter()
             .find_map(|c| {
@@ -218,10 +218,10 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(&raw);
+        let calendar = Component::parse(&raw).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
         let components = calendar
-            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
-            .subcomponents;
+            .into_split_collection()
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
         components
             .iter()
@@ -246,10 +246,10 @@ impl Collection for WebCalCollection {
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
-        let calendar = Component::parse(&raw);
+        let calendar = Component::parse(&raw).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
         let components = calendar
-            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
-            .subcomponents;
+            .into_split_collection()
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
         components
             .iter()
