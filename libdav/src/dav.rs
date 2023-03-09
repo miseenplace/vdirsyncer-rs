@@ -228,7 +228,7 @@ impl DavClient {
             .method(Method::from_bytes(b"PROPFIND").expect("API for HTTP methods is stupid"))
             .uri(url)
             .header("Content-Type", "application/xml; charset=utf-8")
-            .header("Depth", format!("{depth}"))
+            .header("Depth", depth.to_string())
             .body(Body::from(format!(
                 r#"
                 <propfind xmlns="DAV:">
