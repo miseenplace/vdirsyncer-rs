@@ -227,9 +227,13 @@ impl Collection for FilesystemCollection {
     }
 
     async fn add(&mut self, item: &Item) -> Result<ItemRef> {
-        let href = item.ident();
-        // TODO: check that href is a valid href, else, use a uuid.
-        let href = format!("{}.{}", href, self.definition.extension);
+        // TODO: We only need to remove a few "illegal" characters, so this is a bit too strict.
+        let basename = item
+            .ident()
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect::<String>();
+        let href = format!("{}.{}", basename, self.definition.extension);
 
         let filename = self.path.join(&href);
         let mut file = OpenOptions::new()
