@@ -57,7 +57,7 @@ async fn main() {
         let color = caldav_client.get_calendar_colour(calendar).await.unwrap();
         println!("📅 name: {name:?}, colour: {color:?}, path: {calendar:?}");
         let items = caldav_client
-            .list_collection(calendar)
+            .list_resources(calendar)
             .await
             .unwrap()
             .into_iter()

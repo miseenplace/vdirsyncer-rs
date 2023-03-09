@@ -61,7 +61,7 @@ async fn main() {
             .unwrap();
         println!("📇 name: {name:?}, path: {addressbook:?}");
         let items = carddav_client
-            .list_collection(addressbook)
+            .list_resources(addressbook)
             .await
             .unwrap()
             .into_iter()

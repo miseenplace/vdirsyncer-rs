@@ -329,7 +329,7 @@ impl DavClient {
         Ok(Some(Uri::try_from(location.as_bytes())?))
     }
 
-    /// Enumerates entries in a collection
+    /// Enumerates resources in a collection
     ///
     /// Returns an array of results. Because the server can return a non-ok status for individual
     /// entries, some of them may be `Err`, while other are `Ok(ItemDetails)`.
@@ -339,7 +339,7 @@ impl DavClient {
     /// # Errors
     ///
     /// If there are network errors executing the request or parsing the XML response.
-    pub async fn list_collection(
+    pub async fn list_resources(
         &self,
         collection_href: &str,
     ) -> Result<Vec<Result<ResponseWithProp<ItemDetails>, crate::xml::Error>>, DavError> {
