@@ -293,7 +293,7 @@ impl DavClient {
     ///
     /// - <https://www.rfc-editor.org/rfc/rfc6764#section-5>
     /// - [`ResolveContextPathError`]
-    pub async fn resolve_context_path(
+    pub async fn find_context_path(
         &self,
         service: DiscoverableService,
         host: &str,

@@ -125,12 +125,12 @@ impl CalDavClient {
             .as_ref()
             .unwrap_or(&client.base_url)
             .clone();
-        client.calendar_home_set = client.query_calendar_home_set(principal_url).await?;
+        client.calendar_home_set = client.find_calendar_home_set(principal_url).await?;
 
         Ok(client)
     }
 
-    async fn query_calendar_home_set(&self, url: Uri) -> Result<Option<Uri>, DavError> {
+    async fn find_calendar_home_set(&self, url: Uri) -> Result<Option<Uri>, DavError> {
         let property_data = SimplePropertyMeta {
             name: b"calendar-home-set".to_vec(),
             namespace: xml::CALDAV.to_vec(),
@@ -316,12 +316,12 @@ impl CardDavClient {
             .as_ref()
             .unwrap_or(&client.base_url)
             .clone();
-        client.addressbook_home_set = client.query_addressbook_home_set(principal_url).await?;
+        client.addressbook_home_set = client.find_addressbook_home_set(principal_url).await?;
 
         Ok(client)
     }
 
-    async fn query_addressbook_home_set(&self, url: Uri) -> Result<Option<Uri>, DavError> {
+    async fn find_addressbook_home_set(&self, url: Uri) -> Result<Option<Uri>, DavError> {
         let property_data = SimplePropertyMeta {
             name: b"addressbook-home-set".to_vec(),
             namespace: xml::CARDDAV.to_vec(),
@@ -462,7 +462,7 @@ pub(crate) trait DavWithAutoDiscovery:
         } else {
             for candidate in candidates {
                 if let Ok(Some(url)) = self
-                    .resolve_context_path(service, &candidate.0, candidate.1)
+                    .find_context_path(service, &candidate.0, candidate.1)
                     .await
                 {
                     self.base_url = url;
