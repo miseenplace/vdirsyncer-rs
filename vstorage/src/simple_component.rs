@@ -152,7 +152,6 @@ impl ToString for Component<'_> {
         }
         for component in &self.subcomponents {
             raw.push_str(&component.to_string());
-            raw.push_str("\r\n");
         }
         raw.push_str("END:");
         raw.push_str(self.kind);
