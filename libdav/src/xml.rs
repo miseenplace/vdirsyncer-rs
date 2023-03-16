@@ -16,9 +16,13 @@ use std::io::BufRead;
 /// Namespace for properties defined in webdav specifications.
 ///
 /// See: <https://www.rfc-editor.org/rfc/rfc3744>
-pub(crate) const DAV: &[u8] = b"DAV:";
-pub(crate) const CALDAV: &[u8] = b"urn:ietf:params:xml:ns:caldav";
-pub(crate) const CARDDAV: &[u8] = b"urn:ietf:params:xml:ns:carddav";
+pub(crate) const DAV_STR: &str = "DAV:";
+pub(crate) const CALDAV_STR: &str = "urn:ietf:params:xml:ns:caldav";
+pub(crate) const CARDDAV_STR: &str = "urn:ietf:params:xml:ns:carddav";
+
+pub(crate) const DAV: &[u8] = DAV_STR.as_bytes();
+pub(crate) const CALDAV: &[u8] = CALDAV_STR.as_bytes();
+pub(crate) const CARDDAV: &[u8] = CARDDAV_STR.as_bytes();
 
 /// An error parsing XML data.
 #[derive(thiserror::Error, Debug)]

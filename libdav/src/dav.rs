@@ -9,7 +9,7 @@ use crate::{
     dns::DiscoverableService,
     xml::{
         self, FromXml, HrefProperty, ItemDetails, ResponseWithProp, SimplePropertyMeta,
-        StringProperty, DAV,
+        StringProperty, CALDAV_STR, CARDDAV_STR, DAV,
     },
     Auth, AuthError,
 };
@@ -377,4 +377,111 @@ impl DavClient {
         )
         .await
     }
+
+    /// Creates a collection under path `href`.
+    ///
+    /// # Caveats
+    ///
+    /// Because servers commonly don't return an Etag for this operation, it needs to be fetched in
+    /// a separate operation.
+    pub async fn create_collection<Href: AsRef<str>>(
+        &self,
+        href: Href,
+        resourcetype: CollectionType,
+    ) -> Result<(), CreateCollectionError> {
+        let body = format!(
+            r#"
+            <mkcol xmlns="DAV:">
+                <set>
+                    <prop>
+                        <resourcetype>
+                            <collection/>
+                            {resourcetype}
+                        </resourcetype>
+                    </prop>
+                </set>
+            </mkcol>"#
+        );
+
+        let request = self
+            .request_builder()?
+            .method(Method::from_bytes(b"MKCOL").expect("API for HTTP methods is dumb"))
+            .uri(self.relative_uri(href.as_ref())?)
+            .header("Content-Type", "application/xml; charset=utf-8")
+            .body(Body::from(body))?;
+
+        let response = self.http_client.request(request).await?;
+        let (head, _body) = response.into_parts();
+        // TODO: we should check the response body here, but some servers (e.g.: Fastmail) return an empty body.
+        if !head.status.is_success() {
+            return Err(CreateCollectionError(DavError::BadStatusCode(head.status)));
+        }
+
+        Ok(())
+    }
+
+    pub async fn delete_collection<Href, Etag>(
+        &self,
+        href: Href,
+        etag: Etag,
+    ) -> Result<(), DeleteCollectionError>
+    where
+        Href: AsRef<str>,
+        Etag: AsRef<[u8]>,
+    {
+        let request = self
+            .request_builder()?
+            .method(Method::from_bytes(b"DELETE").expect("API for HTTP methods is dumb"))
+            .uri(self.relative_uri(href.as_ref())?)
+            .header("Content-Type", "application/xml; charset=utf-8")
+            .header("If-Match", etag.as_ref())
+            .body(Body::empty())?;
+
+        let response = self.http_client.request(request).await?;
+        let (head, _body) = response.into_parts();
+        if !head.status.is_success() {
+            return Err(DeleteCollectionError(DavError::BadStatusCode(head.status)));
+        }
+
+        Ok(())
+    }
 }
+
+/// Known types of collections.
+pub enum CollectionType {
+    /// A generic webdav collection.
+    Collection,
+    /// A caldav calendar collection.
+    Calendar,
+    /// A carddav addressbook collection.
+    AddressBook,
+}
+
+impl std::fmt::Display for CollectionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CollectionType::Collection => write!(f, "<collection xmlns=\"DAV:\" />"),
+            CollectionType::Calendar => write!(f, "<calendar xmlns=\"{CALDAV_STR}\" />"),
+            CollectionType::AddressBook => write!(f, "<addressbook xmlns=\"{CARDDAV_STR}\" />"),
+        }
+    }
+}
+macro_rules! decl_error {
+    ($($ident:ident, $msg:expr)*) => ($(
+        #[derive(thiserror::Error, Debug)]
+        #[error("$msg: {0}")]
+        pub struct $ident (DavError);
+
+        impl<T> From<T> for $ident
+        where
+            DavError: std::convert::From<T>,
+        {
+            fn from(value: T) -> Self {
+                $ident(DavError::from(value))
+            }
+        }
+    )*)
+}
+
+decl_error!(CreateCollectionError, "error creating collection");
+decl_error!(DeleteCollectionError, "error deleting collection");
