@@ -100,7 +100,7 @@ impl DavClient {
     pub fn new(base_url: Uri, auth: Auth) -> DavClient {
         let https = HttpsConnectorBuilder::new()
             .with_native_roots()
-            .https_only()
+            .https_or_http()
             .enable_http1()
             .build();
         DavClient {
