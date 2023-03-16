@@ -1,9 +1,13 @@
 [package]
 name = "libdav"
 version = "0.1.0"
+authors = ["Hugo Osvaldo Barrera <hugo@whynothugo.nl>"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "CalDav and CardDav client implementations."
+homepage = "https://sr.ht/~whynothugo/vdirsyncer-rs/"
+repository = "https://git.sr.ht/~whynothugo/vdirsyncer-rs"
+license = "EUPL-1.2"
+keywords = ["caldav", "carddav", "webcal", "calendar", "contacts"]
 
 [dependencies]
 async-trait = "0.1.66"
