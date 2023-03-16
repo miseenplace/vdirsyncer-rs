@@ -248,7 +248,7 @@ impl DavWithAutoDiscovery for CalDavClient {
     }
 
     fn set_principal(&mut self, principal: Option<Uri>) {
-        self.principal = principal
+        self.principal = principal;
     }
 }
 
@@ -408,7 +408,7 @@ impl DavWithAutoDiscovery for CardDavClient {
     }
 
     fn set_principal(&mut self, principal: Option<Uri>) {
-        self.principal = principal
+        self.principal = principal;
     }
 }
 
