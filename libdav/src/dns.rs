@@ -38,10 +38,8 @@ impl DiscoverableService {
     #[must_use]
     pub fn scheme(self) -> Scheme {
         match self {
-            DiscoverableService::CalDavs => Scheme::HTTPS,
-            DiscoverableService::CalDav => Scheme::HTTP,
-            DiscoverableService::CardDavs => Scheme::HTTPS,
-            DiscoverableService::CardDav => Scheme::HTTP,
+            DiscoverableService::CalDavs | DiscoverableService::CardDavs => Scheme::HTTPS,
+            DiscoverableService::CalDav | DiscoverableService::CardDav => Scheme::HTTP,
         }
     }
 
