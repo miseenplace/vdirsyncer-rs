@@ -318,7 +318,7 @@ impl DavClient {
         host: &str,
         port: u16,
     ) -> Result<Option<Uri>, ResolveContextPathError> {
-        let url = Uri::builder()
+        let uri = Uri::builder()
             .scheme(service.scheme())
             .authority(format!("{host}:{port}"))
             .path_and_query(service.well_known_path())
@@ -327,7 +327,7 @@ impl DavClient {
         let request = self
             .request_builder()?
             .method(Method::GET)
-            .uri(url)
+            .uri(uri)
             .body(Body::default())?;
 
         // From https://www.rfc-editor.org/rfc/rfc6764#section-5:
