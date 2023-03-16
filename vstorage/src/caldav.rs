@@ -60,7 +60,7 @@ impl Storage for CalDavStorage {
             .find_calendars(client.context_path().clone())
             .await?
             .into_iter()
-            .map(|href| {
+            .map(|(href, _etag)| {
                 let collection: Box<dyn Collection> = Box::from(CalDavCollection {
                     href,
                     client: self.client.clone(),

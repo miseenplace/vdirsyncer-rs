@@ -54,12 +54,12 @@ async fn main() {
 
     println!("found {} addressbooks...", addressbooks.len());
 
-    for ref addressbook in addressbooks {
+    for (ref addressbook, ref etag) in addressbooks {
         let name = carddav_client
             .get_collection_displayname(addressbook)
             .await
             .unwrap();
-        println!("📇 name: {name:?}, path: {addressbook:?}");
+        println!("📇 name: {name:?}, path: {addressbook:?}, etag: {etag}");
         let items = carddav_client
             .list_resources(addressbook)
             .await

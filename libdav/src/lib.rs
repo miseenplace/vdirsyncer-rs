@@ -146,13 +146,13 @@ impl CalDavClient {
 
     /// Find calendars collections under the given `url`.
     ///
-    /// Returns absolute paths to each calendar. This method should be called
-    /// with the `calendar_home_set` URL to find the current user's calendars.
+    /// Returns absolute paths to each calendar and their respective etag. This method should be
+    /// called with the `calendar_home_set` URL to find the current user's calendars.
     ///
     /// # Errors
     ///
     /// If the HTTP call fails or parsing the XML response fails.
-    pub async fn find_calendars(&self, url: Uri) -> Result<Vec<String>, DavError> {
+    pub async fn find_calendars(&self, url: Uri) -> Result<Vec<(String, String)>, DavError> {
         Ok(self
             // XXX: depth 1 or infinity?
             .propfind::<ResponseWithProp<ItemDetails>>(
@@ -172,7 +172,7 @@ impl CalDavClient {
                 }
             })
             // FIXME: silently ignores collections with any issues:
-            .filter_map(|r| r.map(|c| c.href).ok())
+            .filter_map(|r| r.map(|c| (c.href, c.prop.etag)).ok())
             .collect())
     }
 
@@ -337,13 +337,13 @@ impl CardDavClient {
 
     /// Find address book collections under the given `url`.
     ///
-    /// Returns absolute paths to each addressbook. This method should be called
-    /// with the `addressbook_home_set` URL to find the current user's address books.
+    /// Returns absolute paths to each addressbook and their respective etag. This method should be
+    /// called with the `addressbook_home_set` URL to find the current user's address books.
     ///
     /// # Errors
     ///
     /// If the HTTP call fails or parsing the XML response fails.
-    pub async fn find_addresbooks(&self, url: Uri) -> Result<Vec<String>, DavError> {
+    pub async fn find_addresbooks(&self, url: Uri) -> Result<Vec<(String, String)>, DavError> {
         // FIXME: DRY: This is almost a copy-paste of the same method from CalDavClient
         Ok(self
             // XXX: depth 1 or infinity?
@@ -364,7 +364,7 @@ impl CardDavClient {
                 }
             })
             // FIXME: silently ignores collections with any issues:
-            .filter_map(|r| r.map(|c| c.href).ok())
+            .filter_map(|r| r.map(|c| (c.href, c.prop.etag)).ok())
             .collect())
     }
 

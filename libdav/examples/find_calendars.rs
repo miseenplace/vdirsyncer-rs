@@ -49,13 +49,13 @@ async fn main() {
 
     println!("found {} calendars...", calendars.len());
 
-    for ref calendar in calendars {
+    for (ref calendar, ref etag) in calendars {
         let name = caldav_client
             .get_collection_displayname(calendar)
             .await
             .unwrap();
         let color = caldav_client.get_calendar_colour(calendar).await.unwrap();
-        println!("📅 name: {name:?}, colour: {color:?}, path: {calendar:?}");
+        println!("📅 name: {name:?}, colour: {color:?}, path: {calendar:?}, etag: {etag}");
         let items = caldav_client
             .list_resources(calendar)
             .await
