@@ -24,6 +24,7 @@ pub enum DiscoverableService {
 
 impl DiscoverableService {
     /// Return a relative domain suitable for querying this service type.
+    #[must_use]
     pub fn relative_domain(self) -> &'static RelativeDname<[u8]> {
         match self {
             DiscoverableService::CalDavs => RelativeDname::from_slice(b"\x08_caldavs\x04_tcp"),
@@ -34,6 +35,7 @@ impl DiscoverableService {
         .expect("well known relative prefix is valid")
     }
 
+    #[must_use]
     pub fn scheme(self) -> Scheme {
         match self {
             DiscoverableService::CalDavs => Scheme::HTTPS,
@@ -43,6 +45,7 @@ impl DiscoverableService {
         }
     }
 
+    #[must_use]
     pub fn well_known_path(self) -> &'static str {
         match self {
             DiscoverableService::CalDavs | DiscoverableService::CalDav => "/.well-known/caldav",
