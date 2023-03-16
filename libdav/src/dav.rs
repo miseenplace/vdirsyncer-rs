@@ -217,10 +217,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// - If the network request fails.
-    /// - If the response is not successful (e.g.L in the 200-299 range).
-    /// - If parsing the XML fails.
-    /// - If the XML does not match the parametrized type.
+    /// See [`request`](Self::request).
     pub async fn propfind<T: FromXml>(
         &self,
         url: Uri,
