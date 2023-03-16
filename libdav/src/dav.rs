@@ -64,8 +64,11 @@ pub enum ResolveContextPathError {
     #[error("missing Location header in response")]
     MissingLocation,
 
+    // TODO: somehow merge these two into one.
     #[error("error building new Uri with Location from response")]
-    BadLocation(#[from] http::uri::InvalidUri),
+    BadRelativeLocation(#[from] std::str::Utf8Error),
+    #[error("error building new Uri with Location from response")]
+    BadAbsoluteLocation(#[from] http::uri::InvalidUri),
 
     #[error("internal error with specified authentication")]
     Auth(#[from] AuthError),
@@ -343,9 +346,14 @@ impl DavClient {
         let location = head
             .headers
             .get(hyper::header::LOCATION)
-            .ok_or(ResolveContextPathError::MissingLocation)?;
-        // TODO: properly handle RELATIVE urls.
-        Ok(Some(Uri::try_from(location.as_bytes())?))
+            .ok_or(ResolveContextPathError::MissingLocation)?
+            .as_bytes();
+        let uri = if location.starts_with(b"/") {
+            self.relative_uri(std::str::from_utf8(location)?)?
+        } else {
+            Uri::try_from(location)?
+        };
+        Ok(Some(uri))
     }
 
     /// Enumerates resources in a collection
