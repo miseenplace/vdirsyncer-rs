@@ -384,6 +384,10 @@ impl DavClient {
     ///
     /// Because servers commonly don't return an Etag for this operation, it needs to be fetched in
     /// a separate operation.
+    ///
+    /// # Errors
+    ///
+    /// If there is a network error or the server returns an error response.
     pub async fn create_collection<Href: AsRef<str>>(
         &self,
         href: Href,
@@ -420,6 +424,11 @@ impl DavClient {
         Ok(())
     }
 
+    /// Deletes a collection at `href`.
+    ///
+    /// # Errors
+    ///
+    /// If there is a network error or the server returns an error response.
     pub async fn delete_collection<Href, Etag>(
         &self,
         href: Href,
