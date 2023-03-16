@@ -1,7 +1,7 @@
 //! Generic webdav implementation.
 use std::io;
 
-use http::{Method, StatusCode, Uri};
+use http::{Method, Request, StatusCode, Uri};
 use hyper::{client::HttpConnector, Body, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
@@ -109,7 +109,7 @@ impl DavClient {
     }
 
     /// Returns a request builder with the proper `Authorization` header set.
-    pub(crate) fn request(&self) -> Result<http::request::Builder, AuthError> {
+    pub(crate) fn request_builder(&self) -> Result<http::request::Builder, AuthError> {
         // TODO: this isn't a great API. Maybe a `BuilderExt` trait would be a better pattern?
         self.auth.new_request()
     }
@@ -210,6 +210,8 @@ impl DavClient {
 
     /// Sends a `PROPFIND` request and parses the result.
     ///
+    /// This is a shortcut for simple `PROPFIND` requests.
+    ///
     /// # Errors
     ///
     /// - If the network request fails.
@@ -224,7 +226,7 @@ impl DavClient {
         data: &T::Data,
     ) -> Result<Vec<Result<T, xml::Error>>, DavError> {
         let request = self
-            .request()?
+            .request_builder()?
             .method(Method::from_bytes(b"PROPFIND").expect("API for HTTP methods is stupid"))
             .uri(url)
             .header("Content-Type", "application/xml; charset=utf-8")
@@ -238,6 +240,23 @@ impl DavClient {
                 </propfind>
                 "#
             )))?;
+
+        self.request(request, data).await
+    }
+
+    /// Send a request and parse the response as `T`.
+    ///
+    /// # Errors
+    ///
+    /// - If the network request fails.
+    /// - If the response is not successful (e.g.L in the 200-299 range).
+    /// - If parsing the XML fails.
+    /// - If the XML does not match the parametrized type.
+    pub async fn request<T: FromXml>(
+        &self,
+        request: Request<Body>,
+        data: &T::Data,
+    ) -> Result<Vec<Result<T, xml::Error>>, DavError> {
         let response = self.http_client.request(request).await?;
         let (head, body) = response.into_parts();
         if !head.status.is_success() {
@@ -306,7 +325,7 @@ impl DavClient {
             .build()?;
 
         let request = self
-            .request()?
+            .request_builder()?
             .method(Method::GET)
             .uri(url)
             .body(Body::default())?;
