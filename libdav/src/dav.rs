@@ -92,7 +92,7 @@ pub struct DavClient {
     /// # See also
     ///
     /// - <https://www.rfc-editor.org/rfc/rfc5397#section-3>
-    pub principal: Option<Uri>,
+    pub(crate) principal: Option<Uri>,
 }
 
 impl DavClient {
