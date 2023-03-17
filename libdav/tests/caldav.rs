@@ -2,7 +2,12 @@
 //! Run with: cargo test -- --ignored
 //! Requires a few env vars.
 
-use libdav::{auth::Auth, dav::CollectionType, CalDavClient};
+use http::StatusCode;
+use libdav::{
+    auth::Auth,
+    dav::{CollectionType, DavError},
+    CalDavClient,
+};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
 async fn create_test_client_from_env() -> CalDavClient {
@@ -82,4 +87,110 @@ async fn test_create_and_delete_collection() {
     let third_calendar_count = calendars.len();
 
     assert_eq!(orig_calendar_count, third_calendar_count);
+}
+
+const MINIMAL_ICALENDAR: &[u8] = br#"BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//hacksw/handcal//NONSGML v1.0//EN
+BEGIN:VEVENT
+UID:19970610T172345Z-AF23B2@example.com
+DTSTAMP:19970610T172345Z
+DTSTART:19970714T170000Z
+END:VEVENT
+END:VCALENDAR"#;
+
+#[tokio::test]
+#[ignore]
+async fn test_create_and_delete_resource() {
+    let caldav_client = create_test_client_from_env().await;
+    let home_set = caldav_client.calendar_home_set.as_ref().unwrap().clone();
+
+    let collection = format!("{}{}/", home_set.path(), &random_string(16));
+    caldav_client
+        .create_collection(&collection, CollectionType::Calendar)
+        .await
+        .unwrap();
+
+    let resource = format!("{}{}.ics", collection, &random_string(12));
+    caldav_client
+        .create_resource(&resource, MINIMAL_ICALENDAR.to_vec())
+        .await
+        .unwrap();
+
+    let items = caldav_client.list_resources(&collection).await.unwrap();
+    assert_eq!(items.len(), 2); // Item + collection
+
+    // ASSERTION: deleting with a wrong etag fails.
+    caldav_client
+        .delete(&resource, "wrong-lol")
+        .await
+        .unwrap_err();
+
+    // ASSERTION: creating conflicting resource fails.
+    caldav_client
+        .create_resource(&resource, MINIMAL_ICALENDAR.to_vec())
+        .await
+        .unwrap_err();
+
+    // ASSERTION: item with matching href exists.
+    let etag = items
+        .into_iter()
+        .find_map(|i| {
+            let i = i.unwrap();
+
+            if i.href == resource {
+                Some(i.prop.etag)
+            } else {
+                None
+            }
+        })
+        .unwrap();
+
+    let updated_entry = String::from_utf8(MINIMAL_ICALENDAR.to_vec())
+        .unwrap()
+        .replace("1997", "2023")
+        .as_bytes()
+        .to_vec();
+
+    // ASSERTION: updating with wrong etag fails
+    match caldav_client
+        .update_resource(&resource, updated_entry.clone(), &resource)
+        .await
+        .unwrap_err()
+        .0
+    {
+        DavError::BadStatusCode(StatusCode::PRECONDITION_FAILED) => {}
+        _ => panic!("updating entry with the wrong etag did not return the wrong error type"),
+    }
+
+    // ASSERTION: updating with correct etag work
+    caldav_client
+        .update_resource(&resource, updated_entry, &etag)
+        .await
+        .unwrap();
+
+    // ASSERTION: deleting with outdated etag fails
+    caldav_client.delete(&resource, &etag).await.unwrap_err();
+
+    let items = caldav_client.list_resources(&collection).await.unwrap();
+    assert_eq!(items.len(), 2); // Item + collection
+
+    let etag = items
+        .into_iter()
+        .find_map(|i| {
+            let i = i.unwrap();
+
+            if i.href == resource {
+                Some(i.prop.etag)
+            } else {
+                None
+            }
+        })
+        .unwrap();
+
+    // ASSERTION: deleting with correct etag works
+    caldav_client.delete(&resource, &etag).await.unwrap();
+
+    let items = caldav_client.list_resources(&collection).await.unwrap();
+    assert_eq!(items.len(), 1); // collection
 }

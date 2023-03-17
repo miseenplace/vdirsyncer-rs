@@ -383,6 +383,74 @@ impl DavClient {
         .await
     }
 
+    /// Inner helper with common logic between `create` and `update`.
+    async fn put<Href, Etag>(
+        &self,
+        href: Href,
+        data: Vec<u8>,
+        etag: Option<Etag>,
+    ) -> Result<Option<Vec<u8>>, DavError>
+    where
+        Href: AsRef<str>,
+        Etag: AsRef<[u8]>,
+    {
+        let mut builder = self
+            .request_builder()?
+            .method(Method::PUT)
+            .uri(self.relative_uri(href.as_ref())?)
+            .header("Content-Type", "application/xml; charset=utf-8");
+
+        builder = match etag {
+            Some(etag) => builder.header("If-Match", etag.as_ref()),
+            None => builder.header("If-None-Match", "*"),
+        };
+
+        let request = builder.body(Body::from(data))?;
+
+        let response = self.http_client.request(request).await?;
+        let (head, _body) = response.into_parts();
+        check_status(head.status)?;
+
+        // TODO: check multi-response
+
+        let new_etag = head.headers.get("etag").map(|e| e.as_bytes().to_vec());
+        Ok(new_etag)
+    }
+
+    /// Creates a new resource
+    ///
+    /// Returns an `Etag` if present in the server's response.
+    pub async fn create_resource<Href>(
+        &self,
+        href: Href,
+        data: Vec<u8>,
+    ) -> Result<Option<Vec<u8>>, CreateResourceError>
+    where
+        Href: AsRef<str>,
+    {
+        self.put(href, data, Option::<Vec<u8>>::None)
+            .await
+            .map_err(CreateResourceError)
+    }
+
+    /// Updates an existing resource
+    ///
+    /// Returns an `Etag` if present in the server's response.
+    pub async fn update_resource<Href, Etag>(
+        &self,
+        href: Href,
+        data: Vec<u8>,
+        etag: Etag,
+    ) -> Result<Option<Vec<u8>>, UpdateResourceError>
+    where
+        Href: AsRef<str>,
+        Etag: AsRef<[u8]>,
+    {
+        self.put(href, data, Some(etag))
+            .await
+            .map_err(UpdateResourceError)
+    }
+
     /// Creates a collection under path `href`.
     ///
     /// # Caveats
@@ -489,7 +557,7 @@ macro_rules! decl_error {
     ($($ident:ident, $msg:expr)*) => ($(
         #[derive(thiserror::Error, Debug)]
         #[error("$msg: {0}")]
-        pub struct $ident (DavError);
+        pub struct $ident (pub DavError);
 
         impl<T> From<T> for $ident
         where
@@ -502,5 +570,7 @@ macro_rules! decl_error {
     )*)
 }
 
+decl_error!(CreateResourceError, "error creating resources");
+decl_error!(UpdateResourceError, "error updating resources");
 decl_error!(CreateCollectionError, "error creating collection");
 decl_error!(DeleteError, "error deleting collection");
