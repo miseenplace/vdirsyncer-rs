@@ -97,12 +97,19 @@ pub struct DavClient {
 
 impl DavClient {
     /// Builds a new webdav client.
+    ///
+    /// Only `https` is enabled by default. Plain-text `http` is only enabled if the
+    /// input uri has a scheme of `http` or `caldav`.
     pub fn new(base_url: Uri, auth: Auth) -> DavClient {
-        let https = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_or_http()
-            .enable_http1()
-            .build();
+        let builder = HttpsConnectorBuilder::new().with_native_roots();
+        let builder = match base_url.scheme() {
+            Some(scheme) if scheme.as_str() == "http" => builder.https_or_http(),
+            Some(scheme) if scheme.as_str() == "caldav" => builder.https_or_http(),
+            Some(_) => builder.https_only(),
+            None => builder.https_only(),
+        };
+
+        let https = builder.enable_http1().build();
         DavClient {
             base_url,
             auth,
