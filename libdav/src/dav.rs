@@ -443,7 +443,7 @@ impl DavClient {
     {
         let request = self
             .request_builder()?
-            .method(Method::from_bytes(b"DELETE").expect("API for HTTP methods is dumb"))
+            .method(Method::DELETE)
             .uri(self.relative_uri(href.as_ref())?)
             .header("Content-Type", "application/xml; charset=utf-8")
             .header("If-Match", etag.as_ref())
