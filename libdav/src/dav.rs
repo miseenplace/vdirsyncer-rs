@@ -266,9 +266,7 @@ impl DavClient {
     ) -> Result<Vec<Result<T, xml::Error>>, DavError> {
         let response = self.http_client.request(request).await?;
         let (head, body) = response.into_parts();
-        if !head.status.is_success() {
-            return Err(DavError::BadStatusCode(head.status));
-        }
+        check_status(head.status)?;
 
         let body = hyper::body::to_bytes(body).await?;
         xml::parse_multistatus::<T>(&body, data).map_err(DavError::from)
@@ -424,9 +422,7 @@ impl DavClient {
         let response = self.http_client.request(request).await?;
         let (head, _body) = response.into_parts();
         // TODO: we should check the response body here, but some servers (e.g.: Fastmail) return an empty body.
-        if !head.status.is_success() {
-            return Err(CreateCollectionError(DavError::BadStatusCode(head.status)));
-        }
+        check_status(head.status)?;
 
         Ok(())
     }
@@ -455,9 +451,7 @@ impl DavClient {
 
         let response = self.http_client.request(request).await?;
         let (head, _body) = response.into_parts();
-        if !head.status.is_success() {
-            return Err(DeleteCollectionError(DavError::BadStatusCode(head.status)));
-        }
+        check_status(head.status)?;
 
         Ok(())
     }
@@ -482,6 +476,16 @@ impl std::fmt::Display for CollectionType {
         }
     }
 }
+
+#[inline]
+fn check_status(status: StatusCode) -> Result<(), DavError> {
+    if !status.is_success() {
+        Err(DavError::BadStatusCode(status))
+    } else {
+        Ok(())
+    }
+}
+
 macro_rules! decl_error {
     ($($ident:ident, $msg:expr)*) => ($(
         #[derive(thiserror::Error, Debug)]
