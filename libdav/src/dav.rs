@@ -6,6 +6,7 @@ use hyper::{client::HttpConnector, Body, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::{
+    auth::AuthExt,
     dns::DiscoverableService,
     xml::{
         self, FromXml, HrefProperty, ItemDetails, ResponseWithProp, SimplePropertyMeta,
@@ -131,8 +132,7 @@ impl DavClient {
 
     /// Returns a request builder with the proper `Authorization` header set.
     pub(crate) fn request_builder(&self) -> Result<http::request::Builder, AuthError> {
-        // TODO: this isn't a great API. Maybe a `BuilderExt` trait would be a better pattern?
-        self.auth.new_request()
+        Request::builder().authenticate(&self.auth)
     }
 
     /// Returns a URL pointing to the server's context path.

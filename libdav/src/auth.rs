@@ -1,7 +1,7 @@
 //! Authentication-related types.
 
 use base64::{prelude::BASE64_STANDARD, write::EncoderWriter};
-use http::{HeaderValue, Request};
+use http::{request::Builder, HeaderValue};
 use std::io::Write;
 
 /// Authentication schemes supported by [`DavClient`](crate::dav::DavClient).
@@ -29,12 +29,16 @@ impl AuthError {
     }
 }
 
-impl Auth {
+pub(crate) trait AuthExt: Sized {
+    /// Apply this authentication to an object.
+    fn authenticate(self, auth: &Auth) -> Result<Self, AuthError>;
+}
+
+impl AuthExt for Builder {
     /// Apply this authentication to a request builder.
-    pub(crate) fn new_request(&self) -> Result<http::request::Builder, AuthError> {
-        let request = Request::builder();
-        match self {
-            Auth::None => Ok(request),
+    fn authenticate(self, auth: &Auth) -> Result<Builder, AuthError> {
+        match auth {
+            Auth::None => Ok(self),
             Auth::Basic { username, password } => {
                 let mut sequence = b"Basic ".to_vec();
                 let mut encoder = EncoderWriter::new(&mut sequence, &BASE64_STANDARD);
@@ -47,7 +51,7 @@ impl Auth {
 
                 let mut header = HeaderValue::from_bytes(&sequence).map_err(AuthError::from)?;
                 header.set_sensitive(true);
-                Ok(request.header(hyper::header::AUTHORIZATION, header.clone()))
+                Ok(self.header(hyper::header::AUTHORIZATION, header.clone()))
             }
         }
     }
