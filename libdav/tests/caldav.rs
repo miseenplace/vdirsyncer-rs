@@ -118,7 +118,7 @@ async fn test_create_and_delete_resource() {
         .unwrap();
 
     let items = caldav_client.list_resources(&collection).await.unwrap();
-    assert_eq!(items.len(), 2); // Item + collection
+    assert_eq!(items.len(), 1);
 
     // ASSERTION: deleting with a wrong etag fails.
     caldav_client
@@ -173,7 +173,7 @@ async fn test_create_and_delete_resource() {
     caldav_client.delete(&resource, &etag).await.unwrap_err();
 
     let items = caldav_client.list_resources(&collection).await.unwrap();
-    assert_eq!(items.len(), 2); // Item + collection
+    assert_eq!(items.len(), 1);
 
     let etag = items
         .into_iter()
@@ -192,5 +192,5 @@ async fn test_create_and_delete_resource() {
     caldav_client.delete(&resource, &etag).await.unwrap();
 
     let items = caldav_client.list_resources(&collection).await.unwrap();
-    assert_eq!(items.len(), 1); // collection
+    assert_eq!(items.len(), 0);
 }

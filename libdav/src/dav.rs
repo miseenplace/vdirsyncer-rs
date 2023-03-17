@@ -360,10 +360,8 @@ impl DavClient {
 
     /// Enumerates resources in a collection
     ///
-    /// Returns an array of results. Because the server can return a non-ok status for individual
-    /// entries, some of them may be `Err`, while other are `Ok(ItemDetails)`.
-    ///
-    /// Note that the collection itself is also present as an item.
+    /// Returns an array of results. Because the server can return an error status for individual
+    /// resources, some of them may be `Err`, while other are `Ok(ItemDetails)`.
     ///
     /// # Errors
     ///
@@ -372,6 +370,7 @@ impl DavClient {
         &self,
         collection_href: &str,
     ) -> Result<Vec<Result<ResponseWithProp<ItemDetails>, crate::xml::Error>>, DavError> {
+        // TODO: replace the return type for this with something more API-friendly.
         let url = self.relative_uri(collection_href)?;
 
         self.propfind::<ResponseWithProp<ItemDetails>>(
@@ -381,6 +380,16 @@ impl DavClient {
             &(),
         )
         .await
+        .map(|mut vec| {
+            vec.retain(|result| {
+                if let Ok(prop) = result {
+                    prop.href != collection_href
+                } else {
+                    true
+                }
+            });
+            vec
+        })
     }
 
     /// Inner helper with common logic between `create` and `update`.
