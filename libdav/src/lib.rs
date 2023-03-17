@@ -67,6 +67,9 @@ pub enum BootstrapError {
     TxtError(#[from] TxtError),
 
     #[error(transparent)]
+    HomeSet(#[from] FindHomeSetError),
+
+    #[error(transparent)]
     DavError(#[from] DavError),
 }
 
@@ -74,12 +77,25 @@ impl From<BootstrapError> for io::Error {
     fn from(value: BootstrapError) -> Self {
         match value {
             BootstrapError::InvalidUrl(msg) => io::Error::new(io::ErrorKind::InvalidInput, msg),
-            BootstrapError::DnsError(_) | BootstrapError::TxtError(_) => {
-                io::Error::new(io::ErrorKind::Other, value)
-            }
+            BootstrapError::DnsError(_)
+            | BootstrapError::TxtError(_)
+            | BootstrapError::HomeSet(_) => io::Error::new(io::ErrorKind::Other, value),
             BootstrapError::BadSrv(_) => io::Error::new(io::ErrorKind::InvalidData, value),
             BootstrapError::DavError(dav) => io::Error::from(dav),
         }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+#[error("error finding home set collection")]
+pub struct FindHomeSetError(DavError);
+
+impl<T> From<T> for FindHomeSetError
+where
+    DavError: std::convert::From<T>,
+{
+    fn from(value: T) -> Self {
+        FindHomeSetError(DavError::from(value))
     }
 }
 
@@ -130,7 +146,7 @@ impl CalDavClient {
         Ok(client)
     }
 
-    async fn find_calendar_home_set(&self, url: Uri) -> Result<Option<Uri>, DavError> {
+    async fn find_calendar_home_set(&self, url: Uri) -> Result<Option<Uri>, FindHomeSetError> {
         let property_data = SimplePropertyMeta {
             name: b"calendar-home-set".to_vec(),
             namespace: xml::CALDAV.to_vec(),
@@ -142,6 +158,7 @@ impl CalDavClient {
             &property_data,
         )
         .await
+        .map_err(FindHomeSetError)
     }
 
     /// Find calendars collections under the given `url`.
@@ -321,7 +338,7 @@ impl CardDavClient {
         Ok(client)
     }
 
-    async fn find_addressbook_home_set(&self, url: Uri) -> Result<Option<Uri>, DavError> {
+    async fn find_addressbook_home_set(&self, url: Uri) -> Result<Option<Uri>, FindHomeSetError> {
         let property_data = SimplePropertyMeta {
             name: b"addressbook-home-set".to_vec(),
             namespace: xml::CARDDAV.to_vec(),
@@ -333,6 +350,7 @@ impl CardDavClient {
             &property_data,
         )
         .await
+        .map_err(FindHomeSetError)
     }
 
     /// Find address book collections under the given `url`.
