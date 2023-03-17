@@ -40,10 +40,8 @@ async fn test_create_and_delete() {
         .unwrap();
 
     let orig_calendar_count = calendars.len();
-    let mut new_collection = home_set.path().to_string();
-    new_collection.push_str(&random_string(16));
-    new_collection.push('/');
 
+    let new_collection = format!("{}{}/", home_set.path(), &random_string(16));
     caldav_client
         .create_collection(&new_collection, CollectionType::Calendar)
         .await
