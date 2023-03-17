@@ -31,7 +31,7 @@ fn random_string(len: usize) -> String {
 
 #[tokio::test]
 #[ignore]
-async fn test_create_and_delete() {
+async fn test_create_and_delete_collection() {
     let caldav_client = create_test_client_from_env().await;
     let home_set = caldav_client.calendar_home_set.as_ref().unwrap().clone();
     let calendars = caldav_client
@@ -68,15 +68,12 @@ async fn test_create_and_delete() {
 
     // Try deleting with the wrong etag.
     caldav_client
-        .delete_collection(&new_collection, "wrong-etag")
+        .delete(&new_collection, "wrong-etag")
         .await
         .unwrap_err();
 
     // Delete the calendar
-    caldav_client
-        .delete_collection(new_collection, etag)
-        .await
-        .unwrap();
+    caldav_client.delete(new_collection, etag).await.unwrap();
 
     let calendars = caldav_client
         .find_calendars(home_set.clone())

@@ -427,16 +427,15 @@ impl DavClient {
         Ok(())
     }
 
-    /// Deletes a collection at `href`.
+    /// Deletes a resource or collection at `href`.
+    ///
+    /// Because the implementation for deleting resources and collections is identical,
+    /// this same method covers both cases.
     ///
     /// # Errors
     ///
     /// If there is a network error or the server returns an error response.
-    pub async fn delete_collection<Href, Etag>(
-        &self,
-        href: Href,
-        etag: Etag,
-    ) -> Result<(), DeleteCollectionError>
+    pub async fn delete<Href, Etag>(&self, href: Href, etag: Etag) -> Result<(), DeleteError>
     where
         Href: AsRef<str>,
         Etag: AsRef<[u8]>,
@@ -504,4 +503,4 @@ macro_rules! decl_error {
 }
 
 decl_error!(CreateCollectionError, "error creating collection");
-decl_error!(DeleteCollectionError, "error deleting collection");
+decl_error!(DeleteError, "error deleting collection");
