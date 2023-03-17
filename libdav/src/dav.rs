@@ -74,6 +74,17 @@ pub enum ResolveContextPathError {
     Auth(#[from] AuthError),
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum FindCurrentUserPrincipalError {
+    #[error("error sending or parsing with request")]
+    RequestError(#[from] DavError),
+
+    // XXX: This should not really happen, but the API for `http` won't let us validate this
+    // earlier with a clear approach.
+    #[error("cannot use base_url to build request uri")]
+    InvalidInput(#[from] http::Error),
+}
+
 /// A generic webdav client.
 #[derive(Debug)]
 pub struct DavClient {
@@ -154,7 +165,9 @@ impl DavClient {
     /// # See also
     ///
     /// - <https://www.rfc-editor.org/rfc/rfc5397>
-    pub async fn find_current_user_principal(&self) -> Result<Option<Uri>, DavError> {
+    pub async fn find_current_user_principal(
+        &self,
+    ) -> Result<Option<Uri>, FindCurrentUserPrincipalError> {
         let property_data = SimplePropertyMeta {
             name: b"current-user-principal".to_vec(),
             namespace: xml::DAV.to_vec(),
@@ -171,14 +184,15 @@ impl DavClient {
 
         match maybe_principal {
             Err(DavError::BadStatusCode(StatusCode::NOT_FOUND)) | Ok(None) => {}
-            Err(err) => return Err(err),
+            Err(err) => return Err(FindCurrentUserPrincipalError::RequestError(err)),
             Ok(Some(p)) => return Ok(Some(p)),
         };
 
         // ... Otherwise, try querying the root path.
         let root = self.relative_uri("/")?;
         self.find_href_prop_as_uri(root, "<current-user-principal/>", &property_data)
-            .await // Hint: This can be Ok(None)
+            .await
+            .map_err(FindCurrentUserPrincipalError::RequestError)
 
         // NOTE: If no principal is resolved, it needs to be provided interactively
         //       by the user. We use `base_url` as a fallback.

@@ -8,8 +8,8 @@ use std::{
 
 use crate::auth::{Auth, AuthError};
 use async_trait::async_trait;
-use dav::DavClient;
 use dav::DavError;
+use dav::{DavClient, FindCurrentUserPrincipalError};
 use dns::{
     find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, SrvError, TxtError,
 };
@@ -70,6 +70,9 @@ pub enum BootstrapError {
     HomeSet(#[from] FindHomeSetError),
 
     #[error(transparent)]
+    CurrentPrincipal(#[from] FindCurrentUserPrincipalError),
+
+    #[error(transparent)]
     DavError(#[from] DavError),
 }
 
@@ -79,7 +82,8 @@ impl From<BootstrapError> for io::Error {
             BootstrapError::InvalidUrl(msg) => io::Error::new(io::ErrorKind::InvalidInput, msg),
             BootstrapError::DnsError(_)
             | BootstrapError::TxtError(_)
-            | BootstrapError::HomeSet(_) => io::Error::new(io::ErrorKind::Other, value),
+            | BootstrapError::HomeSet(_)
+            | BootstrapError::CurrentPrincipal(_) => io::Error::new(io::ErrorKind::Other, value),
             BootstrapError::BadSrv(_) => io::Error::new(io::ErrorKind::InvalidData, value),
             BootstrapError::DavError(dav) => io::Error::from(dav),
         }
