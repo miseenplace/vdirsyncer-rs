@@ -58,6 +58,7 @@ async fn test_create_and_delete() {
     assert_eq!(orig_calendar_count + 1, new_calendar_count);
 
     // Get the etag of the newly created calendar:
+    // ASSERTION: this validates that a collection with a matching href was created.
     let etag = caldav_client
         .find_calendars(home_set.clone())
         .await
