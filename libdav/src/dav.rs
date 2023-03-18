@@ -117,8 +117,7 @@ impl DavClient {
         let builder = match base_url.scheme() {
             Some(scheme) if scheme.as_str() == "http" => builder.https_or_http(),
             Some(scheme) if scheme.as_str() == "caldav" => builder.https_or_http(),
-            Some(_) => builder.https_only(),
-            None => builder.https_only(),
+            _ => builder.https_only(),
         };
 
         let https = builder.enable_http1().build();
