@@ -268,10 +268,10 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// - If the network request fails.
-    /// - If the response is not successful (e.g.L in the 200-299 range).
-    /// - If parsing the XML fails.
-    /// - If the XML does not match the parametrized type.
+    /// - If a network error occurs executing the underlying HTTP request.
+    /// - If the server returns an error status code.
+    /// - If the response is not a valid XML document.
+    /// - If the response's XML schema does not match the expected type.
     pub async fn request<T: FromXml>(
         &self,
         request: Request<Body>,
@@ -293,7 +293,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// If the HTTP call fails or parsing the XML response fails.
+    /// See [`request`](Self::request).
     pub async fn get_collection_displayname(&self, href: &str) -> Result<Option<String>, DavError> {
         let url = self.relative_uri(href)?;
 
@@ -378,7 +378,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// If there are network errors executing the request or parsing the XML response.
+    /// See [`request`](Self::request).
     pub async fn list_resources(
         &self,
         collection_href: &str,
@@ -442,6 +442,10 @@ impl DavClient {
     /// Creates a new resource
     ///
     /// Returns an `Etag` if present in the server's response.
+    ///
+    /// # Errors
+    ///
+    /// See [`request`](Self::request).
     pub async fn create_resource<Href>(
         &self,
         href: Href,
@@ -458,6 +462,10 @@ impl DavClient {
     /// Updates an existing resource
     ///
     /// Returns an `Etag` if present in the server's response.
+    ///
+    /// # Errors
+    ///
+    /// See [`request`](Self::request).
     pub async fn update_resource<Href, Etag>(
         &self,
         href: Href,
@@ -482,7 +490,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// If there is a network error or the server returns an error response.
+    /// See [`request`](Self::request).
     pub async fn create_collection<Href: AsRef<str>>(
         &self,
         href: Href,
@@ -524,7 +532,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// If there is a network error or the server returns an error response.
+    /// See [`request`](Self::request).
     pub async fn delete<Href, Etag>(&self, href: Href, etag: Etag) -> Result<(), DeleteError>
     where
         Href: AsRef<str>,
