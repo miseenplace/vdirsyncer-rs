@@ -49,7 +49,8 @@ impl AuthExt for Builder {
                 }
                 drop(encoder); // Releases the mutable borrow for `sequence`.
 
-                let mut header = HeaderValue::from_bytes(&sequence).map_err(AuthError::from)?;
+                let mut header = HeaderValue::from_bytes(&sequence)
+                    .expect("base64 string contains only ascii characters");
                 header.set_sensitive(true);
                 Ok(self.header(hyper::header::AUTHORIZATION, header.clone()))
             }
