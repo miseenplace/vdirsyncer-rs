@@ -21,7 +21,7 @@ pub enum Auth {
 /// is invalid). It IS NOT returned when authentication was rejected by the server.
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct AuthError(Box<dyn std::error::Error + Sync + Send>);
+pub struct AuthError(pub Box<dyn std::error::Error + Sync + Send>);
 
 impl AuthError {
     fn from<E: std::error::Error + Sync + Send + 'static>(err: E) -> Self {
