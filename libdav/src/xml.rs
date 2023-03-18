@@ -296,8 +296,8 @@ impl FromXml for StringProperty {
                 (State::Inner, (ResolveResult::Unbound, Event::Text(text))) => {
                     value = Some(text.unescape()?.to_string());
                 }
-                (State::Inner, (ResolveResult::Unbound, Event::CData(cdata))) => {
-                    let text = std::str::from_utf8(&cdata.into_inner())
+                (State::Inner, (ResolveResult::Unbound, Event::CData(c))) => {
+                    let text = std::str::from_utf8(&c.into_inner())
                         .map_err(|e| Error::Parser(quick_xml::Error::NonDecodable(Some(e))))?
                         .to_string();
                     // TODO: on error, read_to_end to leave parser in a consistent state.
@@ -403,8 +403,8 @@ impl FromXml for HrefProperty {
                 (State::Href, (ResolveResult::Unbound, Event::Text(text))) => {
                     value = Some(text.unescape()?.to_string());
                 }
-                (State::Href, (ResolveResult::Unbound, Event::CData(cdata))) => {
-                    let text = std::str::from_utf8(&cdata.into_inner())
+                (State::Href, (ResolveResult::Unbound, Event::CData(c))) => {
+                    let text = std::str::from_utf8(&c.into_inner())
                         .map_err(|e| Error::Parser(quick_xml::Error::NonDecodable(Some(e))))?
                         .to_string();
                     value = Some(text);
