@@ -46,9 +46,7 @@ impl Storage for FilesystemStorage {
         let mut entries = read_dir(&self.definition.path).await?;
 
         let mut collections = Vec::<Box<dyn Collection>>::new();
-        while let Ok(entry) = entries.next_entry().await {
-            let entry = entry.unwrap();
-
+        while let Some(entry) = entries.next_entry().await? {
             if !metadata(entry.path()).await?.is_dir() {
                 continue;
             }
@@ -188,8 +186,7 @@ impl Collection for FilesystemCollection {
         let mut read_dir = read_dir(&self.path).await?;
 
         let mut items = Vec::new();
-        while let Ok(entry) = read_dir.next_entry().await {
-            let entry = entry.unwrap();
+        while let Some(entry) = read_dir.next_entry().await? {
             let href: String = entry
                 .file_name()
                 .to_str()
