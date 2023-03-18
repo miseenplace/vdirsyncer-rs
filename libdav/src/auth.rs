@@ -41,13 +41,13 @@ impl AuthExt for Builder {
             Auth::None => Ok(self),
             Auth::Basic { username, password } => {
                 let mut sequence = b"Basic ".to_vec();
-                let mut encoder = EncoderWriter::new(&mut sequence, &BASE64_STANDARD);
+                let mut encoder = EncoderWriter::new(sequence, &BASE64_STANDARD);
                 if let Some(pwd) = password {
                     write!(encoder, "{username}:{pwd}").map_err(AuthError::from)?;
                 } else {
                     write!(encoder, "{username}:").map_err(AuthError::from)?;
                 }
-                drop(encoder); // Releases the mutable borrow for `sequence`.
+                sequence = encoder.finish().map_err(AuthError::from)?;
 
                 let mut header = HeaderValue::from_bytes(&sequence)
                     .expect("base64 string contains only ascii characters");
