@@ -91,10 +91,10 @@ pub enum FindCurrentUserPrincipalError {
 pub struct DavClient {
     /// Base URL to be used for all requests.
     pub(crate) base_url: Uri,
-    pub(crate) auth: Auth,
+    auth: Auth,
     // TODO: we can eventually use a generic connector to allow explicitly
     // using caldav or caldavs.
-    pub(crate) http_client: Client<HttpsConnector<HttpConnector>>,
+    http_client: Client<HttpsConnector<HttpConnector>>,
     /// URL to a principal resource corresponding to the currently authenticated user.
     ///
     /// In order to determine the principal, see [`find_current_user_principal`].
