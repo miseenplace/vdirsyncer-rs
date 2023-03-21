@@ -66,9 +66,8 @@ async fn main() {
             .unwrap()
             .into_iter()
             .filter(|i| !i.prop.is_collection);
-        println!("Href and Etag for components in addressbook:");
         for item in items {
-            println!("- {}, {}", item.href, item.prop.etag);
+            println!("   {}, {}", item.href, item.prop.etag);
         }
     }
 }
