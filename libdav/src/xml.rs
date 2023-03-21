@@ -348,12 +348,6 @@ impl ResponseWithProp<HrefProperty> {
     }
 }
 
-impl From<ResponseWithProp<HrefProperty>> for Option<String> {
-    fn from(value: ResponseWithProp<HrefProperty>) -> Option<String> {
-        value.prop.0
-    }
-}
-
 impl FromXml for HrefProperty {
     type Data = SimplePropertyMeta;
 
