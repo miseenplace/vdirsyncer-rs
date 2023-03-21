@@ -37,12 +37,13 @@ pub trait FromXml: Sized {
     /// Builds a new instance by parsing the XML reader.
     ///
     /// The opening tag for this type is expected to have been consumed prior
-    /// to calling this method.
+    /// to calling this method. The end tag will be consumed before returning,
+    /// unless an error is returned.
     ///
     /// # Errors
     ///
-    /// If the raw data is not valid XML or does not match the expected format.
-    // TODO: on failure, should the reader be moved to the end of the matching end node?
+    /// - If parsing the XML fails in any way.
+    /// - If any mandatory fields are missing.
     fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &Self::Data) -> Result<Self, Error>;
 }
 
@@ -60,17 +61,7 @@ pub struct ItemDetails {
 
 impl FromXml for ItemDetails {
     type Data = ();
-    /// Parse a list item using an XML reader.
-    ///
-    /// The reader is expected to have consumed the start tag for the `response`
-    /// element, and will return after having consumed the corresponding end tag.
-    ///
-    /// # Errors
-    ///
-    /// - If parsing the XML fails in any way.
-    /// - If any necessary fields are missing.
-    /// - If a `response` object has a status code different to 200.
-    /// - If any unexpected XML nodes are found.
+
     fn from_xml<R: BufRead>(reader: &mut NsReader<R>, _: &()) -> Result<ItemDetails, Error> {
         #[derive(Debug)]
         enum State {
@@ -153,17 +144,7 @@ pub struct CalendarReport {
 
 impl FromXml for CalendarReport {
     type Data = ();
-    /// Parse a list item using an XML reader.
-    ///
-    /// The reader is expected to have consumed the start tag for the `response`
-    /// element, and will return after having consumed the corresponding end tag.
-    ///
-    /// # Errors
-    ///
-    /// - If parsing the XML fails in any way.
-    /// - If any necessary fields are missing.
-    /// - If a `response` object has a status code different to 200.
-    /// - If any unexpected XML nodes are found.
+
     fn from_xml<R: BufRead>(reader: &mut NsReader<R>, _: &()) -> Result<CalendarReport, Error> {
         #[derive(Debug)]
         enum State {
