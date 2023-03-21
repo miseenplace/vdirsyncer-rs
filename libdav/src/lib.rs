@@ -28,7 +28,6 @@ pub mod xml;
 /// A client to communicate with a caldav server.
 ///
 /// Wraps around a [`DavClient`], which provides the underlying webdav functionality.
-// TODO FIXME: Need to figure out how to reuse as much as possible for carddav and caldav.
 #[derive(Debug)]
 pub struct CalDavClient {
     /// The `base_url` may be (due to bootstrapping discovery) different to the one provided as input.
