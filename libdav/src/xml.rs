@@ -143,15 +143,36 @@ impl FromXml for ItemDetails {
 
 /// Etag and contents of a single calendar resource.
 #[derive(Debug, PartialEq, Eq)]
-pub struct CalendarReport {
+pub struct Report {
     pub etag: String,
-    pub calendar_data: String,
+    pub data: String,
 }
 
-impl FromXml for CalendarReport {
-    type Data = ();
+/// Metadata describing which field contains the `data` for a `Report`.
+pub struct ReportField {
+    pub namespace: &'static [u8],
+    pub name: &'static [u8],
+}
 
-    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, _: &()) -> Result<CalendarReport, Error> {
+impl ReportField {
+    pub const CALENDAR_DATA: ReportField = ReportField {
+        namespace: CALDAV,
+        name: b"calendar-data",
+    };
+
+    pub const ADDRESS_DATA: ReportField = ReportField {
+        namespace: CARDDAV,
+        name: b"address-data",
+    };
+}
+
+impl FromXml for Report {
+    type Data = ReportField;
+
+    fn from_xml<R>(reader: &mut NsReader<R>, field: &ReportField) -> Result<Report, Error>
+    where
+        R: BufRead,
+    {
         #[derive(Debug)]
         enum State {
             Prop,
@@ -161,14 +182,16 @@ impl FromXml for CalendarReport {
 
         let mut buf = Vec::new();
         let mut state = State::Prop;
-        let mut etag = Option::<String>::None;
-        let mut calendar_data = None;
+        let mut etag = None;
+        let mut data = None;
 
         loop {
             match (&state, reader.read_resolved_event_into(&mut buf)?) {
                 (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Prop, CALDAV, b"calendar-data") => state = State::CalendarData,
+                        (State::Prop, ns, name) if ns == field.namespace && name == field.name => {
+                            state = State::CalendarData
+                        }
                         (State::Prop, DAV, b"getetag") => state = State::GetEtag,
                         (_, _, _) => {
                             // TODO: log unknown/unhandled node
@@ -178,8 +201,12 @@ impl FromXml for CalendarReport {
                 (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
                         (State::Prop, DAV, b"prop") => break,
-                        (State::CalendarData, CALDAV, b"calendar-data")
-                        | (State::GetEtag, DAV, b"getetag") => state = State::Prop,
+                        (State::CalendarData, ns, name)
+                            if ns == field.namespace && name == field.name =>
+                        {
+                            state = State::Prop
+                        }
+                        (State::GetEtag, DAV, b"getetag") => state = State::Prop,
                         (_, _, _) => {
                             // TODO: log unknown/unhandled node
                         }
@@ -187,7 +214,7 @@ impl FromXml for CalendarReport {
                 }
                 (State::CalendarData, (ResolveResult::Unbound, Event::Text(text))) => {
                     // TODO: can I avoid copying here?
-                    calendar_data = Some(text.unescape()?.to_string());
+                    data = Some(text.unescape()?.to_string());
                 }
                 (State::GetEtag, (ResolveResult::Unbound, Event::Text(text))) => {
                     etag = Some(text.unescape()?.to_string());
@@ -198,9 +225,9 @@ impl FromXml for CalendarReport {
             };
         }
 
-        Ok(CalendarReport {
+        Ok(Report {
             etag: etag.ok_or(Error::MissingData("etag"))?,
-            calendar_data: calendar_data.ok_or(Error::MissingData("calendar-data"))?,
+            data: data.ok_or(Error::MissingData("data"))?,
         })
     }
 }

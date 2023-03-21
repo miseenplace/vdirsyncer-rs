@@ -11,7 +11,7 @@ use std::{
 
 use crate::{
     auth::{Auth, AuthError},
-    xml::CalendarReport,
+    xml::Report,
 };
 use async_trait::async_trait;
 use dav::{DavClient, FindCurrentUserPrincipalError};
@@ -22,7 +22,7 @@ use dns::{
 use domain::base::Dname;
 use http::Method;
 use hyper::{Body, Uri};
-use xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty};
+use xml::{ItemDetails, ReportField, ResponseWithProp, SimplePropertyMeta, StringProperty};
 
 pub mod auth;
 pub mod dav;
@@ -231,8 +231,6 @@ impl CalDavClient {
 
     /// Fetches existing icalendar resources.
     ///
-    /// Returns a tuple of `(href, data, etag)`.
-    ///
     /// # Errors
     ///
     /// See [`request_multistatus`](DavClient::request_multistatus).
@@ -240,7 +238,7 @@ impl CalDavClient {
         &self,
         calendar_href: Href,
         hrefs: Vec<Href>,
-    ) -> Result<Vec<FetchedItem>, GetResourceError>
+    ) -> Result<Vec<FetchedResource>, GetResourceError>
     where
         Href: AsRef<str>,
     {
@@ -265,15 +263,15 @@ impl CalDavClient {
             .body(Body::from(body))?;
 
         let multistatus = self
-            .request_multistatus::<ResponseWithProp<CalendarReport>>(request, &())
+            .request_multistatus::<ResponseWithProp<Report>>(request, &ReportField::CALENDAR_DATA)
             .await?;
 
         let results = multistatus
             .into_responses()
             .into_iter()
-            .map(|r| FetchedItem {
+            .map(|r| FetchedResource {
                 href: r.href,
-                data: r.prop.calendar_data,
+                data: r.prop.data,
                 etag: r.prop.etag,
             })
             .collect();
@@ -539,7 +537,8 @@ pub(crate) trait DavWithAutoDiscovery:
     }
 }
 
-pub struct FetchedItem {
+/// A parsed resource fetched from a server.
+pub struct FetchedResource {
     pub href: String,
     pub data: String,
     pub etag: String,
