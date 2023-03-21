@@ -226,7 +226,6 @@ impl CalDavClient {
     //       Maybe all these props impl a single trait, so the API could be `get_prop<T>(url)`?
 }
 
-#[async_trait]
 impl DavWithAutoDiscovery for CalDavClient {
     #[inline]
 
@@ -382,7 +381,6 @@ impl CardDavClient {
     //       Maybe all these props impl a single trait, so the API could be `get_prop<T>(url)`?
 }
 
-#[async_trait]
 impl DavWithAutoDiscovery for CardDavClient {
     /// Returns the default port to try and use.
     ///
