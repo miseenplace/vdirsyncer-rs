@@ -11,7 +11,6 @@ use async_trait::async_trait;
 use http::Uri;
 use libdav::auth::Auth;
 use libdav::CalDavClient;
-use tokio::sync::RwLock;
 
 use crate::base::{Collection, Definition, MetadataKind, Storage};
 
@@ -24,7 +23,7 @@ pub struct CalDavDefinition {
 impl Definition for CalDavDefinition {
     async fn storage(self) -> Result<Box<dyn Storage>> {
         let unwrapped_client = CalDavClient::auto_bootstrap(self.url, self.auth).await?;
-        let client = Arc::from(RwLock::from(unwrapped_client));
+        let client = Arc::from(unwrapped_client);
 
         Ok(Box::from(CalDavStorage { client }))
     }
@@ -34,7 +33,7 @@ impl Definition for CalDavDefinition {
 ///
 /// A single storage represents a single server with a specific set of credentials.
 pub struct CalDavStorage {
-    client: Arc<RwLock<CalDavClient>>,
+    client: Arc<CalDavClient>,
 }
 
 // TODO: https://www.rfc-editor.org/rfc/rfc6764 states that we should cache principals and other
@@ -55,9 +54,9 @@ impl Storage for CalDavStorage {
     /// Collections outside the principal's home can still be found by providing an absolute path
     /// to [`CalDavStorage::open_collection`].
     async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
-        let client = self.client.read().await;
-        let x = client
-            .find_calendars(client.context_path().clone())
+        let x = self
+            .client
+            .find_calendars(self.client.context_path().clone())
             .await?
             .into_iter()
             .map(|(href, _etag)| {
@@ -92,7 +91,7 @@ impl Storage for CalDavStorage {
 ///
 /// The "collection" concept from `vstorage` maps 1:1 with the "collection" concept in caldav.
 pub struct CalDavCollection {
-    client: Arc<RwLock<CalDavClient>>,
+    client: Arc<CalDavClient>,
     href: String,
 }
 
@@ -153,11 +152,9 @@ impl Collection for CalDavCollection {
     ///
     /// If the underlying HTTP connection fails or if the server returns invalid data.
     async fn get_meta(&self, meta: MetadataKind) -> Result<Option<String>> {
-        let client = &self.client.read().await;
-
         let result = match meta {
-            MetadataKind::DisplayName => client.get_collection_displayname(&self.href).await,
-            MetadataKind::Colour => client.get_calendar_colour(&self.href).await,
+            MetadataKind::DisplayName => self.client.get_collection_displayname(&self.href).await,
+            MetadataKind::Colour => self.client.get_calendar_colour(&self.href).await,
         };
 
         result.map_err(Error::from)
