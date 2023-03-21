@@ -28,9 +28,6 @@ pub enum Error {
 
     #[error(transparent)]
     Parser(#[from] quick_xml::Error),
-
-    #[error("status code is not 200")]
-    BadStatus(String),
 }
 
 /// A type that can be built by parsing XML.
