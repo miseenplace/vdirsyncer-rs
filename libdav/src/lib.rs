@@ -216,9 +216,8 @@ impl CalDavClient {
         )
         .await?
         .pop()
-        .ok_or(xml::Error::MissingData("calendar-color"))
+        .ok_or(DavError::from(xml::Error::MissingData("calendar-color")))
         .map(Option::<String>::from)
-        .map_err(DavError::from)
     }
 
     // TODO: get_calendar_description ("calendar-description", "urn:ietf:params:xml:ns:caldav")
