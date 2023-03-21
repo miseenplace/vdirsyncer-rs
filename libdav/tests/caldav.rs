@@ -9,6 +9,7 @@ use libdav::{
     CalDavClient,
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use std::fmt::Write;
 
 async fn create_test_client_from_env() -> CalDavClient {
     let server = std::env::var("CALDAV_SERVER").unwrap();
@@ -91,14 +92,16 @@ async fn test_create_and_delete_collection() {
 
 fn minimal_icalendar() -> Vec<u8> {
     let mut entry = String::new();
+    let uid = random_string(12);
 
     entry.push_str("BEGIN:VCALENDAR\r\n");
     entry.push_str("VERSION:2.0\r\n");
     entry.push_str("PRODID:-//hacksw/handcal//NONSGML v1.0//EN\r\n");
     entry.push_str("BEGIN:VEVENT\r\n");
-    entry.push_str("UID:19970610T172345Z-AF23B2@example.com\r\n");
+    write!(entry, "UID:{uid}\r\n").unwrap();
     entry.push_str("DTSTAMP:19970610T172345Z\r\n");
     entry.push_str("DTSTART:19970714T170000Z\r\n");
+    entry.push_str("SUMMARY:hello, testing\r\n");
     entry.push_str("END:VEVENT\r\n");
     entry.push_str("END:VCALENDAR\r\n");
 
@@ -118,13 +121,21 @@ async fn test_create_and_delete_resource() {
         .unwrap();
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
+    let content = minimal_icalendar();
+
     caldav_client
-        .create_resource(&resource, minimal_icalendar(), mime_types::CALENDAR)
+        .create_resource(&resource, content.clone(), mime_types::CALENDAR)
         .await
         .unwrap();
 
     let items = caldav_client.list_resources(&collection).await.unwrap();
     assert_eq!(items.len(), 1);
+
+    let updated_entry = String::from_utf8(content)
+        .unwrap()
+        .replace("hello", "goodbye")
+        .as_bytes()
+        .to_vec();
 
     // ASSERTION: deleting with a wrong etag fails.
     caldav_client
@@ -134,7 +145,7 @@ async fn test_create_and_delete_resource() {
 
     // ASSERTION: creating conflicting resource fails.
     caldav_client
-        .create_resource(&resource, minimal_icalendar(), mime_types::CALENDAR)
+        .create_resource(&resource, updated_entry.clone(), mime_types::CALENDAR)
         .await
         .unwrap_err();
 
@@ -149,12 +160,6 @@ async fn test_create_and_delete_resource() {
             }
         })
         .unwrap();
-
-    let updated_entry = String::from_utf8(minimal_icalendar())
-        .unwrap()
-        .replace("1997", "2023")
-        .as_bytes()
-        .to_vec();
 
     // ASSERTION: updating with wrong etag fails
     match caldav_client
