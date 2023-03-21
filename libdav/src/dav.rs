@@ -210,7 +210,6 @@ impl DavClient {
             .propfind::<ResponseWithProp<HrefProperty>>(url.clone(), prop, 0, prop_type)
             .await?
             .pop()
-            .transpose()?
         {
             Some(prop) => prop.into_maybe_string(),
             None => return Ok(None),
@@ -244,7 +243,7 @@ impl DavClient {
         prop: &str,
         depth: u8,
         data: &T::Data,
-    ) -> Result<Vec<Result<T, xml::Error>>, DavError> {
+    ) -> Result<Vec<T>, DavError> {
         let request = self
             .request_builder()?
             .method(Method::from_bytes(b"PROPFIND").expect("API for HTTP methods is stupid"))
@@ -276,7 +275,7 @@ impl DavClient {
         &self,
         request: Request<Body>,
         data: &T::Data,
-    ) -> Result<Vec<Result<T, xml::Error>>, DavError> {
+    ) -> Result<Vec<T>, DavError> {
         let response = self.http_client.request(request).await?;
         let (head, body) = response.into_parts();
         check_status(head.status)?;
@@ -310,7 +309,7 @@ impl DavClient {
         )
         .await?
         .pop()
-        .ok_or(xml::Error::MissingData("displayname"))?
+        .ok_or(xml::Error::MissingData("displayname"))
         .map(Option::<String>::from)
         .map_err(DavError::from)
     }
@@ -382,7 +381,7 @@ impl DavClient {
     pub async fn list_resources(
         &self,
         collection_href: &str,
-    ) -> Result<Vec<Result<ResponseWithProp<ItemDetails>, crate::xml::Error>>, DavError> {
+    ) -> Result<Vec<ResponseWithProp<ItemDetails>>, DavError> {
         // TODO: replace the return type for this with something more API-friendly.
         let url = self.relative_uri(collection_href)?;
 
@@ -394,13 +393,7 @@ impl DavClient {
         )
         .await
         .map(|mut vec| {
-            vec.retain(|result| {
-                if let Ok(prop) = result {
-                    prop.href != collection_href
-                } else {
-                    true
-                }
-            });
+            vec.retain(|r| r.href != collection_href);
             vec
         })
     }

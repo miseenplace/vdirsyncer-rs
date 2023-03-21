@@ -136,8 +136,6 @@ async fn test_create_and_delete_resource() {
     let etag = items
         .into_iter()
         .find_map(|i| {
-            let i = i.unwrap();
-
             if i.href == resource {
                 Some(i.prop.etag)
             } else {
@@ -178,8 +176,6 @@ async fn test_create_and_delete_resource() {
     let etag = items
         .into_iter()
         .find_map(|i| {
-            let i = i.unwrap();
-
             if i.href == resource {
                 Some(i.prop.etag)
             } else {

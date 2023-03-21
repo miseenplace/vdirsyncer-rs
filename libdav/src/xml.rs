@@ -6,11 +6,7 @@
 //! These types are used internally by this crate and are generally reserved
 //! for advanced usage.
 
-use quick_xml::{
-    events::Event,
-    name::{QName, ResolveResult},
-    NsReader,
-};
+use quick_xml::{events::Event, name::ResolveResult, NsReader};
 use std::io::BufRead;
 
 /// Namespace for properties defined in webdav specifications.
@@ -49,7 +45,7 @@ pub trait FromXml: Sized {
     /// # Errors
     ///
     /// If the raw data is not valid XML or does not match the expected format.
-    // TODO: on failure, the reader should be moved to the end of the matching end node.
+    // TODO: on failure, should the reader be moved to the end of the matching end node?
     fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &Self::Data) -> Result<Self, Error>;
 }
 
@@ -431,10 +427,7 @@ impl FromXml for HrefProperty {
 /// - If parsing the XML fails in any way.
 /// - If any necessary fields are missing.
 /// - If any unexpected XML nodes are found.
-pub(crate) fn parse_multistatus<F: FromXml>(
-    raw: &[u8],
-    data: &F::Data,
-) -> Result<Vec<Result<F, Error>>, Error> {
+pub(crate) fn parse_multistatus<F: FromXml>(raw: &[u8], data: &F::Data) -> Result<Vec<F>, Error> {
     #[derive(Debug)]
     enum State {
         Root,
@@ -466,15 +459,7 @@ pub(crate) fn parse_multistatus<F: FromXml>(
             (State::Multistatus, (ResolveResult::Bound(namespace), Event::Start(element)))
                 if namespace.as_ref() == DAV && element.local_name().as_ref() == b"response" =>
             {
-                let item = F::from_xml(reader, data);
-                // FIXME: HACK: missing data doesn't leave the reader inconsistent.
-                if let Err(ref err) = item {
-                    if let Error::MissingData(_) = err {
-                    } else {
-                        reader.read_to_end(QName("response".as_bytes()))?;
-                    }
-                }
-                items.push(item);
+                items.push(F::from_xml(reader, data)?);
             }
             (State::Multistatus, (ResolveResult::Bound(namespace), Event::End(element)))
                 if namespace.as_ref() == DAV && element.local_name().as_ref() == b"multistatus" =>
@@ -527,7 +512,7 @@ mod more_tests {
 
         let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &()).unwrap();
         assert_eq!(parsed.len(), 2);
-        assert_eq!(parsed[0].as_ref().unwrap(), &ResponseWithProp {
+        assert_eq!(parsed[0], ResponseWithProp {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/".to_string(),
             prop: ItemDetails {
                 content_type: Some("text/calendar; charset=utf-8".to_string()),
@@ -538,7 +523,7 @@ mod more_tests {
             },
             status: "HTTP/1.1 200 OK".to_string()
         });
-        assert_eq!(parsed[1].as_ref().unwrap(), &ResponseWithProp {
+        assert_eq!(parsed[1], ResponseWithProp {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/395b00a0-eebc-40fd-a98e-176a06367c82.ics".to_string(),
             prop: ItemDetails {
                 content_type: Some("text/calendar; charset=utf-8; component=VEVENT".to_string()),
@@ -580,8 +565,8 @@ mod more_tests {
             parse_multistatus::<ResponseWithProp<StringProperty>>(raw, &property_data).unwrap();
         assert_eq!(parsed.len(), 1);
         assert_eq!(
-            parsed[0].as_ref().unwrap(),
-            &ResponseWithProp {
+            parsed[0],
+            ResponseWithProp {
                 href: "/path".to_string(),
                 prop: StringProperty(Some("test calendar".to_string())),
                 status: "HTTP/1.1 200 OK".to_string()

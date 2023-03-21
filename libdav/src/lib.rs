@@ -188,15 +188,8 @@ impl CalDavClient {
             .await
             .map_err(DavError::from)?
             .into_iter()
-            .filter(|c| {
-                if let Ok(cal) = c {
-                    cal.prop.is_calendar
-                } else {
-                    true
-                }
-            })
-            // FIXME: silently ignores collections with any issues:
-            .filter_map(|r| r.map(|c| (c.href, c.prop.etag)).ok())
+            .filter(|c| c.prop.is_calendar)
+            .map(|r| (r.href, r.prop.etag))
             .collect())
     }
 
@@ -224,7 +217,7 @@ impl CalDavClient {
         )
         .await?
         .pop()
-        .ok_or(xml::Error::MissingData("calendar-color"))?
+        .ok_or(xml::Error::MissingData("calendar-color"))
         .map(Option::<String>::from)
         .map_err(DavError::from)
     }
@@ -381,15 +374,8 @@ impl CardDavClient {
             .await
             .map_err(DavError::from)?
             .into_iter()
-            .filter(|c| {
-                if let Ok(cal) = c {
-                    cal.prop.is_address_book
-                } else {
-                    true
-                }
-            })
-            // FIXME: silently ignores collections with any issues:
-            .filter_map(|r| r.map(|c| (c.href, c.prop.etag)).ok())
+            .filter(|c| c.prop.is_address_book)
+            .map(|r| (r.href, r.prop.etag))
             .collect())
     }
 

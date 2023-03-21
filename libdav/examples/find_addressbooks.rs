@@ -65,7 +65,6 @@ async fn main() {
             .await
             .unwrap()
             .into_iter()
-            .map(Result::unwrap)
             .filter(|i| !i.prop.is_collection);
         println!("Href and Etag for components in addressbook:");
         for item in items {
