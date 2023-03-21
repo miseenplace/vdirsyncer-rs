@@ -216,6 +216,13 @@ impl FromXml for Report {
                     // TODO: can I avoid copying here?
                     data = Some(text.unescape()?.to_string());
                 }
+                (State::CalendarData, (ResolveResult::Unbound, Event::CData(c))) => {
+                    // TODO: assuming UTF-8
+                    let text = std::str::from_utf8(&c.into_inner())
+                        .map_err(|e| Error::Parser(quick_xml::Error::NonDecodable(Some(e))))?
+                        .to_string();
+                    data = Some(text);
+                }
                 (State::GetEtag, (ResolveResult::Unbound, Event::Text(text))) => {
                     etag = Some(text.unescape()?.to_string());
                 }
