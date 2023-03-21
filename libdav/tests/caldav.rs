@@ -5,7 +5,7 @@
 use http::StatusCode;
 use libdav::{
     auth::Auth,
-    dav::{CollectionType, DavError},
+    dav::{mime_types, CollectionType, DavError},
     CalDavClient,
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
@@ -119,7 +119,7 @@ async fn test_create_and_delete_resource() {
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
     caldav_client
-        .create_resource(&resource, minimal_icalendar())
+        .create_resource(&resource, minimal_icalendar(), mime_types::CALENDAR)
         .await
         .unwrap();
 
@@ -134,7 +134,7 @@ async fn test_create_and_delete_resource() {
 
     // ASSERTION: creating conflicting resource fails.
     caldav_client
-        .create_resource(&resource, minimal_icalendar())
+        .create_resource(&resource, minimal_icalendar(), mime_types::CALENDAR)
         .await
         .unwrap_err();
 
@@ -158,7 +158,12 @@ async fn test_create_and_delete_resource() {
 
     // ASSERTION: updating with wrong etag fails
     match caldav_client
-        .update_resource(&resource, updated_entry.clone(), &resource)
+        .update_resource(
+            &resource,
+            updated_entry.clone(),
+            &resource,
+            mime_types::CALENDAR,
+        )
         .await
         .unwrap_err()
         .0
@@ -169,7 +174,7 @@ async fn test_create_and_delete_resource() {
 
     // ASSERTION: updating with correct etag work
     caldav_client
-        .update_resource(&resource, updated_entry, &etag)
+        .update_resource(&resource, updated_entry, &etag, mime_types::CALENDAR)
         .await
         .unwrap();
 
@@ -211,7 +216,7 @@ async fn test_create_and_fetch_resource() {
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
     caldav_client
-        .create_resource(&resource, minimal_icalendar())
+        .create_resource(&resource, minimal_icalendar(), mime_types::CALENDAR)
         .await
         .unwrap();
 

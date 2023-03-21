@@ -401,21 +401,23 @@ impl DavClient {
     }
 
     /// Inner helper with common logic between `create` and `update`.
-    async fn put<Href, Etag>(
+    async fn put<Href, Etag, MimeType>(
         &self,
         href: Href,
         data: Vec<u8>,
         etag: Option<Etag>,
+        mime_type: MimeType,
     ) -> Result<Option<Vec<u8>>, DavError>
     where
         Href: AsRef<str>,
         Etag: AsRef<[u8]>,
+        MimeType: AsRef<[u8]>,
     {
         let mut builder = self
             .request_builder()?
             .method(Method::PUT)
             .uri(self.relative_uri(href.as_ref())?)
-            .header("Content-Type", "application/xml; charset=utf-8");
+            .header("Content-Type", mime_type.as_ref());
 
         builder = match etag {
             Some(etag) => builder.header("If-Match", etag.as_ref()),
@@ -441,15 +443,17 @@ impl DavClient {
     /// # Errors
     ///
     /// See [`request_multistatus`](Self::request_multistatus).
-    pub async fn create_resource<Href>(
+    pub async fn create_resource<Href, MimeType>(
         &self,
         href: Href,
         data: Vec<u8>,
+        mime_type: MimeType,
     ) -> Result<Option<Vec<u8>>, CreateResourceError>
     where
         Href: AsRef<str>,
+        MimeType: AsRef<[u8]>,
     {
-        self.put(href, data, Option::<Vec<u8>>::None)
+        self.put(href, data, Option::<Vec<u8>>::None, mime_type)
             .await
             .map_err(CreateResourceError)
     }
@@ -461,17 +465,19 @@ impl DavClient {
     /// # Errors
     ///
     /// See [`request_multistatus`](Self::request_multistatus).
-    pub async fn update_resource<Href, Etag>(
+    pub async fn update_resource<Href, Etag, MimeType>(
         &self,
         href: Href,
         data: Vec<u8>,
         etag: Etag,
+        mime_type: MimeType,
     ) -> Result<Option<Vec<u8>>, UpdateResourceError>
     where
         Href: AsRef<str>,
         Etag: AsRef<[u8]>,
+        MimeType: AsRef<[u8]>,
     {
-        self.put(href, data, Some(etag))
+        self.put(href, data, Some(etag), mime_type)
             .await
             .map_err(UpdateResourceError)
     }
@@ -576,6 +582,11 @@ pub(crate) fn check_status(status: StatusCode) -> Result<(), DavError> {
     } else {
         Ok(())
     }
+}
+
+pub mod mime_types {
+    pub const CALENDAR: &[u8] = b"text/calendar";
+    pub const ADDRESSBOOK: &[u8] = b"text/vcard";
 }
 
 macro_rules! decl_error {
