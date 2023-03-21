@@ -33,6 +33,12 @@ pub enum Error {
 /// A type that can be built by parsing XML.
 #[allow(clippy::module_name_repetitions)]
 pub trait FromXml: Sized {
+    /// Optional information used to extract values.
+    ///
+    /// Some `FromXml` implementations can be generic and parse data with
+    /// dynamic rules. This associated type allows passing such rules.
+    ///
+    /// For the general case, just set this to `()`.
     type Data;
     /// Builds a new instance by parsing the XML reader.
     ///
