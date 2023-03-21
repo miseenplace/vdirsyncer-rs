@@ -9,8 +9,8 @@ use crate::{
     auth::AuthExt,
     dns::DiscoverableService,
     xml::{
-        self, FromXml, HrefProperty, ItemDetails, ResponseWithProp, SimplePropertyMeta,
-        StringProperty, CALDAV_STR, CARDDAV_STR, DAV,
+        self, FromXml, HrefProperty, ItemDetails, Multistatus, ResponseWithProp,
+        SimplePropertyMeta, StringProperty, CALDAV_STR, CARDDAV_STR, DAV,
     },
     Auth, AuthError,
 };
@@ -236,7 +236,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// See [`request`](Self::request).
+    /// See [`request_multistatus`](Self::request_multistatus).
     pub async fn propfind<T: FromXml>(
         &self,
         url: Uri,
@@ -260,10 +260,12 @@ impl DavClient {
                 "#
             )))?;
 
-        self.request(request, data).await
+        self.request_multistatus(request, data)
+            .await
+            .map(|ms| ms.into_responses())
     }
 
-    /// Send a request and parse the response as `T`.
+    /// Send a request which expects a multistatus response and parse it as `T`.
     ///
     /// # Errors
     ///
@@ -271,11 +273,11 @@ impl DavClient {
     /// - If the server returns an error status code.
     /// - If the response is not a valid XML document.
     /// - If the response's XML schema does not match the expected type.
-    pub async fn request<T: FromXml>(
+    pub async fn request_multistatus<T: FromXml>(
         &self,
         request: Request<Body>,
         data: &T::Data,
-    ) -> Result<Vec<T>, DavError> {
+    ) -> Result<Multistatus<T>, DavError> {
         let response = self.http_client.request(request).await?;
         let (head, body) = response.into_parts();
         check_status(head.status)?;
@@ -292,7 +294,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// See [`request`](Self::request).
+    /// See [`request_multistatus`](Self::request_multistatus).
     pub async fn get_collection_displayname(&self, href: &str) -> Result<Option<String>, DavError> {
         let url = self.relative_uri(href)?;
 
@@ -377,7 +379,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// See [`request`](Self::request).
+    /// See [`request_multistatus`](Self::request_multistatus).
     pub async fn list_resources(
         &self,
         collection_href: &str,
@@ -438,7 +440,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// See [`request`](Self::request).
+    /// See [`request_multistatus`](Self::request_multistatus).
     pub async fn create_resource<Href>(
         &self,
         href: Href,
@@ -458,7 +460,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// See [`request`](Self::request).
+    /// See [`request_multistatus`](Self::request_multistatus).
     pub async fn update_resource<Href, Etag>(
         &self,
         href: Href,
@@ -483,7 +485,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// See [`request`](Self::request).
+    /// See [`request_multistatus`](Self::request_multistatus).
     pub async fn create_collection<Href: AsRef<str>>(
         &self,
         href: Href,
@@ -525,7 +527,7 @@ impl DavClient {
     ///
     /// # Errors
     ///
-    /// See [`request`](Self::request).
+    /// See [`request_multistatus`](Self::request_multistatus).
     pub async fn delete<Href, Etag>(&self, href: Href, etag: Etag) -> Result<(), DeleteError>
     where
         Href: AsRef<str>,

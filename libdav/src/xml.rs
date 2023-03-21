@@ -357,10 +357,10 @@ impl From<ResponseWithProp<HrefProperty>> for Option<String> {
 impl FromXml for HrefProperty {
     type Data = SimplePropertyMeta;
 
-    fn from_xml<R: BufRead>(
-        reader: &mut NsReader<R>,
-        data: &SimplePropertyMeta,
-    ) -> Result<Self, Error> {
+    fn from_xml<R>(reader: &mut NsReader<R>, data: &SimplePropertyMeta) -> Result<Self, Error>
+    where
+        R: BufRead,
+    {
         #[derive(Debug)]
         enum State {
             Prop,
@@ -420,6 +420,70 @@ impl FromXml for HrefProperty {
     }
 }
 
+pub struct Multistatus<F> {
+    responses: Vec<F>,
+}
+
+impl<F> Multistatus<F> {
+    #[inline]
+    pub fn into_responses(self) -> Vec<F> {
+        self.responses
+    }
+}
+
+impl<F> FromXml for Multistatus<F>
+where
+    F: FromXml,
+{
+    type Data = F::Data;
+
+    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &Self::Data) -> Result<Self, Error> {
+        #[derive(Debug)]
+        enum State {
+            Root,
+            Multistatus,
+        }
+
+        let mut state = State::Root;
+        let mut buf = Vec::new();
+        let mut items = Vec::new();
+
+        loop {
+            match (&state, reader.read_resolved_event_into(&mut buf)?) {
+                (State::Root, (_, Event::Decl(_))) => {}
+                (State::Root, (ResolveResult::Bound(namespace), Event::Start(element)))
+                    if namespace.as_ref() == DAV
+                        && element.local_name().as_ref() == b"multistatus" =>
+                {
+                    state = State::Multistatus;
+                }
+                (State::Root, (ResolveResult::Bound(namespace), Event::Empty(element)))
+                    if namespace.as_ref() == DAV
+                        && element.local_name().as_ref() == b"multistatus" =>
+                {
+                    return Ok(Multistatus { responses: items });
+                }
+                (State::Root, (_, Event::Eof)) => return Err(Error::MissingData("multistatus")),
+                (State::Multistatus, (ResolveResult::Bound(namespace), Event::Start(element)))
+                    if namespace.as_ref() == DAV
+                        && element.local_name().as_ref() == b"response" =>
+                {
+                    items.push(F::from_xml(reader, data)?);
+                }
+                (State::Multistatus, (ResolveResult::Bound(namespace), Event::End(element)))
+                    if namespace.as_ref() == DAV
+                        && element.local_name().as_ref() == b"multistatus" =>
+                {
+                    return Ok(Multistatus { responses: items });
+                }
+                (_, (_, _)) => {
+                    // TODO: log unknown/unhandled event
+                }
+            }
+        }
+    }
+}
+
 /// Parse a raw multi-response when listing items.
 ///
 /// # Errors
@@ -427,50 +491,11 @@ impl FromXml for HrefProperty {
 /// - If parsing the XML fails in any way.
 /// - If any necessary fields are missing.
 /// - If any unexpected XML nodes are found.
-pub(crate) fn parse_multistatus<F: FromXml>(raw: &[u8], data: &F::Data) -> Result<Vec<F>, Error> {
-    #[derive(Debug)]
-    enum State {
-        Root,
-        Multistatus,
-    }
-
-    //TODO: Use an async reader instead (this is mostly a Poc).
-    let reader = &mut NsReader::from_reader(raw);
-    reader.trim_text(true);
-
-    let mut state = State::Root;
-    let mut buf = Vec::new();
-    let mut items = Vec::new();
-
-    loop {
-        match (&state, reader.read_resolved_event_into(&mut buf)?) {
-            (State::Root, (_, Event::Decl(_))) => {}
-            (State::Root, (ResolveResult::Bound(namespace), Event::Start(element)))
-                if namespace.as_ref() == DAV && element.local_name().as_ref() == b"multistatus" =>
-            {
-                state = State::Multistatus;
-            }
-            (State::Root, (ResolveResult::Bound(namespace), Event::Empty(element)))
-                if namespace.as_ref() == DAV && element.local_name().as_ref() == b"multistatus" =>
-            {
-                return Ok(items);
-            }
-            (State::Root, (_, Event::Eof)) => return Err(Error::MissingData("multistatus")),
-            (State::Multistatus, (ResolveResult::Bound(namespace), Event::Start(element)))
-                if namespace.as_ref() == DAV && element.local_name().as_ref() == b"response" =>
-            {
-                items.push(F::from_xml(reader, data)?);
-            }
-            (State::Multistatus, (ResolveResult::Bound(namespace), Event::End(element)))
-                if namespace.as_ref() == DAV && element.local_name().as_ref() == b"multistatus" =>
-            {
-                return Ok(items);
-            }
-            (_, (_, _)) => {
-                // TODO: log unknown/unhandled event
-            }
-        }
-    }
+pub(crate) fn parse_multistatus<F>(raw: &[u8], data: &F::Data) -> Result<Multistatus<F>, Error>
+where
+    F: FromXml,
+{
+    Multistatus::from_xml(&mut NsReader::from_reader(raw), data)
 }
 
 #[cfg(test)]
@@ -510,7 +535,9 @@ mod more_tests {
   </response>
 </multistatus>"#;
 
-        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &()).unwrap();
+        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &())
+            .unwrap()
+            .into_responses();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0], ResponseWithProp {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/".to_string(),
@@ -538,7 +565,9 @@ mod more_tests {
     #[test]
     fn test_empty_response() {
         let raw = br#"<multistatus xmlns="DAV:" />"#;
-        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &()).unwrap();
+        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &())
+            .unwrap()
+            .into_responses();
         assert_eq!(parsed.len(), 0);
     }
 
@@ -561,8 +590,9 @@ mod more_tests {
             name: b"displayname".to_vec(),
             namespace: DAV.to_vec(),
         };
-        let parsed =
-            parse_multistatus::<ResponseWithProp<StringProperty>>(raw, &property_data).unwrap();
+        let parsed = parse_multistatus::<ResponseWithProp<StringProperty>>(raw, &property_data)
+            .unwrap()
+            .into_responses();
         assert_eq!(parsed.len(), 1);
         assert_eq!(
             parsed[0],
