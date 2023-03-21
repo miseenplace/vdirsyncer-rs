@@ -570,7 +570,7 @@ impl std::fmt::Display for CollectionType {
 }
 
 #[inline]
-fn check_status(status: StatusCode) -> Result<(), DavError> {
+pub(crate) fn check_status(status: StatusCode) -> Result<(), DavError> {
     if !status.is_success() {
         Err(DavError::BadStatusCode(status))
     } else {
@@ -597,5 +597,6 @@ macro_rules! decl_error {
 
 decl_error!(CreateResourceError, "error creating resources");
 decl_error!(UpdateResourceError, "error updating resources");
+decl_error!(GetResourceError, "error updating resources");
 decl_error!(CreateCollectionError, "error creating collection");
 decl_error!(DeleteError, "error deleting collection");

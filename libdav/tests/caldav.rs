@@ -190,3 +190,34 @@ async fn test_create_and_delete_resource() {
     let items = caldav_client.list_resources(&collection).await.unwrap();
     assert_eq!(items.len(), 0);
 }
+
+#[tokio::test]
+#[ignore]
+async fn test_create_and_fetch_resource() {
+    let caldav_client = create_test_client_from_env().await;
+    let home_set = caldav_client.calendar_home_set.as_ref().unwrap().clone();
+
+    let collection = format!("{}{}/", home_set.path(), &random_string(16));
+    caldav_client
+        .create_collection(&collection, CollectionType::Calendar)
+        .await
+        .unwrap();
+
+    let resource = format!("{}{}.ics", collection, &random_string(12));
+    caldav_client
+        .create_resource(&resource, MINIMAL_ICALENDAR.to_vec())
+        .await
+        .unwrap();
+
+    let items = caldav_client.list_resources(&collection).await.unwrap();
+    assert_eq!(items.len(), 1);
+
+    let fetched = caldav_client
+        .get_resources(&collection, vec![&items[0].href])
+        .await
+        .unwrap();
+    assert_eq!(fetched.len(), 1);
+
+    // FIXME: some servers will fail here due to tampering PRODID
+    assert_eq!(fetched[0].data.as_bytes(), MINIMAL_ICALENDAR);
+}

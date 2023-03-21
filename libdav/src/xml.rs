@@ -144,6 +144,80 @@ impl FromXml for ItemDetails {
     }
 }
 
+/// Etag and contents of a single calendar resource.
+#[derive(Debug, PartialEq, Eq)]
+pub struct CalendarReport {
+    pub etag: String,
+    pub calendar_data: String,
+}
+
+impl FromXml for CalendarReport {
+    type Data = ();
+    /// Parse a list item using an XML reader.
+    ///
+    /// The reader is expected to have consumed the start tag for the `response`
+    /// element, and will return after having consumed the corresponding end tag.
+    ///
+    /// # Errors
+    ///
+    /// - If parsing the XML fails in any way.
+    /// - If any necessary fields are missing.
+    /// - If a `response` object has a status code different to 200.
+    /// - If any unexpected XML nodes are found.
+    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, _: &()) -> Result<CalendarReport, Error> {
+        #[derive(Debug)]
+        enum State {
+            Prop,
+            GetEtag,
+            CalendarData,
+        }
+
+        let mut buf = Vec::new();
+        let mut state = State::Prop;
+        let mut etag = Option::<String>::None;
+        let mut calendar_data = None;
+
+        loop {
+            match (&state, reader.read_resolved_event_into(&mut buf)?) {
+                (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
+                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
+                        (State::Prop, CALDAV, b"calendar-data") => state = State::CalendarData,
+                        (State::Prop, DAV, b"getetag") => state = State::GetEtag,
+                        (_, _, _) => {
+                            // TODO: log unknown/unhandled node
+                        }
+                    }
+                }
+                (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
+                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
+                        (State::Prop, DAV, b"prop") => break,
+                        (State::CalendarData, CALDAV, b"calendar-data")
+                        | (State::GetEtag, DAV, b"getetag") => state = State::Prop,
+                        (_, _, _) => {
+                            // TODO: log unknown/unhandled node
+                        }
+                    }
+                }
+                (State::CalendarData, (ResolveResult::Unbound, Event::Text(text))) => {
+                    // TODO: can I avoid copying here?
+                    calendar_data = Some(text.unescape()?.to_string());
+                }
+                (State::GetEtag, (ResolveResult::Unbound, Event::Text(text))) => {
+                    etag = Some(text.unescape()?.to_string());
+                }
+                (_, (_, _)) => {
+                    // TODO: log unknown/unhandled event
+                }
+            };
+        }
+
+        Ok(CalendarReport {
+            etag: etag.ok_or(Error::MissingData("etag"))?,
+            calendar_data: calendar_data.ok_or(Error::MissingData("calendar-data"))?,
+        })
+    }
+}
+
 /// A response with one or more properties.
 ///
 /// The inner type `T` will be parsed from the response's `prop` node.
@@ -411,6 +485,7 @@ impl FromXml for HrefProperty {
     }
 }
 
+#[derive(Debug)]
 pub struct Multistatus<F> {
     responses: Vec<F>,
 }

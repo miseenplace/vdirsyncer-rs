@@ -9,15 +9,19 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use crate::auth::{Auth, AuthError};
+use crate::{
+    auth::{Auth, AuthError},
+    xml::CalendarReport,
+};
 use async_trait::async_trait;
-use dav::DavError;
 use dav::{DavClient, FindCurrentUserPrincipalError};
+use dav::{DavError, GetResourceError};
 use dns::{
     find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, SrvError, TxtError,
 };
 use domain::base::Dname;
-use hyper::Uri;
+use http::Method;
+use hyper::{Body, Uri};
 use xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta, StringProperty};
 
 pub mod auth;
@@ -224,6 +228,58 @@ impl CalDavClient {
     // TODO: get_calendar_order ("calendar-order", "http://apple.com/ns/ical/")
     // TODO: DRY: the above methods are super repetitive.
     //       Maybe all these props impl a single trait, so the API could be `get_prop<T>(url)`?
+
+    /// Fetches existing icalendar resources.
+    ///
+    /// Returns a tuple of `(href, data, etag)`.
+    ///
+    /// # Errors
+    ///
+    /// See [`request_multistatus`](DavClient::request_multistatus).
+    pub async fn get_resources<Href>(
+        &self,
+        calendar_href: Href,
+        hrefs: Vec<Href>,
+    ) -> Result<Vec<FetchedItem>, GetResourceError>
+    where
+        Href: AsRef<str>,
+    {
+        let mut body = String::from(
+            r#"
+            <C:calendar-multiget xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+                <prop>
+                    <getetag/>
+                    <C:calendar-data/>
+                </prop>"#,
+        );
+        for href in hrefs {
+            body.push_str(&format!("<href>{}</href>", href.as_ref()));
+        }
+        body.push_str("</C:calendar-multiget>");
+
+        let request = self
+            .request_builder()?
+            .method(Method::from_bytes(b"REPORT").expect("API for HTTP methods is dumb"))
+            .uri(self.relative_uri(calendar_href.as_ref())?)
+            .header("Content-Type", "application/xml; charset=utf-8")
+            .body(Body::from(body))?;
+
+        let multistatus = self
+            .request_multistatus::<ResponseWithProp<CalendarReport>>(request, &())
+            .await?;
+
+        let results = multistatus
+            .into_responses()
+            .into_iter()
+            .map(|r| FetchedItem {
+                href: r.href,
+                data: r.prop.calendar_data,
+                etag: r.prop.etag,
+            })
+            .collect();
+
+        Ok(results)
+    }
 }
 
 impl DavWithAutoDiscovery for CalDavClient {
@@ -481,4 +537,10 @@ pub(crate) trait DavWithAutoDiscovery:
         self.set_principal(self.find_current_user_principal().await?);
         Ok(self)
     }
+}
+
+pub struct FetchedItem {
+    pub href: String,
+    pub data: String,
+    pub etag: String,
 }
