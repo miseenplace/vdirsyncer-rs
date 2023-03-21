@@ -42,6 +42,7 @@ pub struct CalDavStorage {
 #[async_trait]
 impl Storage for CalDavStorage {
     async fn check(&self) -> Result<()> {
+        // TODO: use https://www.rfc-editor.org/rfc/rfc4791#section-5.1
         todo!()
     }
 
