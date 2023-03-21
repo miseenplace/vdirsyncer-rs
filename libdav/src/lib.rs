@@ -1,6 +1,9 @@
 //! This library contains caldav and carddav clients.
 //!
 //! See [`CalDavClient`] and [`CardDavClient`] as a useful entry points.
+//!
+//! Both clients implement `Deref<Target = DavClient>`, so all the associated
+//! functions for [`dav::DavClient`] are usable directly.
 use std::{
     io,
     ops::{Deref, DerefMut},
