@@ -6,8 +6,10 @@
 //! These types are used internally by this crate and are generally reserved
 //! for advanced usage.
 
+use http::{status::InvalidStatusCode, StatusCode};
 use log::{debug, warn};
 use quick_xml::{events::Event, name::ResolveResult, NsReader};
+use std::str::FromStr;
 use std::{borrow::Cow, io::BufRead};
 
 /// Namespace for properties defined in webdav specifications.
@@ -26,6 +28,9 @@ pub(crate) const CARDDAV: &[u8] = CARDDAV_STR.as_bytes();
 pub enum Error {
     #[error("missing field in data")]
     MissingData(&'static str),
+
+    #[error("invalid status code")]
+    InvalidStatusCode(#[from] InvalidStatusCode),
 
     #[error(transparent)]
     Parser(#[from] quick_xml::Error),
@@ -267,7 +272,15 @@ where
     T: FromXml,
 {
     pub prop: T,
-    pub status: String,
+    pub status: StatusCode,
+}
+
+// See: https://www.rfc-editor.org/rfc/rfc2068#section-6.1
+fn parse_statusline<S: AsRef<str>>(status_line: S) -> Result<StatusCode, InvalidStatusCode> {
+    let mut iter = status_line.as_ref().splitn(3, ' ');
+    iter.next();
+    let code = iter.next().unwrap_or("");
+    StatusCode::from_str(code)
 }
 
 impl<T> FromXml for PropStat<T>
@@ -313,7 +326,7 @@ where
                     }
                 }
                 (State::Status, (ResolveResult::Unbound, Event::Text(text))) => {
-                    status = Some(text.unescape()?.to_string());
+                    status = Some(parse_statusline(text.unescape()?)?);
                 }
                 (_, (_, _)) => {
                     // TODO: log unknown/unhandled event
@@ -703,7 +716,7 @@ mod more_tests {
                         is_calendar: true,
                         is_address_book: false,
                     },
-                    status: "HTTP/1.1 200 OK".to_string()
+                    status: StatusCode::OK,
                 },
             ],
         });
@@ -718,7 +731,7 @@ mod more_tests {
                         is_calendar: false,
                         is_address_book: false,
                     },
-                    status: "HTTP/1.1 200 OK".to_string()
+                    status: StatusCode::OK,
                 },
             ],
         });
@@ -792,7 +805,7 @@ mod more_tests {
                 href: "/path".to_string(),
                 propstats: vec![PropStat {
                     prop: StringProperty(Some("test calendar".to_string())),
-                    status: "HTTP/1.1 200 OK".to_string()
+                    status: StatusCode::OK,
                 },],
             }
         );
