@@ -589,7 +589,9 @@ pub(crate) fn parse_multistatus<F>(raw: &[u8], data: &F::Data) -> Result<Multist
 where
     F: FromXml,
 {
-    Multistatus::from_xml(&mut NsReader::from_reader(raw), data)
+    let mut reader = NsReader::from_reader(raw);
+    reader.trim_text(true);
+    Multistatus::from_xml(&mut reader, data)
 }
 
 #[cfg(test)]
