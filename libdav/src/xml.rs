@@ -211,8 +211,8 @@ impl FromXml for Report {
                             state = State::CalendarData;
                         }
                         (State::Prop, DAV, b"getetag") => state = State::GetEtag,
-                        (_, _, _) => {
-                            // TODO: log unknown/unhandled node
+                        (state, ns, name) => {
+                            debug!("unexpected start: {:?}, {}, {}", state, s(ns), s(name));
                         }
                     }
                 }
@@ -225,8 +225,8 @@ impl FromXml for Report {
                             state = State::Prop;
                         }
                         (State::GetEtag, DAV, b"getetag") => state = State::Prop,
-                        (_, _, _) => {
-                            // TODO: log unknown/unhandled node
+                        (state, ns, name) => {
+                            debug!("unexpected end: {:?}, {}, {}", state, s(ns), s(name));
                         }
                     }
                 }
@@ -247,8 +247,8 @@ impl FromXml for Report {
                 (_, (_, Event::Eof)) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
-                (_, (_, _)) => {
-                    // TODO: log unknown/unhandled event
+                (state, (_, event)) => {
+                    debug!("unexpected event: {:?}, {:?}", state, event);
                 }
             };
         }
@@ -326,8 +326,8 @@ where
                         (State::PropStat, DAV, b"prop") => {
                             prop = Some(T::from_xml(reader, data)?);
                         }
-                        (_, _, _) => {
-                            // TODO: log unknown/unhandled node
+                        (state, ns, name) => {
+                            debug!("unexpected end: {:?}, {}, {}", state, s(ns), s(name));
                         }
                     }
                 }
@@ -337,8 +337,8 @@ where
                         (State::Status, DAV, b"status") => {
                             state = State::PropStat;
                         }
-                        (_, _, _) => {
-                            // TODO: log unknown/unhandled node
+                        (state, ns, name) => {
+                            debug!("unexpected empty: {:?}, {}, {}", state, s(ns), s(name));
                         }
                     }
                 }
@@ -348,8 +348,8 @@ where
                 (_, (_, Event::Eof)) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
-                (_, (_, _)) => {
-                    // TODO: log unknown/unhandled event
+                (_, (_, event)) => {
+                    debug!("unexpected event: {:?}, {:?}", state, event);
                 }
             }
         }
@@ -469,8 +469,8 @@ where
                             }
                             state = State::Status;
                         }
-                        (_, _, _) => {
-                            // TODO: log unknown/unhandled node
+                        (state, ns, name) => {
+                            debug!("unexpected end: {:?}, {}, {}", state, s(ns), s(name));
                         }
                     }
                 }
@@ -480,8 +480,8 @@ where
                         (State::Status, DAV, b"status") | (State::Href, DAV, b"href") => {
                             state = State::Response;
                         }
-                        (_, _, _) => {
-                            // TODO: log unknown/unhandled node
+                        (state, ns, name) => {
+                            debug!("unexpected empty: {:?}, {}, {}", state, s(ns), s(name));
                         }
                     }
                 }
@@ -506,8 +506,8 @@ where
                 (_, (_, Event::Eof)) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
-                (_, (_, _)) => {
-                    // TODO: log unknown/unhandled event
+                (state, (_, event)) => {
+                    debug!("unexpected event: {:?}, {:?}", state, event);
                 }
             }
         }
@@ -594,8 +594,8 @@ impl FromXml for StringProperty {
                 (_, (_, Event::Eof)) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
-                (_, (_, _)) => {
-                    // TODO: log unknown/unhandled event
+                (state, (_, event)) => {
+                    debug!("unexpected event: {:?}, {:?}", state, event);
                 }
             }
         }
@@ -706,8 +706,8 @@ impl FromXml for HrefProperty {
                 (_, (_, Event::Eof)) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
-                (_, (_, _)) => {
-                    // TODO: log unknown/unhandled event
+                (state, (_, event)) => {
+                    debug!("unexpected event: {:?}, {:?}", state, event);
                 }
             }
         }
@@ -776,8 +776,8 @@ where
                 (_, (_, Event::Eof)) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
-                (_, (_, _)) => {
-                    // TODO: log unknown/unhandled event
+                (state, (_, event)) => {
+                    debug!("unexpected event: {:?}, {:?}", state, event);
                 }
             }
         }
