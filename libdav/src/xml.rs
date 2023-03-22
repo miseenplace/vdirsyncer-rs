@@ -140,6 +140,9 @@ impl FromXml for ItemDetails {
                 (State::GetEtag, (ResolveResult::Unbound, Event::Text(text))) => {
                     etag = Some(text.unescape()?.to_string());
                 }
+                (_, (_, Event::Eof)) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
                 (state, (_, event)) => {
                     debug!("unexpected event: {:?}, {:?}", state, event);
                 }
@@ -241,6 +244,9 @@ impl FromXml for Report {
                 (State::GetEtag, (ResolveResult::Unbound, Event::Text(text))) => {
                     etag = Some(text.unescape()?.to_string());
                 }
+                (_, (_, Event::Eof)) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
                 (_, (_, _)) => {
                     // TODO: log unknown/unhandled event
                 }
@@ -328,6 +334,9 @@ where
                 (State::Status, (ResolveResult::Unbound, Event::Text(text))) => {
                     status = Some(parse_statusline(text.unescape()?)?);
                 }
+                (_, (_, Event::Eof)) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
                 (_, (_, _)) => {
                     // TODO: log unknown/unhandled event
                 }
@@ -386,6 +395,9 @@ where
                 }
                 (State::Href, (ResolveResult::Unbound, Event::Text(text))) => {
                     href = Some(text.unescape()?.to_string());
+                }
+                (_, (_, Event::Eof)) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
                 (_, (_, _)) => {
                     // TODO: log unknown/unhandled event
@@ -467,6 +479,9 @@ impl FromXml for StringProperty {
                         .to_string();
                     // TODO: on error, read_to_end to leave parser in a consistent state.
                     value = Some(text);
+                }
+                (_, (_, Event::Eof)) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
                 (_, (_, _)) => {
                     // TODO: log unknown/unhandled event
@@ -573,6 +588,9 @@ impl FromXml for HrefProperty {
                 {
                     state = State::Inner;
                 }
+                (_, (_, Event::Eof)) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
                 (_, (_, _)) => {
                     // TODO: log unknown/unhandled event
                 }
@@ -639,6 +657,9 @@ where
                         && element.local_name().as_ref() == b"multistatus" =>
                 {
                     return Ok(Multistatus { responses: items });
+                }
+                (_, (_, Event::Eof)) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
                 (_, (_, _)) => {
                     // TODO: log unknown/unhandled event
