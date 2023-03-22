@@ -591,11 +591,11 @@ impl DavClient {
             .header("Content-Type", "application/xml; charset=utf-8")
             .body(Body::from(body))?;
 
-        let multistatus = self
+        let responses = self
             .request_multistatus::<ResponseWithProp<Report>>(request, data)
-            .await?;
+            .await?
+            .into_responses();
 
-        let responses = multistatus.into_responses();
         let mut items = Vec::new();
         for r in responses {
             match r.variant {
