@@ -6,8 +6,9 @@
 //! These types are used internally by this crate and are generally reserved
 //! for advanced usage.
 
+use log::debug;
 use quick_xml::{events::Event, name::ResolveResult, NsReader};
-use std::io::BufRead;
+use std::{borrow::Cow, io::BufRead};
 
 /// Namespace for properties defined in webdav specifications.
 ///
@@ -65,6 +66,12 @@ pub struct ItemDetails {
     pub is_address_book: bool,
 }
 
+/// Shortcut to keep log statements short.
+#[inline]
+fn s(data: &[u8]) -> Cow<'_, str> {
+    String::from_utf8_lossy(data)
+}
+
 impl FromXml for ItemDetails {
     type Data = ();
 
@@ -92,8 +99,8 @@ impl FromXml for ItemDetails {
                         (State::Prop, DAV, b"resourcetype") => state = State::ResourceType,
                         (State::Prop, DAV, b"getcontenttype") => state = State::GetContentType,
                         (State::Prop, DAV, b"getetag") => state = State::GetEtag,
-                        (_, _, _) => {
-                            // TODO: log unknown/unhandled node
+                        (state, ns, name) => {
+                            debug!("unexpected start: {:?}, {}, {}", state, s(ns), s(name));
                         }
                     }
                 }
@@ -103,8 +110,8 @@ impl FromXml for ItemDetails {
                         (State::ResourceType, DAV, b"resourcetype")
                         | (State::GetContentType, DAV, b"getcontenttype")
                         | (State::GetEtag, DAV, b"getetag") => state = State::Prop,
-                        (_, _, _) => {
-                            // TODO: log unknown/unhandled node
+                        (state, ns, name) => {
+                            debug!("unexpected end: {:?}, {}, {}", state, s(ns), s(name));
                         }
                     }
                 }
@@ -114,8 +121,8 @@ impl FromXml for ItemDetails {
                         (State::ResourceType, DAV, b"collection") => is_collection = true,
                         (State::ResourceType, CALDAV, b"calendar") => is_calendar = true,
                         (State::ResourceType, CARDDAV, b"addressbook") => is_address_book = true,
-                        (_, _, _) => {
-                            // TODO: log unknown/unhandled node
+                        (state, ns, name) => {
+                            debug!("unexpected empty: {:?}, {}, {}", state, s(ns), s(name));
                         }
                     }
                 }
@@ -125,8 +132,8 @@ impl FromXml for ItemDetails {
                 (State::GetEtag, (ResolveResult::Unbound, Event::Text(text))) => {
                     etag = Some(text.unescape()?.to_string());
                 }
-                (_, (_, _)) => {
-                    // TODO: log unknown/unhandled event
+                (state, (_, event)) => {
+                    debug!("unexpected event: {:?}, {:?}", state, event);
                 }
             };
         }

@@ -11,6 +11,14 @@ use libdav::{
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::fmt::Write;
 
+#[cfg(test)]
+fn init() {
+    let _ = env_logger::builder()
+        .filter_level(log::LevelFilter::Debug)
+        .is_test(true)
+        .try_init();
+}
+
 async fn create_test_client_from_env() -> CalDavClient {
     let server = std::env::var("CALDAV_SERVER").unwrap();
     let username = std::env::var("CALDAV_USERNAME").unwrap();
@@ -38,6 +46,8 @@ fn random_string(len: usize) -> String {
 #[tokio::test]
 #[ignore]
 async fn test_create_and_delete_collection() {
+    init();
+
     let caldav_client = create_test_client_from_env().await;
     let home_set = caldav_client.calendar_home_set.as_ref().unwrap().clone();
     let calendars = caldav_client
@@ -111,6 +121,8 @@ fn minimal_icalendar() -> Vec<u8> {
 #[tokio::test]
 #[ignore]
 async fn test_create_and_delete_resource() {
+    init();
+
     let caldav_client = create_test_client_from_env().await;
     let home_set = caldav_client.calendar_home_set.as_ref().unwrap().clone();
 
@@ -212,6 +224,8 @@ async fn test_create_and_delete_resource() {
 #[tokio::test]
 #[ignore]
 async fn test_create_and_fetch_resource() {
+    init();
+
     let caldav_client = create_test_client_from_env().await;
     let home_set = caldav_client.calendar_home_set.as_ref().unwrap().clone();
 
