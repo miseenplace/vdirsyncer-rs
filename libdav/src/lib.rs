@@ -145,7 +145,7 @@ pub(crate) trait DavWithAutoDiscovery:
 
 /// See [`FetchedResource`]
 #[derive(Debug, PartialEq, Eq)]
-pub struct RequestedResourceContent {
+pub struct FetchedResourceContent {
     pub data: String,
     pub etag: String,
 }
@@ -156,5 +156,5 @@ pub struct FetchedResource {
     /// The absolute path to the resource in the server.
     pub href: String,
     /// The contents of the resource if available, or the status code if unavailable.
-    pub content: Result<RequestedResourceContent, StatusCode>,
+    pub content: Result<FetchedResourceContent, StatusCode>,
 }

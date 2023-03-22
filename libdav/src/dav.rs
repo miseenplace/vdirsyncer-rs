@@ -13,7 +13,7 @@ use crate::{
         ResponseVariant, ResponseWithProp, SimplePropertyMeta, StringProperty, CALDAV_STR,
         CARDDAV_STR, DAV,
     },
-    Auth, AuthError, FetchedResource, RequestedResourceContent,
+    Auth, AuthError, FetchedResource, FetchedResourceContent,
 };
 
 /// A generic error for `WebDav` operations.
@@ -616,7 +616,7 @@ impl DavClient {
                         }
                         // Missing `etag` or `data` with a non-error status is invalid.
                         // This may be an invalid response or a parser issue.
-                        Ok(RequestedResourceContent {
+                        Ok(FetchedResourceContent {
                             data: data.ok_or(crate::xml::Error::MissingData("data"))?,
                             etag: etag.ok_or(crate::xml::Error::MissingData("etag"))?,
                         })
