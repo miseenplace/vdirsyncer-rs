@@ -374,8 +374,7 @@ impl DavClient {
 
     /// Enumerates resources in a collection
     ///
-    /// Returns an array of results. Because the server can return an error status for individual
-    /// resources, some of them may be `Err`, while other are `Ok(ItemDetails)`.
+    /// Returns an array of results.
     ///
     /// # Errors
     ///
