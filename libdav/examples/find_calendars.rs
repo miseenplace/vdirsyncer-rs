@@ -55,15 +55,15 @@ async fn main() {
             .await
             .unwrap();
         let color = caldav_client.get_calendar_colour(calendar).await.unwrap();
-        println!("📅 name: {name:?}, colour: {color:?}, path: {calendar:?}, etag: {etag}");
+        println!("📅 name: {name:?}, colour: {color:?}, path: {calendar:?}, etag: {etag:?}");
         let items = caldav_client
             .list_resources(calendar)
             .await
             .unwrap()
             .into_iter()
-            .filter(|i| !i.prop.is_collection);
+            .filter(|i| !i.details.is_collection);
         for item in items {
-            println!("   {}, {}", item.href, item.prop.etag.unwrap());
+            println!("   {}, {}", item.href, item.details.etag.unwrap());
         }
     }
 }

@@ -173,13 +173,16 @@ impl CalDavClient {
 
     /// Find calendars collections under the given `url`.
     ///
-    /// Returns absolute paths to each calendar and their respective etag. This method should be
-    /// called with the `calendar_home_set` URL to find the current user's calendars.
+    /// Returns absolute paths to each calendar and their respective etag, if any. This method
+    /// should be called with the `calendar_home_set` URL to find the current user's calendars.
     ///
     /// # Errors
     ///
     /// If the HTTP call fails or parsing the XML response fails.
-    pub async fn find_calendars(&self, url: Uri) -> Result<Vec<(String, String)>, DavError> {
+    pub async fn find_calendars(
+        &self,
+        url: Uri,
+    ) -> Result<Vec<(String, Option<String>)>, DavError> {
         let items = self
             // XXX: depth 1 or infinity?
             .propfind::<ResponseWithProp<ItemDetails>>(
@@ -191,16 +194,16 @@ impl CalDavClient {
             .await
             .map_err(DavError::from)?
             .into_iter()
-            .filter(|c| c.prop.is_calendar);
+            .filter(|c| c.propstats.iter().any(|p| p.prop.is_calendar))
+            .map(|item| {
+                (
+                    item.href,
+                    item.propstats.into_iter().find_map(|p| p.prop.etag),
+                )
+            })
+            .collect();
 
-        let mut results = Vec::new();
-        for item in items {
-            results.push((
-                item.href,
-                item.prop.etag.ok_or(xml::Error::MissingData("etag"))?,
-            ));
-        }
-        Ok(results)
+        Ok(items)
     }
 
     /// Returns the colour for the calendar at path `href`.
@@ -273,17 +276,29 @@ impl CalDavClient {
             .request_multistatus::<ResponseWithProp<Report>>(request, &ReportField::CALENDAR_DATA)
             .await?;
 
-        let results = multistatus
-            .into_responses()
-            .into_iter()
-            .map(|r| FetchedResource {
-                href: r.href,
-                data: r.prop.data,
-                etag: r.prop.etag,
-            })
-            .collect();
+        let responses = multistatus.into_responses();
+        let mut items = Vec::new();
+        for r in responses {
+            let mut data = None;
+            let mut etag = None;
+            for propstat in r.propstats {
+                if let Some(d) = propstat.prop.data {
+                    data = Some(d)
+                }
+                if let Some(e) = propstat.prop.etag {
+                    etag = Some(e)
+                }
+            }
 
-        Ok(results)
+            // FIXME: should not raise due to missing data here. Rather, we should properly model a "not found" response.
+            items.push(FetchedResource {
+                href: r.href,
+                data: data.ok_or(xml::Error::MissingData("data"))?,
+                etag: etag.ok_or(xml::Error::MissingData("etag"))?,
+            });
+        }
+
+        Ok(items)
     }
 }
 
@@ -432,13 +447,16 @@ impl CardDavClient {
             .await
             .map_err(DavError::from)?
             .into_iter()
-            .filter(|c| c.prop.is_address_book);
+            .filter(|c| c.propstats.iter().any(|p| p.prop.is_address_book));
 
         let mut results = Vec::new();
         for item in items {
             results.push((
                 item.href,
-                item.prop.etag.ok_or(xml::Error::MissingData("etag"))?,
+                item.propstats
+                    .into_iter()
+                    .find_map(|p| p.prop.etag)
+                    .ok_or(xml::Error::MissingData("etag"))?,
             ));
         }
         Ok(results)
@@ -556,4 +574,5 @@ pub struct FetchedResource {
     pub href: String,
     pub data: String,
     pub etag: String,
+    // TODO: include status here.
 }

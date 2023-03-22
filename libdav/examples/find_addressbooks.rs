@@ -65,9 +65,9 @@ async fn main() {
             .await
             .unwrap()
             .into_iter()
-            .filter(|i| !i.prop.is_collection);
+            .filter(|i| !i.details.is_collection);
         for item in items {
-            println!("   {}, {}", item.href, item.prop.etag.unwrap());
+            println!("   {}, {}", item.href, item.details.etag.unwrap());
         }
     }
 }

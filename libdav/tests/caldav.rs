@@ -88,8 +88,16 @@ async fn test_create_and_delete_collection() {
         .await
         .unwrap_err();
 
+    assert!(
+        etag.is_some(),
+        "deletion is only supported on servers which provide etags"
+    );
+
     // Delete the calendar
-    caldav_client.delete(new_collection, etag).await.unwrap();
+    caldav_client
+        .delete(new_collection, etag.unwrap())
+        .await
+        .unwrap();
 
     let calendars = caldav_client
         .find_calendars(home_set.clone())
@@ -166,7 +174,7 @@ async fn test_create_and_delete_resource() {
         .into_iter()
         .find_map(|i| {
             if i.href == resource {
-                Some(i.prop.etag)
+                Some(i.details.etag)
             } else {
                 None
             }
@@ -206,7 +214,7 @@ async fn test_create_and_delete_resource() {
         .into_iter()
         .find_map(|i| {
             if i.href == resource {
-                Some(i.prop.etag)
+                Some(i.details.etag)
             } else {
                 None
             }

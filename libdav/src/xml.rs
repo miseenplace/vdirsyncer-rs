@@ -6,7 +6,7 @@
 //! These types are used internally by this crate and are generally reserved
 //! for advanced usage.
 
-use log::debug;
+use log::{debug, warn};
 use quick_xml::{events::Event, name::ResolveResult, NsReader};
 use std::{borrow::Cow, io::BufRead};
 
@@ -121,6 +121,9 @@ impl FromXml for ItemDetails {
                         (State::ResourceType, DAV, b"collection") => is_collection = true,
                         (State::ResourceType, CALDAV, b"calendar") => is_calendar = true,
                         (State::ResourceType, CARDDAV, b"addressbook") => is_address_book = true,
+                        (State::Prop, DAV, b"getetag") => {
+                            warn!("missing etag in response");
+                        }
                         (state, ns, name) => {
                             debug!("unexpected empty: {:?}, {}, {}", state, s(ns), s(name));
                         }
@@ -151,8 +154,8 @@ impl FromXml for ItemDetails {
 /// Etag and contents of a single calendar resource.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Report {
-    pub etag: String,
-    pub data: String,
+    pub etag: Option<String>,
+    pub data: Option<String>,
 }
 
 /// Metadata describing which field contains the `data` for a `Report`.
@@ -239,14 +242,11 @@ impl FromXml for Report {
             };
         }
 
-        Ok(Report {
-            etag: etag.ok_or(Error::MissingData("etag"))?,
-            data: data.ok_or(Error::MissingData("data"))?,
-        })
+        Ok(Report { etag, data })
     }
 }
 
-/// A response with one or more properties.
+/// A single response from a multistatus response.
 ///
 /// The inner type `T` will be parsed from the response's `prop` node.
 /// Generally, this will be a response to a `PROPFIND`.
@@ -258,8 +258,74 @@ where
     T: FromXml,
 {
     pub href: String,
+    pub propstats: Vec<PropStat<T>>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct PropStat<T>
+where
+    T: FromXml,
+{
     pub prop: T,
     pub status: String,
+}
+
+impl<T> FromXml for PropStat<T>
+where
+    T: FromXml,
+{
+    type Data = T::Data;
+
+    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &Self::Data) -> Result<Self, Error> {
+        #[derive(Debug)]
+        enum State {
+            PropStat,
+            Status,
+        }
+
+        let mut buf = Vec::new();
+        let mut state = State::PropStat;
+        let mut status = None;
+        let mut prop = None;
+
+        loop {
+            match (&state, reader.read_resolved_event_into(&mut buf)?) {
+                (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
+                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
+                        (State::PropStat, DAV, b"status") => state = State::Status,
+                        (State::PropStat, DAV, b"prop") => {
+                            prop = Some(T::from_xml(reader, data)?);
+                        }
+                        (_, _, _) => {
+                            // TODO: log unknown/unhandled node
+                        }
+                    }
+                }
+                (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
+                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
+                        (State::PropStat, DAV, b"propstat") => break,
+                        (State::Status, DAV, b"status") => {
+                            state = State::PropStat;
+                        }
+                        (_, _, _) => {
+                            // TODO: log unknown/unhandled node
+                        }
+                    }
+                }
+                (State::Status, (ResolveResult::Unbound, Event::Text(text))) => {
+                    status = Some(text.unescape()?.to_string());
+                }
+                (_, (_, _)) => {
+                    // TODO: log unknown/unhandled event
+                }
+            }
+        }
+
+        Ok(PropStat {
+            prop: prop.ok_or(Error::MissingData("prop"))?,
+            status: status.ok_or(Error::MissingData("status"))?,
+        })
+    }
 }
 
 impl<T> FromXml for ResponseWithProp<T>
@@ -273,26 +339,22 @@ where
         enum State {
             Response,
             Href,
-            PropStat,
-            Status,
         }
 
         let mut buf = Vec::new();
         let mut state = State::Response;
         let mut href = Option::<String>::None;
-        let mut status = Option::<String>::None;
-        let mut value = Option::<T>::None;
+        let mut propstats = Vec::new();
 
         loop {
             match (&state, reader.read_resolved_event_into(&mut buf)?) {
                 (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
                         (State::Response, DAV, b"href") => state = State::Href,
-                        (State::Response, DAV, b"propstat") => state = State::PropStat,
-                        (State::PropStat, DAV, b"prop") => {
-                            value = Some(T::from_xml(reader, data)?);
+                        (State::Response, DAV, b"propstat") => {
+                            // TODO: if propstat is set, error
+                            propstats.push(PropStat::<T>::from_xml(reader, data)?);
                         }
-                        (State::PropStat, DAV, b"status") => state = State::Status,
                         (_, _, _) => {
                             // TODO: log unknown/unhandled node
                         }
@@ -301,10 +363,9 @@ where
                 (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
                         (State::Response, DAV, b"response") => break,
-                        (State::Href, DAV, b"href") | (State::PropStat, DAV, b"propstat") => {
+                        (State::Href, DAV, b"href") => {
                             state = State::Response;
                         }
-                        (State::Status, DAV, b"status") => state = State::PropStat,
                         (_, _, _) => {
                             // TODO: log unknown/unhandled node
                         }
@@ -312,9 +373,6 @@ where
                 }
                 (State::Href, (ResolveResult::Unbound, Event::Text(text))) => {
                     href = Some(text.unescape()?.to_string());
-                }
-                (State::Status, (ResolveResult::Unbound, Event::Text(text))) => {
-                    status = Some(text.unescape()?.to_string());
                 }
                 (_, (_, _)) => {
                     // TODO: log unknown/unhandled event
@@ -324,8 +382,7 @@ where
 
         Ok(ResponseWithProp {
             href: href.ok_or(Error::MissingData("href"))?,
-            prop: value.ok_or(Error::MissingData("property value"))?,
-            status: status.ok_or(Error::MissingData("status"))?,
+            propstats,
         })
     }
 }
@@ -341,8 +398,8 @@ pub struct SimplePropertyMeta {
 }
 
 impl From<ResponseWithProp<StringProperty>> for Option<String> {
-    fn from(value: ResponseWithProp<StringProperty>) -> Option<String> {
-        value.prop.0
+    fn from(mut value: ResponseWithProp<StringProperty>) -> Option<String> {
+        value.propstats.pop()?.prop.0
     }
 }
 
@@ -442,8 +499,8 @@ pub struct HrefProperty(Option<String>);
 
 impl ResponseWithProp<HrefProperty> {
     #[must_use]
-    pub fn into_maybe_string(self) -> Option<String> {
-        self.prop.0
+    pub fn into_maybe_string(mut self) -> Option<String> {
+        self.propstats.pop()?.prop.0
     }
 }
 
@@ -637,27 +694,66 @@ mod more_tests {
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0], ResponseWithProp {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/".to_string(),
-            prop: ItemDetails {
-                content_type: Some("text/calendar; charset=utf-8".to_string()),
-                etag: Some("\"1591712486-1-1\"".to_string()),
-                is_collection: true,
-                is_calendar: true,
-                is_address_book: false,
-            },
-            status: "HTTP/1.1 200 OK".to_string()
+            propstats: vec![
+                PropStat {
+                    prop: ItemDetails {
+                        content_type: Some("text/calendar; charset=utf-8".to_string()),
+                        etag: Some("\"1591712486-1-1\"".to_string()),
+                        is_collection: true,
+                        is_calendar: true,
+                        is_address_book: false,
+                    },
+                    status: "HTTP/1.1 200 OK".to_string()
+                },
+            ],
         });
         assert_eq!(parsed[1], ResponseWithProp {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/395b00a0-eebc-40fd-a98e-176a06367c82.ics".to_string(),
-            prop: ItemDetails {
-                content_type: Some("text/calendar; charset=utf-8; component=VEVENT".to_string()),
-                etag: Some("\"e7577ff2b0924fe8e9a91d3fb2eb9072598bf9fb\"".to_string()),
-                is_collection: false,
-                is_calendar: false,
-                is_address_book: false,
-            },
-            status: "HTTP/1.1 200 OK".to_string()
+            propstats: vec![
+                PropStat {
+                    prop: ItemDetails {
+                        content_type: Some("text/calendar; charset=utf-8; component=VEVENT".to_string()),
+                        etag: Some("\"e7577ff2b0924fe8e9a91d3fb2eb9072598bf9fb\"".to_string()),
+                        is_collection: false,
+                        is_calendar: false,
+                        is_address_book: false,
+                    },
+                    status: "HTTP/1.1 200 OK".to_string()
+                },
+            ],
         });
     }
+
+    #[test]
+    fn test_multi_propstat() {
+        let raw = br#"
+<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+    <d:response>
+        <d:href>/remote.php/dav/calendars/vdirsyncer/1678996875/</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:resourcetype>
+                    <d:collection/>
+                    <cal:calendar/>
+                </d:resourcetype>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+        <d:propstat>
+            <d:prop>
+                <d:getetag/>
+            </d:prop>
+            <d:status>HTTP/1.1 404 Not Found</d:status>
+        </d:propstat>
+    </d:response>
+</d:multistatus>"#;
+        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &())
+            .unwrap()
+            .into_responses();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed.first().unwrap().propstats.len(), 2);
+    }
+
     #[test]
     fn test_empty_response() {
         let raw = br#"<multistatus xmlns="DAV:" />"#;
@@ -694,8 +790,10 @@ mod more_tests {
             parsed[0],
             ResponseWithProp {
                 href: "/path".to_string(),
-                prop: StringProperty(Some("test calendar".to_string())),
-                status: "HTTP/1.1 200 OK".to_string()
+                propstats: vec![PropStat {
+                    prop: StringProperty(Some("test calendar".to_string())),
+                    status: "HTTP/1.1 200 OK".to_string()
+                },],
             }
         );
     }

@@ -390,21 +390,33 @@ impl DavClient {
     pub async fn list_resources(
         &self,
         collection_href: &str,
-    ) -> Result<Vec<ResponseWithProp<ItemDetails>>, DavError> {
-        // TODO: replace the return type for this with something more API-friendly.
+    ) -> Result<Vec<ListedResource>, DavError> {
         let url = self.relative_uri(collection_href)?;
 
-        self.propfind::<ResponseWithProp<ItemDetails>>(
-            url,
-            "<resourcetype/><getcontenttype/><getetag/>",
-            1,
-            &(),
-        )
-        .await
-        .map(|mut vec| {
-            vec.retain(|r| r.href != collection_href);
-            vec
-        })
+        let items = self
+            .propfind::<ResponseWithProp<ItemDetails>>(
+                url,
+                "<resourcetype/><getcontenttype/><getetag/>",
+                1,
+                &(),
+            )
+            .await?
+            .into_iter()
+            .filter(|r| r.href != collection_href);
+
+        let mut result = Vec::new();
+        for mut item in items {
+            result.push(ListedResource {
+                details: item
+                    .propstats
+                    .pop()
+                    .ok_or(xml::Error::MissingData("props"))?
+                    .prop,
+                href: item.href,
+            });
+        }
+
+        Ok(result)
     }
 
     /// Inner helper with common logic between `create` and `update`.
@@ -615,3 +627,12 @@ decl_error!(UpdateResourceError, "error updating resources");
 decl_error!(GetResourceError, "error updating resources");
 decl_error!(CreateCollectionError, "error creating collection");
 decl_error!(DeleteError, "error deleting collection");
+
+/// Metadata for a resource.
+///
+/// This type is returned when listing resources. It contains metadata on
+/// resources but no the resource data itself.
+pub struct ListedResource {
+    pub details: ItemDetails,
+    pub href: String,
+}
