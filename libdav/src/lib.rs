@@ -180,7 +180,7 @@ impl CalDavClient {
     ///
     /// If the HTTP call fails or parsing the XML response fails.
     pub async fn find_calendars(&self, url: Uri) -> Result<Vec<(String, String)>, DavError> {
-        Ok(self
+        let items = self
             // XXX: depth 1 or infinity?
             .propfind::<ResponseWithProp<ItemDetails>>(
                 url.clone(),
@@ -191,9 +191,16 @@ impl CalDavClient {
             .await
             .map_err(DavError::from)?
             .into_iter()
-            .filter(|c| c.prop.is_calendar)
-            .map(|r| (r.href, r.prop.etag))
-            .collect())
+            .filter(|c| c.prop.is_calendar);
+
+        let mut results = Vec::new();
+        for item in items {
+            results.push((
+                item.href,
+                item.prop.etag.ok_or(xml::Error::MissingData("etag"))?,
+            ));
+        }
+        Ok(results)
     }
 
     /// Returns the colour for the calendar at path `href`.
@@ -414,7 +421,7 @@ impl CardDavClient {
     /// If the HTTP call fails or parsing the XML response fails.
     pub async fn find_addresbooks(&self, url: Uri) -> Result<Vec<(String, String)>, DavError> {
         // FIXME: DRY: This is almost a copy-paste of the same method from CalDavClient
-        Ok(self
+        let items = self
             // XXX: depth 1 or infinity?
             .propfind::<ResponseWithProp<ItemDetails>>(
                 url.clone(),
@@ -425,9 +432,16 @@ impl CardDavClient {
             .await
             .map_err(DavError::from)?
             .into_iter()
-            .filter(|c| c.prop.is_address_book)
-            .map(|r| (r.href, r.prop.etag))
-            .collect())
+            .filter(|c| c.prop.is_address_book);
+
+        let mut results = Vec::new();
+        for item in items {
+            results.push((
+                item.href,
+                item.prop.etag.ok_or(xml::Error::MissingData("etag"))?,
+            ));
+        }
+        Ok(results)
     }
 
     // TODO: get_addressbook_description ("addressbook-description", "urn:ietf:params:xml:ns:carddav")

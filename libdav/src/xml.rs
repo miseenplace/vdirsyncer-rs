@@ -59,7 +59,7 @@ pub trait FromXml: Sized {
 #[derive(Debug, PartialEq, Eq)]
 pub struct ItemDetails {
     pub content_type: Option<String>,
-    pub etag: String,
+    pub etag: Option<String>,
     pub is_collection: bool,
     pub is_calendar: bool,
     pub is_address_book: bool,
@@ -133,7 +133,7 @@ impl FromXml for ItemDetails {
 
         Ok(ItemDetails {
             content_type,
-            etag: etag.ok_or(Error::MissingData("etag"))?,
+            etag,
             is_collection,
             is_calendar,
             is_address_book,
@@ -630,7 +630,7 @@ mod more_tests {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/".to_string(),
             prop: ItemDetails {
                 content_type: Some("text/calendar; charset=utf-8".to_string()),
-                etag: "\"1591712486-1-1\"".to_string(),
+                etag: Some("\"1591712486-1-1\"".to_string()),
                 is_collection: true,
                 is_calendar: true,
                 is_address_book: false,
@@ -641,7 +641,7 @@ mod more_tests {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/395b00a0-eebc-40fd-a98e-176a06367c82.ics".to_string(),
             prop: ItemDetails {
                 content_type: Some("text/calendar; charset=utf-8; component=VEVENT".to_string()),
-                etag: "\"e7577ff2b0924fe8e9a91d3fb2eb9072598bf9fb\"".to_string(),
+                etag: Some("\"e7577ff2b0924fe8e9a91d3fb2eb9072598bf9fb\"".to_string()),
                 is_collection: false,
                 is_calendar: false,
                 is_address_book: false,

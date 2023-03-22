@@ -67,7 +67,7 @@ async fn main() {
             .into_iter()
             .filter(|i| !i.prop.is_collection);
         for item in items {
-            println!("   {}, {}", item.href, item.prop.etag);
+            println!("   {}, {}", item.href, item.prop.etag.unwrap());
         }
     }
 }

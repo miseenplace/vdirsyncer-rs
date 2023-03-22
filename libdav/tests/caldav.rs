@@ -159,6 +159,7 @@ async fn test_create_and_delete_resource() {
                 None
             }
         })
+        .unwrap()
         .unwrap();
 
     // ASSERTION: updating with wrong etag fails
@@ -198,6 +199,7 @@ async fn test_create_and_delete_resource() {
                 None
             }
         })
+        .unwrap()
         .unwrap();
 
     // ASSERTION: deleting with correct etag works
