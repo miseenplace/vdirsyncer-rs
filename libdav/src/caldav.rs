@@ -206,13 +206,12 @@ impl CalDavClient {
 }
 
 impl DavWithAutoDiscovery for CalDavClient {
-    #[inline]
-
     /// Returns the default port to try and use.
     ///
     /// If the `base_url` has an explicit port, that value is returned. Otherwise,
     /// returns `443` for https, `80` for http, and `443` as a fallback for
     /// anything else.
+    #[inline]
     fn default_port(&self) -> Result<u16, BootstrapError> {
         // raise InvaidUrl?
         if let Some(port) = self.base_url.port_u16() {
