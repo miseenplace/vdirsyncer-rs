@@ -16,7 +16,7 @@ pub struct CardDavClient {
     dav_client: DavClient,
     /// URL of collections that are either address book collections or ordinary collections
     /// that have child or descendant address book collections owned by the principal.
-    /// See: <https://www.rfc-editor.org/rfc/rfc4791#section-6.2.1>
+    /// See: <https://www.rfc-editor.org/rfc/rfc6352#section-7.1.1>
     pub addressbook_home_set: Option<Uri>, // TODO: timeouts
 }
 
