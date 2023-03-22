@@ -1,8 +1,8 @@
 //! Generic webdav implementation.
 use std::io;
 
-use http::{Method, Request, StatusCode, Uri};
-use hyper::{client::HttpConnector, Body, Client};
+use http::{response::Parts, Method, Request, StatusCode, Uri};
+use hyper::{body::Bytes, client::HttpConnector, Body, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::{
@@ -278,12 +278,20 @@ impl DavClient {
         request: Request<Body>,
         data: &T::Data,
     ) -> Result<Multistatus<T>, DavError> {
-        let response = self.http_client.request(request).await?;
-        let (head, body) = response.into_parts();
+        let (head, body) = self.request(request).await?;
         check_status(head.status)?;
 
-        let body = hyper::body::to_bytes(body).await?;
         xml::parse_multistatus::<T>(&body, data).map_err(DavError::from)
+    }
+
+    // Internal wrapper around `http_client.request` that logs all response bodies.
+    async fn request(&self, request: Request<Body>) -> Result<(Parts, Bytes), hyper::Error> {
+        let response = self.http_client.request(request).await?;
+        let (head, body) = response.into_parts();
+        let body = hyper::body::to_bytes(body).await?;
+
+        log::debug!("Response ({}): {:?}", head.status, body);
+        Ok((head, body))
     }
 
     /// Returns the `displayname` for the collection at path `href`.
@@ -352,7 +360,7 @@ impl DavClient {
         // From https://www.rfc-editor.org/rfc/rfc6764#section-5:
         // > [...] the server MAY require authentication when a client tries to
         // > access the ".well-known" URI
-        let (head, _body) = self.http_client.request(request).await?.into_parts();
+        let (head, _body) = self.request(request).await?;
 
         if !head.status.is_redirection() {
             return Ok(None);
@@ -425,8 +433,7 @@ impl DavClient {
 
         let request = builder.body(Body::from(data))?;
 
-        let response = self.http_client.request(request).await?;
-        let (head, _body) = response.into_parts();
+        let (head, _body) = self.request(request).await?;
         check_status(head.status)?;
 
         // TODO: check multi-response
@@ -517,8 +524,7 @@ impl DavClient {
             .header("Content-Type", "application/xml; charset=utf-8")
             .body(Body::from(body))?;
 
-        let response = self.http_client.request(request).await?;
-        let (head, _body) = response.into_parts();
+        let (head, _body) = self.request(request).await?;
         // TODO: we should check the response body here, but some servers (e.g.: Fastmail) return an empty body.
         check_status(head.status)?;
 
@@ -546,8 +552,7 @@ impl DavClient {
             .header("If-Match", etag.as_ref())
             .body(Body::empty())?;
 
-        let response = self.http_client.request(request).await?;
-        let (head, _body) = response.into_parts();
+        let (head, _body) = self.request(request).await?;
         check_status(head.status)?;
 
         Ok(())
