@@ -252,18 +252,12 @@ impl DavClient {
             .header("Content-Type", "application/xml; charset=utf-8")
             .header("Depth", depth.to_string())
             .body(Body::from(format!(
-                r#"
-                <propfind xmlns="DAV:">
-                    <prop>
-                        {prop}
-                    </prop>
-                </propfind>
-                "#
+                r#"<propfind xmlns="DAV:"><prop>{prop}</prop></propfind>"#
             )))?;
 
         self.request_multistatus(request, data)
             .await
-            .map(|ms| ms.into_responses())
+            .map(Multistatus::into_responses)
     }
 
     /// Send a request which expects a multistatus response and parse it as `T`.
