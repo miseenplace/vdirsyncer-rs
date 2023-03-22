@@ -1,17 +1,15 @@
-use std::iter::once;
 use std::ops::{Deref, DerefMut};
 
-use http::Method;
-use hyper::{Body, Uri};
+use hyper::Uri;
 
+use crate::auth::Auth;
 use crate::dav::{DavError, GetResourceError};
 use crate::dns::DiscoverableService;
 use crate::xml::{
     ItemDetails, ReportField, ResponseVariant, ResponseWithProp, SimplePropertyMeta, StringProperty,
 };
-use crate::{auth::Auth, xml::Report};
+use crate::FetchedResource;
 use crate::{dav::DavClient, BootstrapError, DavWithAutoDiscovery, FindHomeSetError};
-use crate::{FetchedResource, RequestedResourceContent};
 
 /// A client to communicate with a caldav server.
 ///
@@ -202,61 +200,8 @@ impl CalDavClient {
         }
         body.push_str("</C:calendar-multiget>");
 
-        let request = self
-            .request_builder()?
-            .method(Method::from_bytes(b"REPORT").expect("API for HTTP methods is dumb"))
-            .uri(self.relative_uri(calendar_href.as_ref())?)
-            .header("Content-Type", "application/xml; charset=utf-8")
-            .body(Body::from(body))?;
-
-        let multistatus = self
-            .request_multistatus::<ResponseWithProp<Report>>(request, &ReportField::CALENDAR_DATA)
-            .await?;
-
-        let responses = multistatus.into_responses();
-        let mut items = Vec::new();
-        for r in responses {
-            match r.variant {
-                ResponseVariant::WithProps { propstats } => {
-                    let err_prop = propstats.iter().find(|p| !p.status.is_success());
-                    let content = if let Some(prop) = err_prop {
-                        Err(prop.status)
-                    } else {
-                        let mut data = None;
-                        let mut etag = None;
-                        for propstat in propstats {
-                            if let Some(d) = propstat.prop.data {
-                                data = Some(d);
-                            }
-                            if let Some(e) = propstat.prop.etag {
-                                etag = Some(e);
-                            }
-                        }
-                        // Missing `etag` or `data` with a non-error status is invalid.
-                        // This may be an invalid response or a parser issue.
-                        Ok(RequestedResourceContent {
-                            data: data.ok_or(crate::xml::Error::MissingData("data"))?,
-                            etag: etag.ok_or(crate::xml::Error::MissingData("etag"))?,
-                        })
-                    };
-
-                    items.push(FetchedResource {
-                        href: r.href,
-                        content,
-                    });
-                }
-                ResponseVariant::WithoutProps { hrefs, status } => {
-                    for href in hrefs.into_iter().chain(once(r.href)) {
-                        items.push(FetchedResource {
-                            href,
-                            content: Err(status),
-                        });
-                    }
-                }
-            };
-        }
-
-        Ok(items)
+        self.multi_get(calendar_href.as_ref(), body, &ReportField::CALENDAR_DATA)
+            .await
     }
 }
 

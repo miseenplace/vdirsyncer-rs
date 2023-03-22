@@ -1,5 +1,5 @@
 //! Generic webdav implementation.
-use std::io;
+use std::{io, iter::once};
 
 use http::{response::Parts, Method, Request, StatusCode, Uri};
 use hyper::{body::Bytes, client::HttpConnector, Body, Client};
@@ -9,10 +9,11 @@ use crate::{
     auth::AuthExt,
     dns::DiscoverableService,
     xml::{
-        self, FromXml, HrefProperty, ItemDetails, Multistatus, ResponseVariant, ResponseWithProp,
-        SimplePropertyMeta, StringProperty, CALDAV_STR, CARDDAV_STR, DAV,
+        self, FromXml, HrefProperty, ItemDetails, Multistatus, Report, ReportField,
+        ResponseVariant, ResponseWithProp, SimplePropertyMeta, StringProperty, CALDAV_STR,
+        CARDDAV_STR, DAV,
     },
-    Auth, AuthError,
+    Auth, AuthError, FetchedResource, RequestedResourceContent,
 };
 
 /// A generic error for `WebDav` operations.
@@ -575,6 +576,69 @@ impl DavClient {
         check_status(head.status)?;
 
         Ok(())
+    }
+
+    pub(crate) async fn multi_get(
+        &self,
+        collection_href: &str,
+        body: String,
+        data: &ReportField,
+    ) -> Result<Vec<FetchedResource>, GetResourceError> {
+        let request = self
+            .request_builder()?
+            .method(Method::from_bytes(b"REPORT").expect("API for HTTP methods is dumb"))
+            .uri(self.relative_uri(collection_href.as_ref())?)
+            .header("Content-Type", "application/xml; charset=utf-8")
+            .body(Body::from(body))?;
+
+        let multistatus = self
+            .request_multistatus::<ResponseWithProp<Report>>(request, data)
+            .await?;
+
+        let responses = multistatus.into_responses();
+        let mut items = Vec::new();
+        for r in responses {
+            match r.variant {
+                ResponseVariant::WithProps { propstats } => {
+                    let err_prop = propstats.iter().find(|p| !p.status.is_success());
+                    let content = if let Some(prop) = err_prop {
+                        Err(prop.status)
+                    } else {
+                        let mut data = None;
+                        let mut etag = None;
+                        for propstat in propstats {
+                            if let Some(d) = propstat.prop.data {
+                                data = Some(d);
+                            }
+                            if let Some(e) = propstat.prop.etag {
+                                etag = Some(e);
+                            }
+                        }
+                        // Missing `etag` or `data` with a non-error status is invalid.
+                        // This may be an invalid response or a parser issue.
+                        Ok(RequestedResourceContent {
+                            data: data.ok_or(crate::xml::Error::MissingData("data"))?,
+                            etag: etag.ok_or(crate::xml::Error::MissingData("etag"))?,
+                        })
+                    };
+
+                    items.push(FetchedResource {
+                        href: r.href,
+                        content,
+                    });
+                }
+                ResponseVariant::WithoutProps { hrefs, status } => {
+                    for href in hrefs.into_iter().chain(once(r.href)) {
+                        items.push(FetchedResource {
+                            href,
+                            content: Err(status),
+                        });
+                    }
+                }
+            };
+        }
+
+        Ok(items)
     }
 }
 
