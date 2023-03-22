@@ -722,6 +722,7 @@ pub struct Multistatus<F> {
 }
 
 impl<F> Multistatus<F> {
+    #[must_use]
     #[inline]
     pub fn into_responses(self) -> Vec<F> {
         self.responses
