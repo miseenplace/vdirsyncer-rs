@@ -14,16 +14,21 @@ use domain::{
 };
 use http::uri::Scheme;
 
+/// Services for which automatic discovery is possible.
 #[derive(Debug, Clone, Copy)]
 pub enum DiscoverableService {
+    /// Caldav over HTTPS.
     CalDavs,
+    /// Caldav over plain-text HTTP.
     CalDav,
+    /// Carddav over plain-text HTTP.
     CardDavs,
+    /// Carddav over plain-text HTTP.
     CardDav,
 }
 
 impl DiscoverableService {
-    /// Return a relative domain suitable for querying this service type.
+    /// Relative domain suitable for querying this service type.
     #[must_use]
     pub fn relative_domain(self) -> &'static RelativeDname<[u8]> {
         match self {
@@ -35,6 +40,7 @@ impl DiscoverableService {
         .expect("well known relative prefix is valid")
     }
 
+    /// The scheme for this service type (e.g.: HTTP or HTTPS).
     #[must_use]
     pub fn scheme(self) -> Scheme {
         match self {
@@ -43,6 +49,7 @@ impl DiscoverableService {
         }
     }
 
+    /// The will-known path for context-path discovery.
     #[must_use]
     pub fn well_known_path(self) -> &'static str {
         match self {

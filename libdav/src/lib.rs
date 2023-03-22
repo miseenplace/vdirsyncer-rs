@@ -66,6 +66,7 @@ impl From<BootstrapError> for io::Error {
     }
 }
 
+/// Error finding home set.
 #[derive(thiserror::Error, Debug)]
 #[error("error finding home set collection")]
 pub struct FindHomeSetError(pub DavError);

@@ -8,6 +8,9 @@ use crate::dns::DiscoverableService;
 use crate::xml::{ItemDetails, ResponseVariant, ResponseWithProp, SimplePropertyMeta};
 use crate::{dav::DavClient, BootstrapError, DavWithAutoDiscovery, FindHomeSetError};
 
+/// A client to communicate with a carddav server.
+///
+/// Wraps around a [`DavClient`], which provides the underlying webdav functionality.
 #[derive(Debug)]
 pub struct CardDavClient {
     /// The `base_url` may be (due to bootstrapping discovery) different to the one provided as input.
