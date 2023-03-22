@@ -1,3 +1,4 @@
+use std::iter::once;
 use std::ops::{Deref, DerefMut};
 
 use http::Method;
@@ -5,11 +6,12 @@ use hyper::{Body, Uri};
 
 use crate::dav::{DavError, GetResourceError};
 use crate::dns::DiscoverableService;
-use crate::xml::{ItemDetails, ReportField, ResponseWithProp, SimplePropertyMeta, StringProperty};
-use crate::{auth::Auth, xml::Report};
-use crate::{
-    dav::DavClient, BootstrapError, DavWithAutoDiscovery, FetchedResource, FindHomeSetError,
+use crate::xml::{
+    ItemDetails, ReportField, ResponseVariant, ResponseWithProp, SimplePropertyMeta, StringProperty,
 };
+use crate::{auth::Auth, xml::Report};
+use crate::{dav::DavClient, BootstrapError, DavWithAutoDiscovery, FindHomeSetError};
+use crate::{FetchedResource, RequestedResourceContent};
 
 /// A client to communicate with a caldav server.
 ///
@@ -124,12 +126,15 @@ impl CalDavClient {
             .await
             .map_err(DavError::from)?
             .into_iter()
-            .filter(|c| c.propstats.iter().any(|p| p.prop.is_calendar))
-            .map(|item| {
-                (
-                    item.href,
-                    item.propstats.into_iter().find_map(|p| p.prop.etag),
-                )
+            .filter_map(|c| match c.variant {
+                ResponseVariant::WithProps { propstats } => {
+                    if propstats.iter().any(|p| p.prop.is_calendar) {
+                        Some((c.href, propstats.into_iter().find_map(|p| p.prop.etag)))
+                    } else {
+                        None
+                    }
+                }
+                ResponseVariant::WithoutProps { .. } => None,
             })
             .collect();
 
@@ -211,23 +216,44 @@ impl CalDavClient {
         let responses = multistatus.into_responses();
         let mut items = Vec::new();
         for r in responses {
-            let mut data = None;
-            let mut etag = None;
-            for propstat in r.propstats {
-                if let Some(d) = propstat.prop.data {
-                    data = Some(d)
-                }
-                if let Some(e) = propstat.prop.etag {
-                    etag = Some(e)
-                }
-            }
+            match r.variant {
+                ResponseVariant::WithProps { propstats } => {
+                    let err_prop = propstats.iter().find(|p| !p.status.is_success());
+                    let content = if let Some(prop) = err_prop {
+                        Err(prop.status)
+                    } else {
+                        let mut data = None;
+                        let mut etag = None;
+                        for propstat in propstats {
+                            if let Some(d) = propstat.prop.data {
+                                data = Some(d);
+                            }
+                            if let Some(e) = propstat.prop.etag {
+                                etag = Some(e);
+                            }
+                        }
+                        // Missing `etag` or `data` with a non-error status is invalid.
+                        // This may be an invalid response or a parser issue.
+                        Ok(RequestedResourceContent {
+                            data: data.ok_or(crate::xml::Error::MissingData("data"))?,
+                            etag: etag.ok_or(crate::xml::Error::MissingData("etag"))?,
+                        })
+                    };
 
-            // FIXME: should not raise due to missing data here. Rather, we should properly model a "not found" response.
-            items.push(FetchedResource {
-                href: r.href,
-                data: data.ok_or(crate::xml::Error::MissingData("data"))?,
-                etag: etag.ok_or(crate::xml::Error::MissingData("etag"))?,
-            });
+                    items.push(FetchedResource {
+                        href: r.href,
+                        content,
+                    });
+                }
+                ResponseVariant::WithoutProps { hrefs, status } => {
+                    for href in hrefs.into_iter().chain(once(r.href)) {
+                        items.push(FetchedResource {
+                            href,
+                            content: Err(status),
+                        });
+                    }
+                }
+            };
         }
 
         Ok(items)

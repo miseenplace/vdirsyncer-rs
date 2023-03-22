@@ -5,7 +5,7 @@ use hyper::Uri;
 use crate::auth::Auth;
 use crate::dav::DavError;
 use crate::dns::DiscoverableService;
-use crate::xml::{ItemDetails, ResponseWithProp, SimplePropertyMeta};
+use crate::xml::{ItemDetails, ResponseVariant, ResponseWithProp, SimplePropertyMeta};
 use crate::{dav::DavClient, BootstrapError, DavWithAutoDiscovery, FindHomeSetError};
 
 #[derive(Debug)]
@@ -100,7 +100,10 @@ impl CardDavClient {
     /// # Errors
     ///
     /// If the HTTP call fails or parsing the XML response fails.
-    pub async fn find_addresbooks(&self, url: Uri) -> Result<Vec<(String, String)>, DavError> {
+    pub async fn find_addresbooks(
+        &self,
+        url: Uri,
+    ) -> Result<Vec<(String, Option<String>)>, DavError> {
         // FIXME: DRY: This is almost a copy-paste of the same method from CalDavClient
         let items = self
             // XXX: depth 1 or infinity?
@@ -113,19 +116,19 @@ impl CardDavClient {
             .await
             .map_err(DavError::from)?
             .into_iter()
-            .filter(|c| c.propstats.iter().any(|p| p.prop.is_address_book));
+            .filter_map(|c| match c.variant {
+                ResponseVariant::WithProps { propstats } => {
+                    if propstats.iter().any(|p| p.prop.is_address_book) {
+                        Some((c.href, propstats.into_iter().find_map(|p| p.prop.etag)))
+                    } else {
+                        None
+                    }
+                }
+                ResponseVariant::WithoutProps { .. } => None,
+            })
+            .collect();
 
-        let mut results = Vec::new();
-        for item in items {
-            results.push((
-                item.href,
-                item.propstats
-                    .into_iter()
-                    .find_map(|p| p.prop.etag)
-                    .ok_or(crate::xml::Error::MissingData("etag"))?,
-            ));
-        }
-        Ok(results)
+        Ok(items)
     }
 
     // TODO: get_addressbook_description ("addressbook-description", "urn:ietf:params:xml:ns:carddav")

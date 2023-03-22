@@ -14,6 +14,7 @@ use dns::{
     find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, SrvError, TxtError,
 };
 use domain::base::Dname;
+use http::StatusCode;
 use hyper::Uri;
 
 pub mod auth;
@@ -142,10 +143,18 @@ pub(crate) trait DavWithAutoDiscovery:
     }
 }
 
-/// A parsed resource fetched from a server.
-pub struct FetchedResource {
-    pub href: String,
+/// See [`FetchedResource`]
+#[derive(Debug, PartialEq, Eq)]
+pub struct RequestedResourceContent {
     pub data: String,
     pub etag: String,
-    // TODO: include status here.
+}
+
+/// A parsed resource fetched from a server.
+#[derive(Debug, PartialEq, Eq)]
+pub struct FetchedResource {
+    /// The absolute path to the resource in the server.
+    pub href: String,
+    /// The contents of the resource if available, or the status code if unavailable.
+    pub content: Result<RequestedResourceContent, StatusCode>,
 }

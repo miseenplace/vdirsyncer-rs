@@ -59,7 +59,7 @@ async fn main() {
             .get_collection_displayname(addressbook)
             .await
             .unwrap();
-        println!("📇 name: {name:?}, path: {addressbook:?}, etag: {etag}");
+        println!("📇 name: {name:?}, path: {addressbook:?}, etag: {etag:?}");
         let items = carddav_client
             .list_resources(addressbook)
             .await

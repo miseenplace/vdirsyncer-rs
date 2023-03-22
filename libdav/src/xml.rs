@@ -208,7 +208,7 @@ impl FromXml for Report {
                 (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
                         (State::Prop, ns, name) if ns == field.namespace && name == field.name => {
-                            state = State::CalendarData
+                            state = State::CalendarData;
                         }
                         (State::Prop, DAV, b"getetag") => state = State::GetEtag,
                         (_, _, _) => {
@@ -222,7 +222,7 @@ impl FromXml for Report {
                         (State::CalendarData, ns, name)
                             if ns == field.namespace && name == field.name =>
                         {
-                            state = State::Prop
+                            state = State::Prop;
                         }
                         (State::GetEtag, DAV, b"getetag") => state = State::Prop,
                         (_, _, _) => {
@@ -269,7 +269,18 @@ where
     T: FromXml,
 {
     pub href: String,
-    pub propstats: Vec<PropStat<T>>,
+    pub variant: ResponseVariant<T>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ResponseVariant<T: FromXml> {
+    WithProps {
+        propstats: Vec<PropStat<T>>,
+    },
+    WithoutProps {
+        hrefs: Vec<String>,
+        status: StatusCode,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -361,21 +372,102 @@ where
         enum State {
             Response,
             Href,
+            Status, // Only for one variant
+        }
+
+        enum VariantBuilder<T: FromXml> {
+            None,
+            WithProps {
+                propstats: Vec<PropStat<T>>,
+            },
+            WithoutProps {
+                hrefs: Vec<String>,
+                status: Option<StatusCode>,
+            },
+        }
+
+        impl<T: FromXml> VariantBuilder<T> {
+            fn build(self) -> Result<ResponseVariant<T>, Error> {
+                match self {
+                    VariantBuilder::None => Ok(ResponseVariant::WithProps {
+                        propstats: Vec::new(),
+                    }),
+                    VariantBuilder::WithProps { propstats } => {
+                        Ok(ResponseVariant::WithProps { propstats })
+                    }
+                    VariantBuilder::WithoutProps { hrefs, status } => {
+                        Ok(ResponseVariant::WithoutProps {
+                            hrefs,
+                            status: status.ok_or(Error::MissingData("status"))?,
+                        })
+                    }
+                }
+            }
         }
 
         let mut buf = Vec::new();
         let mut state = State::Response;
         let mut href = Option::<String>::None;
-        let mut propstats = Vec::new();
+        let mut variant = VariantBuilder::None;
 
         loop {
             match (&state, reader.read_resolved_event_into(&mut buf)?) {
                 (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Response, DAV, b"href") => state = State::Href,
+                        (State::Response, DAV, b"href") => {
+                            if href.is_some() {
+                                match variant {
+                                    VariantBuilder::None => {
+                                        variant = VariantBuilder::WithoutProps {
+                                            hrefs: Vec::new(),
+                                            status: None,
+                                        };
+                                    }
+                                    VariantBuilder::WithProps { .. } => {
+                                        return Err(Error::Parser(
+                                            quick_xml::Error::UnexpectedToken("href".to_string()),
+                                        ))
+                                    }
+                                    VariantBuilder::WithoutProps { .. } => {}
+                                }
+                            }
+                            state = State::Href;
+                        }
                         (State::Response, DAV, b"propstat") => {
-                            // TODO: if propstat is set, error
-                            propstats.push(PropStat::<T>::from_xml(reader, data)?);
+                            let propstat = PropStat::<T>::from_xml(reader, data)?;
+
+                            match variant {
+                                VariantBuilder::None => {
+                                    variant = VariantBuilder::WithProps {
+                                        propstats: vec![propstat],
+                                    };
+                                }
+                                VariantBuilder::WithProps { ref mut propstats } => {
+                                    propstats.push(propstat);
+                                }
+                                VariantBuilder::WithoutProps { .. } => {
+                                    return Err(Error::Parser(quick_xml::Error::UnexpectedToken(
+                                        "propstat".to_string(),
+                                    )))
+                                }
+                            }
+                        }
+                        (State::Response, DAV, b"status") => {
+                            match variant {
+                                VariantBuilder::None => {
+                                    variant = VariantBuilder::WithoutProps {
+                                        hrefs: Vec::new(),
+                                        status: None,
+                                    }
+                                }
+                                VariantBuilder::WithProps { .. } => {
+                                    return Err(Error::Parser(quick_xml::Error::UnexpectedToken(
+                                        "status".to_string(),
+                                    )))
+                                }
+                                VariantBuilder::WithoutProps { .. } => {}
+                            }
+                            state = State::Status;
                         }
                         (_, _, _) => {
                             // TODO: log unknown/unhandled node
@@ -385,7 +477,7 @@ where
                 (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
                         (State::Response, DAV, b"response") => break,
-                        (State::Href, DAV, b"href") => {
+                        (State::Status, DAV, b"status") | (State::Href, DAV, b"href") => {
                             state = State::Response;
                         }
                         (_, _, _) => {
@@ -394,8 +486,23 @@ where
                     }
                 }
                 (State::Href, (ResolveResult::Unbound, Event::Text(text))) => {
-                    href = Some(text.unescape()?.to_string());
+                    let h = text.unescape()?.to_string();
+                    match href {
+                        None => href = Some(h),
+                        Some(_) => match variant {
+                            VariantBuilder::None | VariantBuilder::WithProps { .. } => {
+                                unreachable!()
+                            }
+                            VariantBuilder::WithoutProps { ref mut hrefs, .. } => hrefs.push(h),
+                        },
+                    }
                 }
+                (State::Status, (ResolveResult::Unbound, Event::Text(text))) => match variant {
+                    VariantBuilder::None | VariantBuilder::WithProps { .. } => unreachable!(),
+                    VariantBuilder::WithoutProps { ref mut status, .. } => {
+                        *status = Some(parse_statusline(text.unescape()?)?);
+                    }
+                },
                 (_, (_, Event::Eof)) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
@@ -407,7 +514,7 @@ where
 
         Ok(ResponseWithProp {
             href: href.ok_or(Error::MissingData("href"))?,
-            propstats,
+            variant: variant.build()?,
         })
     }
 }
@@ -423,8 +530,12 @@ pub struct SimplePropertyMeta {
 }
 
 impl From<ResponseWithProp<StringProperty>> for Option<String> {
-    fn from(mut value: ResponseWithProp<StringProperty>) -> Option<String> {
-        value.propstats.pop()?.prop.0
+    fn from(value: ResponseWithProp<StringProperty>) -> Option<String> {
+        if let ResponseVariant::WithProps { mut propstats } = value.variant {
+            propstats.pop()?.prop.0
+        } else {
+            None
+        }
     }
 }
 
@@ -527,8 +638,12 @@ pub struct HrefProperty(Option<String>);
 
 impl ResponseWithProp<HrefProperty> {
     #[must_use]
-    pub fn into_maybe_string(mut self) -> Option<String> {
-        self.propstats.pop()?.prop.0
+    pub fn into_maybe_string(self) -> Option<String> {
+        if let ResponseVariant::WithProps { mut propstats } = self.variant {
+            propstats.pop()?.prop.0
+        } else {
+            None
+        }
     }
 }
 
@@ -728,33 +843,37 @@ mod more_tests {
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0], ResponseWithProp {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/".to_string(),
-            propstats: vec![
-                PropStat {
-                    prop: ItemDetails {
-                        content_type: Some("text/calendar; charset=utf-8".to_string()),
-                        etag: Some("\"1591712486-1-1\"".to_string()),
-                        is_collection: true,
-                        is_calendar: true,
-                        is_address_book: false,
+            variant: ResponseVariant::WithProps {
+                propstats: vec![
+                    PropStat {
+                        prop: ItemDetails {
+                            content_type: Some("text/calendar; charset=utf-8".to_string()),
+                            etag: Some("\"1591712486-1-1\"".to_string()),
+                            is_collection: true,
+                            is_calendar: true,
+                            is_address_book: false,
+                        },
+                        status: StatusCode::OK,
                     },
-                    status: StatusCode::OK,
-                },
-            ],
+                ],
+            }
         });
         assert_eq!(parsed[1], ResponseWithProp {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/395b00a0-eebc-40fd-a98e-176a06367c82.ics".to_string(),
-            propstats: vec![
-                PropStat {
-                    prop: ItemDetails {
-                        content_type: Some("text/calendar; charset=utf-8; component=VEVENT".to_string()),
-                        etag: Some("\"e7577ff2b0924fe8e9a91d3fb2eb9072598bf9fb\"".to_string()),
-                        is_collection: false,
-                        is_calendar: false,
-                        is_address_book: false,
+            variant: ResponseVariant::WithProps {
+                propstats: vec![
+                    PropStat {
+                        prop: ItemDetails {
+                            content_type: Some("text/calendar; charset=utf-8; component=VEVENT".to_string()),
+                            etag: Some("\"e7577ff2b0924fe8e9a91d3fb2eb9072598bf9fb\"".to_string()),
+                            is_collection: false,
+                            is_calendar: false,
+                            is_address_book: false,
+                        },
+                        status: StatusCode::OK,
                     },
-                    status: StatusCode::OK,
-                },
-            ],
+                ],
+            }
         });
     }
 
@@ -785,7 +904,10 @@ mod more_tests {
             .unwrap()
             .into_responses();
         assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed.first().unwrap().propstats.len(), 2);
+        match &parsed.first().unwrap().variant {
+            ResponseVariant::WithProps { propstats } => assert_eq!(propstats.len(), 2),
+            ResponseVariant::WithoutProps { .. } => unreachable!(),
+        };
     }
 
     #[test]
@@ -824,10 +946,12 @@ mod more_tests {
             parsed[0],
             ResponseWithProp {
                 href: "/path".to_string(),
-                propstats: vec![PropStat {
-                    prop: StringProperty(Some("test calendar".to_string())),
-                    status: StatusCode::OK,
-                },],
+                variant: ResponseVariant::WithProps {
+                    propstats: vec![PropStat {
+                        prop: StringProperty(Some("test calendar".to_string())),
+                        status: StatusCode::OK,
+                    }],
+                },
             }
         );
     }

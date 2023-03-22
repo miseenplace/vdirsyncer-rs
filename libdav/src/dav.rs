@@ -9,7 +9,7 @@ use crate::{
     auth::AuthExt,
     dns::DiscoverableService,
     xml::{
-        self, FromXml, HrefProperty, ItemDetails, Multistatus, ResponseWithProp,
+        self, FromXml, HrefProperty, ItemDetails, Multistatus, ResponseVariant, ResponseWithProp,
         SimplePropertyMeta, StringProperty, CALDAV_STR, CARDDAV_STR, DAV,
     },
     Auth, AuthError,
@@ -405,15 +405,22 @@ impl DavClient {
             .filter(|r| r.href != collection_href);
 
         let mut result = Vec::new();
-        for mut item in items {
-            result.push(ListedResource {
-                details: item
-                    .propstats
-                    .pop()
-                    .ok_or(xml::Error::MissingData("props"))?
-                    .prop,
-                href: item.href,
-            });
+        for item in items {
+            match item.variant {
+                ResponseVariant::WithProps { mut propstats } => {
+                    result.push(ListedResource {
+                        details: propstats
+                            .pop()
+                            .ok_or(xml::Error::MissingData("props"))?
+                            .prop,
+                        href: item.href,
+                    });
+                }
+                ResponseVariant::WithoutProps { .. } => {
+                    // FIXME: this fails when a collection has nested collections. It should not.
+                    return Err(DavError::Xml(xml::Error::MissingData("propstat")));
+                }
+            }
         }
 
         Ok(result)

@@ -265,3 +265,33 @@ async fn test_create_and_fetch_resource() {
     //     String::from_utf8(minimal_icalendar()).unwrap()
     // );
 }
+
+#[tokio::test]
+#[ignore]
+async fn test_fetch_missing() {
+    init();
+
+    let caldav_client = create_test_client_from_env().await;
+    let home_set = caldav_client.calendar_home_set.as_ref().unwrap().clone();
+
+    let collection = format!("{}{}/", home_set.path(), &random_string(16));
+    caldav_client
+        .create_collection(&collection, CollectionType::Calendar)
+        .await
+        .unwrap();
+
+    let resource = format!("{}{}.ics", collection, &random_string(12));
+    caldav_client
+        .create_resource(&resource, minimal_icalendar(), mime_types::CALENDAR)
+        .await
+        .unwrap();
+
+    let fetched = caldav_client
+        .get_resources(&collection, vec![&resource, &random_string(8)])
+        .await
+        .unwrap();
+    dbg!(&fetched);
+    assert_eq!(fetched.len(), 2);
+    // FIXME: order is not guaranteed, this will likely fail on some server:
+    assert_eq!(fetched[1].content, Err(StatusCode::NOT_FOUND));
+}
