@@ -286,8 +286,9 @@ async fn test_fetch_missing() {
         .await
         .unwrap();
 
+    let missing = format!("{}{}.ics", collection, &random_string(8));
     let fetched = caldav_client
-        .get_resources(&collection, vec![&resource, &random_string(8)])
+        .get_resources(&collection, vec![&resource, &missing])
         .await
         .unwrap();
     dbg!(&fetched);
