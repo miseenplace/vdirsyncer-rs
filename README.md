@@ -26,7 +26,7 @@ export CALDAV_SERVER=http://localhost:8000
 export CALDAV_USERNAME=test
 export CALDAV_PASSWORD=test
 
-cargo test -- --ignored --test-threads=1
+cargo test -- --ignored
 ```
 
 Test clients use the discovery bootstrapping mechanism, do you can specify your

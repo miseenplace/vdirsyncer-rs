@@ -9,6 +9,7 @@ use libdav::{
     CalDavClient,
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use serial_test::serial;
 use std::fmt::Write;
 
 #[cfg(test)]
@@ -45,6 +46,7 @@ fn random_string(len: usize) -> String {
 
 #[tokio::test]
 #[ignore]
+#[serial]
 async fn test_create_and_delete_collection() {
     init();
 
@@ -128,6 +130,7 @@ fn minimal_icalendar() -> Vec<u8> {
 
 #[tokio::test]
 #[ignore]
+#[serial]
 async fn test_create_and_delete_resource() {
     init();
 
@@ -231,6 +234,7 @@ async fn test_create_and_delete_resource() {
 
 #[tokio::test]
 #[ignore]
+#[serial]
 async fn test_create_and_fetch_resource() {
     init();
 
@@ -268,6 +272,7 @@ async fn test_create_and_fetch_resource() {
 
 #[tokio::test]
 #[ignore]
+#[serial]
 async fn test_fetch_missing() {
     init();
 
