@@ -270,9 +270,9 @@ async fn test_create_and_fetch_resource() {
     // );
 }
 
-#[tokio::test]
-#[ignore]
 #[serial]
+#[test_with::env(CALDAV_SERVER)]
+#[tokio::test]
 async fn test_fetch_missing() {
     init();
 
