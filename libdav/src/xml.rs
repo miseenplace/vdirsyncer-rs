@@ -912,6 +912,58 @@ mod more_tests {
     }
 
     #[test]
+    fn test_multi_variants() {
+        let raw = br#"<ns0:multistatus
+	xmlns:ns0="DAV:"
+	xmlns:ns1="urn:ietf:params:xml:ns:caldav">
+	<ns0:response>
+		<ns0:href>/user/calendars/Q208cKvMGjAdJFUw/qJJ9Li5DPJYr.ics</ns0:href>
+		<ns0:propstat>
+			<ns0:status>HTTP/1.1 200 OK</ns0:status>
+			<ns0:prop>
+				<ns0:getetag>"adb2da8d3cb1280a932ed8f8a2e8b4ecf66d6a02"</ns0:getetag>
+				<ns1:calendar-data>CALENDAR-DATA-HERE</ns1:calendar-data>
+			</ns0:prop>
+		</ns0:propstat>
+	</ns0:response>
+	<ns0:response>
+		<ns0:href>/user/calendars/Q208cKvMGjAdJFUw/rKbu4uUn.ics</ns0:href>
+		<ns0:status>HTTP/1.1 404 Not Found</ns0:status>
+	</ns0:response>
+</ns0:multistatus>"#;
+        let parsed =
+            parse_multistatus::<ResponseWithProp<Report>>(raw, &ReportField::CALENDAR_DATA)
+                .unwrap()
+                .into_responses();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(
+            parsed[0],
+            ResponseWithProp {
+                href: "/user/calendars/Q208cKvMGjAdJFUw/qJJ9Li5DPJYr.ics".to_string(),
+                variant: ResponseVariant::WithProps {
+                    propstats: vec![PropStat {
+                        prop: Report {
+                            etag: Some("\"adb2da8d3cb1280a932ed8f8a2e8b4ecf66d6a02\"".to_string()),
+                            data: Some("CALENDAR-DATA-HERE".to_string())
+                        },
+                        status: StatusCode::OK
+                    }],
+                }
+            }
+        );
+        assert_eq!(
+            parsed[1],
+            ResponseWithProp {
+                href: "/user/calendars/Q208cKvMGjAdJFUw/rKbu4uUn.ics".to_string(),
+                variant: ResponseVariant::WithoutProps {
+                    hrefs: vec![],
+                    status: StatusCode::NOT_FOUND,
+                }
+            }
+        );
+    }
+
+    #[test]
     fn test_empty_response() {
         let raw = br#"<multistatus xmlns="DAV:" />"#;
         let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &())
