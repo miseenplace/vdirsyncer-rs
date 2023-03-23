@@ -37,6 +37,12 @@ pub enum DavError {
     InvalidResponse(Box<dyn std::error::Error + Send + Sync>),
 }
 
+impl From<StatusCode> for DavError {
+    fn from(status: StatusCode) -> Self {
+        DavError::BadStatusCode(status)
+    }
+}
+
 impl From<DavError> for io::Error {
     fn from(value: DavError) -> Self {
         match value {
@@ -651,9 +657,9 @@ impl std::fmt::Display for CollectionType {
 }
 
 #[inline]
-pub(crate) fn check_status(status: StatusCode) -> Result<(), DavError> {
+pub(crate) fn check_status(status: StatusCode) -> Result<(), StatusCode> {
     if !status.is_success() {
-        Err(DavError::BadStatusCode(status))
+        Err(status)
     } else {
         Ok(())
     }
