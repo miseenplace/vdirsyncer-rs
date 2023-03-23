@@ -1,10 +1,7 @@
 //! Helpers for parsing XML responses returned by WebDav/CalDav/CardDav servers.
 //!
-//! This mostly uses the low-level [`NsReader`] API from `quick-xml`, which
-//! supports namespaces and properties with details defined at runtime.
-//!
 //! These types are used internally by this crate and are generally reserved
-//! for advanced usage.
+//! **for advanced usage**.
 
 use http::{status::InvalidStatusCode, StatusCode};
 use log::{debug, warn};
