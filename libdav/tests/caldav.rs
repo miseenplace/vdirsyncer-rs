@@ -297,3 +297,15 @@ async fn test_fetch_missing() {
     // FIXME: order is not guaranteed, this will likely fail on some server:
     assert_eq!(fetched[1].content, Err(StatusCode::NOT_FOUND));
 }
+
+#[tokio::test]
+#[ignore]
+async fn test_check_support() {
+    init();
+
+    let caldav_client = create_test_client_from_env().await;
+    caldav_client
+        .check_support(caldav_client.context_path().clone())
+        .await
+        .unwrap();
+}

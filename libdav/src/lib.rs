@@ -159,3 +159,34 @@ pub struct FetchedResource {
     /// The contents of the resource if available, or the status code if unavailable.
     pub content: Result<FetchedResourceContent, StatusCode>,
 }
+
+/// Returned when checking support for a feature encounters an error.
+#[derive(thiserror::Error, Debug)]
+pub enum CheckSupportError {
+    #[error("the DAV header was missing from the response")]
+    MissingHeader,
+
+    #[error("the requested support is not advertised by the server")]
+    NotAdvertised,
+
+    #[error("the DAV header is not a valid string")]
+    HeaderNotAscii(#[from] http::header::ToStrError),
+
+    #[error("http error executing request")]
+    Network(#[from] hyper::Error),
+
+    #[error("invalid input URL")]
+    InvalidInput(#[from] http::Error),
+
+    #[error("internal error with specified authentication")]
+    Auth(#[from] crate::AuthError),
+
+    #[error("a request did not return a successful status code")]
+    BadStatusCode(http::StatusCode),
+}
+
+impl From<StatusCode> for CheckSupportError {
+    fn from(status: StatusCode) -> Self {
+        CheckSupportError::BadStatusCode(status)
+    }
+}

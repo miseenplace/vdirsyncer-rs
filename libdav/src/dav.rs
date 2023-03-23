@@ -285,7 +285,10 @@ impl DavClient {
     }
 
     // Internal wrapper around `http_client.request` that logs all response bodies.
-    async fn request(&self, request: Request<Body>) -> Result<(Parts, Bytes), hyper::Error> {
+    pub(crate) async fn request(
+        &self,
+        request: Request<Body>,
+    ) -> Result<(Parts, Bytes), hyper::Error> {
         let response = self.http_client.request(request).await?;
         let (head, body) = response.into_parts();
         let body = hyper::body::to_bytes(body).await?;

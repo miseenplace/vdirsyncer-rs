@@ -1,15 +1,17 @@
 use std::ops::{Deref, DerefMut};
 
-use hyper::Uri;
+use http::Method;
+use hyper::{Body, Uri};
+use log::debug;
 
 use crate::auth::Auth;
-use crate::dav::{DavError, GetResourceError};
+use crate::dav::{check_status, DavError, GetResourceError};
 use crate::dns::DiscoverableService;
 use crate::xml::{
     ItemDetails, ReportField, Response, ResponseVariant, SimplePropertyMeta, StringProperty,
 };
-use crate::FetchedResource;
 use crate::{dav::DavClient, BootstrapError, DavWithAutoDiscovery, FindHomeSetError};
+use crate::{CheckSupportError, FetchedResource};
 
 /// A client to communicate with a caldav server.
 ///
@@ -197,6 +199,42 @@ impl CalDavClient {
 
         self.multi_get(calendar_href.as_ref(), body, &ReportField::CALENDAR_DATA)
             .await
+    }
+
+    /// Checks that the given URI advertises caldav support.
+    ///
+    /// See: <https://www.rfc-editor.org/rfc/rfc4791#section-5.1>
+    ///
+    /// # Known Issues
+    ///
+    /// - This is currently broken on Nextcloud. [Bug report][nextcloud].
+    ///
+    /// [nextcloud]: https://github.com/nextcloud/server/issues/37374
+    pub async fn check_support(&self, url: Uri) -> Result<(), CheckSupportError> {
+        let request = self
+            .request_builder()?
+            .method(Method::OPTIONS)
+            .uri(url)
+            .body(Body::empty())?;
+
+        let (head, _body) = self.request(request).await?;
+        check_status(head.status)?;
+
+        let header = head
+            .headers
+            .get("DAV")
+            .ok_or(CheckSupportError::MissingHeader)?
+            .to_str()?;
+
+        debug!("DAV header: '{}'", header);
+        if !header
+            .split(|c| c == ',')
+            .any(|part| part.trim() == "calendar-access")
+        {
+            Err(CheckSupportError::NotAdvertised)
+        } else {
+            Ok(())
+        }
     }
 }
 
