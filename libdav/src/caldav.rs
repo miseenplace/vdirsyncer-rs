@@ -6,7 +6,7 @@ use crate::auth::Auth;
 use crate::dav::{DavError, GetResourceError};
 use crate::dns::DiscoverableService;
 use crate::xml::{
-    ItemDetails, ReportField, ResponseVariant, ResponseWithProp, SimplePropertyMeta, StringProperty,
+    ItemDetails, ReportField, Response, ResponseVariant, SimplePropertyMeta, StringProperty,
 };
 use crate::FetchedResource;
 use crate::{dav::DavClient, BootstrapError, DavWithAutoDiscovery, FindHomeSetError};
@@ -115,12 +115,7 @@ impl CalDavClient {
     ) -> Result<Vec<(String, Option<String>)>, DavError> {
         let items = self
             // XXX: depth 1 or infinity?
-            .propfind::<ResponseWithProp<ItemDetails>>(
-                url.clone(),
-                "<resourcetype/><getetag/>",
-                1,
-                &(),
-            )
+            .propfind::<Response<ItemDetails>>(url.clone(), "<resourcetype/><getetag/>", 1, &())
             .await
             .map_err(DavError::from)?
             .into_iter()
@@ -155,7 +150,7 @@ impl CalDavClient {
             namespace: b"DAV:".to_vec(),
         };
 
-        self.propfind::<ResponseWithProp<StringProperty>>(
+        self.propfind::<Response<StringProperty>>(
             url.clone(),
             "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>",
             0,

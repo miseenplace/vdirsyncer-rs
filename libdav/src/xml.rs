@@ -260,11 +260,11 @@ impl FromXml for Report {
 /// A single response from a multistatus response.
 ///
 /// The inner type `T` will be parsed from the response's `prop` node.
-/// Generally, this will be a response to a `PROPFIND`.
+/// Generally, this is used for responses to `PROPFIND` or `REPORT`.
 ///
 /// See: <https://www.rfc-editor.org/rfc/rfc2518>
 #[derive(Debug, PartialEq, Eq)]
-pub struct ResponseWithProp<T>
+pub struct Response<T>
 where
     T: FromXml,
 {
@@ -361,7 +361,7 @@ where
     }
 }
 
-impl<T> FromXml for ResponseWithProp<T>
+impl<T> FromXml for Response<T>
 where
     T: FromXml,
 {
@@ -512,7 +512,7 @@ where
             }
         }
 
-        Ok(ResponseWithProp {
+        Ok(Response {
             href: href.ok_or(Error::MissingData("href"))?,
             variant: variant.build()?,
         })
@@ -529,8 +529,8 @@ pub struct SimplePropertyMeta {
     pub namespace: Vec<u8>,
 }
 
-impl From<ResponseWithProp<StringProperty>> for Option<String> {
-    fn from(value: ResponseWithProp<StringProperty>) -> Option<String> {
+impl From<Response<StringProperty>> for Option<String> {
+    fn from(value: Response<StringProperty>) -> Option<String> {
         if let ResponseVariant::WithProps { mut propstats } = value.variant {
             propstats.pop()?.prop.0
         } else {
@@ -636,7 +636,7 @@ impl FromXml for StringProperty {
 /// ```
 pub struct HrefProperty(Option<String>);
 
-impl ResponseWithProp<HrefProperty> {
+impl Response<HrefProperty> {
     #[must_use]
     pub fn into_maybe_string(self) -> Option<String> {
         if let ResponseVariant::WithProps { mut propstats } = self.variant {
@@ -838,11 +838,11 @@ mod more_tests {
   </response>
 </multistatus>"#;
 
-        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &())
+        let parsed = parse_multistatus::<Response<ItemDetails>>(raw, &())
             .unwrap()
             .into_responses();
         assert_eq!(parsed.len(), 2);
-        assert_eq!(parsed[0], ResponseWithProp {
+        assert_eq!(parsed[0], Response {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/".to_string(),
             variant: ResponseVariant::WithProps {
                 propstats: vec![
@@ -859,7 +859,7 @@ mod more_tests {
                 ],
             }
         });
-        assert_eq!(parsed[1], ResponseWithProp {
+        assert_eq!(parsed[1], Response {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/395b00a0-eebc-40fd-a98e-176a06367c82.ics".to_string(),
             variant: ResponseVariant::WithProps {
                 propstats: vec![
@@ -901,7 +901,7 @@ mod more_tests {
         </d:propstat>
     </d:response>
 </d:multistatus>"#;
-        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &())
+        let parsed = parse_multistatus::<Response<ItemDetails>>(raw, &())
             .unwrap()
             .into_responses();
         assert_eq!(parsed.len(), 1);
@@ -931,14 +931,13 @@ mod more_tests {
 		<ns0:status>HTTP/1.1 404 Not Found</ns0:status>
 	</ns0:response>
 </ns0:multistatus>"#;
-        let parsed =
-            parse_multistatus::<ResponseWithProp<Report>>(raw, &ReportField::CALENDAR_DATA)
-                .unwrap()
-                .into_responses();
+        let parsed = parse_multistatus::<Response<Report>>(raw, &ReportField::CALENDAR_DATA)
+            .unwrap()
+            .into_responses();
         assert_eq!(parsed.len(), 2);
         assert_eq!(
             parsed[0],
-            ResponseWithProp {
+            Response {
                 href: "/user/calendars/Q208cKvMGjAdJFUw/qJJ9Li5DPJYr.ics".to_string(),
                 variant: ResponseVariant::WithProps {
                     propstats: vec![PropStat {
@@ -953,7 +952,7 @@ mod more_tests {
         );
         assert_eq!(
             parsed[1],
-            ResponseWithProp {
+            Response {
                 href: "/user/calendars/Q208cKvMGjAdJFUw/rKbu4uUn.ics".to_string(),
                 variant: ResponseVariant::WithoutProps {
                     hrefs: vec![],
@@ -966,7 +965,7 @@ mod more_tests {
     #[test]
     fn test_empty_response() {
         let raw = br#"<multistatus xmlns="DAV:" />"#;
-        let parsed = parse_multistatus::<ResponseWithProp<ItemDetails>>(raw, &())
+        let parsed = parse_multistatus::<Response<ItemDetails>>(raw, &())
             .unwrap()
             .into_responses();
         assert_eq!(parsed.len(), 0);
@@ -991,13 +990,13 @@ mod more_tests {
             name: b"displayname".to_vec(),
             namespace: DAV.to_vec(),
         };
-        let parsed = parse_multistatus::<ResponseWithProp<StringProperty>>(raw, &property_data)
+        let parsed = parse_multistatus::<Response<StringProperty>>(raw, &property_data)
             .unwrap()
             .into_responses();
         assert_eq!(parsed.len(), 1);
         assert_eq!(
             parsed[0],
-            ResponseWithProp {
+            Response {
                 href: "/path".to_string(),
                 variant: ResponseVariant::WithProps {
                     propstats: vec![PropStat {

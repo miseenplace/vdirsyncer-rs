@@ -5,7 +5,7 @@ use hyper::Uri;
 use crate::auth::Auth;
 use crate::dav::DavError;
 use crate::dns::DiscoverableService;
-use crate::xml::{ItemDetails, ResponseVariant, ResponseWithProp, SimplePropertyMeta};
+use crate::xml::{ItemDetails, Response, ResponseVariant, SimplePropertyMeta};
 use crate::{dav::DavClient, BootstrapError, DavWithAutoDiscovery, FindHomeSetError};
 
 /// A client to communicate with a carddav server.
@@ -110,12 +110,7 @@ impl CardDavClient {
         // FIXME: DRY: This is almost a copy-paste of the same method from CalDavClient
         let items = self
             // XXX: depth 1 or infinity?
-            .propfind::<ResponseWithProp<ItemDetails>>(
-                url.clone(),
-                "<resourcetype/><getetag/>",
-                1,
-                &(),
-            )
+            .propfind::<Response<ItemDetails>>(url.clone(), "<resourcetype/><getetag/>", 1, &())
             .await
             .map_err(DavError::from)?
             .into_iter()

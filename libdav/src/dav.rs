@@ -9,9 +9,8 @@ use crate::{
     auth::AuthExt,
     dns::DiscoverableService,
     xml::{
-        self, FromXml, HrefProperty, ItemDetails, Multistatus, Report, ReportField,
-        ResponseVariant, ResponseWithProp, SimplePropertyMeta, StringProperty, CALDAV_STR,
-        CARDDAV_STR, DAV,
+        self, FromXml, HrefProperty, ItemDetails, Multistatus, Report, ReportField, Response,
+        ResponseVariant, SimplePropertyMeta, StringProperty, CALDAV_STR, CARDDAV_STR, DAV,
     },
     Auth, AuthError, FetchedResource, FetchedResourceContent,
 };
@@ -208,7 +207,7 @@ impl DavClient {
         prop_type: &SimplePropertyMeta,
     ) -> Result<Option<Uri>, DavError> {
         let maybe_href = match self
-            .propfind::<ResponseWithProp<HrefProperty>>(url.clone(), prop, 0, prop_type)
+            .propfind::<Response<HrefProperty>>(url.clone(), prop, 0, prop_type)
             .await?
             .pop()
         {
@@ -306,17 +305,12 @@ impl DavClient {
             namespace: DAV.to_vec(),
         };
 
-        self.propfind::<ResponseWithProp<StringProperty>>(
-            url.clone(),
-            "<displayname/>",
-            0,
-            &property_data,
-        )
-        .await?
-        .pop()
-        .ok_or(xml::Error::MissingData("displayname"))
-        .map(Option::<String>::from)
-        .map_err(DavError::from)
+        self.propfind::<Response<StringProperty>>(url.clone(), "<displayname/>", 0, &property_data)
+            .await?
+            .pop()
+            .ok_or(xml::Error::MissingData("displayname"))
+            .map(Option::<String>::from)
+            .map_err(DavError::from)
     }
 
     /// Resolve the default context path using a well-known path.
@@ -389,7 +383,7 @@ impl DavClient {
         let url = self.relative_uri(collection_href)?;
 
         let items = self
-            .propfind::<ResponseWithProp<ItemDetails>>(
+            .propfind::<Response<ItemDetails>>(
                 url,
                 "<resourcetype/><getcontenttype/><getetag/>",
                 1,
@@ -586,7 +580,7 @@ impl DavClient {
             .body(Body::from(body))?;
 
         let responses = self
-            .request_multistatus::<ResponseWithProp<Report>>(request, data)
+            .request_multistatus::<Response<Report>>(request, data)
             .await?
             .into_responses();
 
