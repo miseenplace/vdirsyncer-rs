@@ -292,10 +292,20 @@ async fn test_fetch_missing() {
         .await
         .unwrap();
     dbg!(&fetched);
-    // FIXME: Nextcloud does not return 404 for missing items; it simply ignores them.
-    assert_eq!(fetched.len(), 2);
-    // FIXME: order is not guaranteed, this will likely fail on some server:
-    assert_eq!(fetched[1].content, Err(StatusCode::NOT_FOUND));
+    // Nextcloud omits missing entries, rather than return 404, so we might have just one result.
+    match fetched.len() {
+        1 => {}
+        2 => {
+            // ASSERTION: one of the two entries is the 404 one
+            fetched
+                .iter()
+                .find(|r| r.content == Err(StatusCode::NOT_FOUND))
+                .unwrap();
+        }
+        _ => panic!("bogus amount of resources found"),
+    }
+    // ASSERTION: one entry is the matching resource
+    fetched.iter().find(|r| r.content.is_ok()).unwrap();
 }
 
 #[tokio::test]
