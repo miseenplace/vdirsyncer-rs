@@ -99,6 +99,40 @@ async fn test_create_and_delete_collection() {
     assert_eq!(orig_calendar_count, third_calendar_count);
 }
 
+#[tokio::test]
+#[ignore]
+async fn test_create_and_force_delete_collection() {
+    init();
+
+    let caldav_client = create_test_client_from_env().await;
+    let home_set = caldav_client.calendar_home_set.as_ref().unwrap().clone();
+    let calendars = caldav_client.find_calendars(&home_set).await.unwrap();
+
+    let orig_calendar_count = calendars.len();
+
+    let new_collection = format!("{}{}/", home_set.path(), &random_string(16));
+    caldav_client
+        .create_collection(&new_collection, CollectionType::Calendar)
+        .await
+        .unwrap();
+
+    let calendars = caldav_client.find_calendars(&home_set).await.unwrap();
+    let after_creationg_calendar_count = calendars.len();
+
+    assert_eq!(orig_calendar_count + 1, after_creationg_calendar_count);
+
+    // Try deleting with the wrong etag.
+    caldav_client
+        .force_delete(&new_collection)
+        .await
+        .unwrap();
+
+    let calendars = caldav_client.find_calendars(&home_set).await.unwrap();
+    let after_deletion_calendar_count = calendars.len();
+
+    assert_eq!(orig_calendar_count, after_deletion_calendar_count);
+}
+
 fn minimal_icalendar() -> Vec<u8> {
     let mut entry = String::new();
     let uid = random_string(12);

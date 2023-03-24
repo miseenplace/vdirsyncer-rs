@@ -535,10 +535,10 @@ impl WebDavClient {
         Ok(())
     }
 
-    /// Deletes a resource or collection at `href`.
+    /// Deletes the resource at `href`.
     ///
-    /// Because the implementation for deleting resources and collections is identical,
-    /// this same method covers both cases.
+    /// The resource MAY be a collection. Because the implementation for deleting resources and
+    /// collections is identical, this same method covers both cases.
     ///
     /// # Errors
     ///
@@ -554,6 +554,34 @@ impl WebDavClient {
             .uri(self.relative_uri(href.as_ref())?)
             .header("Content-Type", "application/xml; charset=utf-8")
             .header("If-Match", etag.as_ref())
+            .body(Body::empty())?;
+
+        let (head, _body) = self.request(request).await?;
+        check_status(head.status)?;
+
+        Ok(())
+    }
+
+    /// Force deletion of the resource at `href`.
+    ///
+    /// This function cannot guarantee that a resource or collection has not been modified since
+    /// it was last read. **Use this function with great care**.
+    ///
+    /// The resource MAY be a collection. Because the implementation for deleting resources and
+    /// collections is identical, this same method covers both cases.
+    ///
+    /// # Errors
+    ///
+    /// See [`request_multistatus`](Self::request_multistatus).
+    pub async fn force_delete<Href>(&self, href: Href) -> Result<(), DeleteError>
+    where
+        Href: AsRef<str>,
+    {
+        let request = self
+            .request_builder()?
+            .method(Method::DELETE)
+            .uri(self.relative_uri(href.as_ref())?)
+            .header("Content-Type", "application/xml; charset=utf-8")
             .body(Body::empty())?;
 
         let (head, _body) = self.request(request).await?;
