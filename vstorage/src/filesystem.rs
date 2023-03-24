@@ -228,7 +228,7 @@ impl Collection for FilesystemCollection {
         let basename = item
             .ident()
             .chars()
-            .filter(|c| c.is_ascii_alphanumeric())
+            .filter(char::is_ascii_alphanumeric)
             .collect::<String>();
         let href = format!("{}.{}", basename, self.definition.extension);
 
