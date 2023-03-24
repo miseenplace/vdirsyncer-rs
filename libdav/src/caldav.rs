@@ -10,8 +10,8 @@ use crate::dns::DiscoverableService;
 use crate::xml::{
     ItemDetails, ReportField, Response, ResponseVariant, SimplePropertyMeta, StringProperty,
 };
-use crate::{dav::DavClient, BootstrapError, DavWithAutoDiscovery, FindHomeSetError};
-use crate::{CheckSupportError, FetchedResource};
+use crate::{common_bootstrap, CheckSupportError, FetchedResource};
+use crate::{dav::DavClient, BootstrapError, FindHomeSetError};
 
 /// A client to communicate with a caldav server.
 ///
@@ -74,7 +74,9 @@ impl CalDavClient {
     /// Does not return an error if DNS records as missing, only if they contain invalid data.
     pub async fn auto_bootstrap(base_url: Uri, auth: Auth) -> Result<Self, BootstrapError> {
         let mut client = Self::raw_client(base_url, auth);
-        client = client.common_bootstrap().await?;
+        let port = client.default_port()?;
+        let service = client.service()?;
+        common_bootstrap(&mut client, port, service).await?;
 
         // If obtaining a principal fails, the specification says we should query the user. This
         // tries to use the `base_url` first, since the user might have provided it for a reason.
@@ -236,9 +238,7 @@ impl CalDavClient {
             Ok(())
         }
     }
-}
 
-impl DavWithAutoDiscovery for CalDavClient {
     /// Returns the default port to try and use.
     ///
     /// If the `base_url` has an explicit port, that value is returned. Otherwise,
@@ -246,7 +246,6 @@ impl DavWithAutoDiscovery for CalDavClient {
     /// anything else.
     #[inline]
     fn default_port(&self) -> Result<u16, BootstrapError> {
-        // raise InvaidUrl?
         if let Some(port) = self.base_url.port_u16() {
             Ok(port)
         } else {
@@ -270,9 +269,5 @@ impl DavWithAutoDiscovery for CalDavClient {
             "http" | "caldav" => Ok(DiscoverableService::CalDav),
             _ => Err(BootstrapError::InvalidUrl("scheme is invalid")),
         }
-    }
-
-    fn set_principal(&mut self, principal: Option<Uri>) {
-        self.principal = principal;
     }
 }

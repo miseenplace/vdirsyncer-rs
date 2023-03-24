@@ -3,10 +3,11 @@ use std::ops::{Deref, DerefMut};
 use hyper::Uri;
 
 use crate::auth::Auth;
+use crate::common_bootstrap;
 use crate::dav::DavError;
 use crate::dns::DiscoverableService;
 use crate::xml::{ItemDetails, Response, ResponseVariant, SimplePropertyMeta};
-use crate::{dav::DavClient, BootstrapError, DavWithAutoDiscovery, FindHomeSetError};
+use crate::{dav::DavClient, BootstrapError, FindHomeSetError};
 
 /// A client to communicate with a carddav server.
 ///
@@ -66,7 +67,9 @@ impl CardDavClient {
     /// Does not return an error if DNS records as missing, only if they contain invalid data.
     pub async fn auto_bootstrap(base_url: Uri, auth: Auth) -> Result<Self, BootstrapError> {
         let mut client = Self::raw_client(base_url, auth);
-        client = client.common_bootstrap().await?;
+        let port = client.default_port()?;
+        let service = client.service()?;
+        common_bootstrap(&mut client, port, service).await?;
 
         // If obtaining a principal fails, the specification says we should query the user. This
         // tries to use the `base_url` first, since the user might have provided it for a reason.
@@ -132,9 +135,7 @@ impl CardDavClient {
     // TODO: get_addressbook_description ("addressbook-description", "urn:ietf:params:xml:ns:carddav")
     // TODO: DRY: the above methods are super repetitive.
     //       Maybe all these props impl a single trait, so the API could be `get_prop<T>(url)`?
-}
 
-impl DavWithAutoDiscovery for CardDavClient {
     /// Returns the default port to try and use.
     ///
     /// If the `base_url` has an explicit port, that value is returned. Otherwise,
@@ -165,9 +166,5 @@ impl DavWithAutoDiscovery for CardDavClient {
             "http" | "caldav" => Ok(DiscoverableService::CalDav),
             _ => Err(BootstrapError::InvalidUrl("scheme is invalid")),
         }
-    }
-
-    fn set_principal(&mut self, principal: Option<Uri>) {
-        self.principal = principal;
     }
 }

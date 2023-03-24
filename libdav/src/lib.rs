@@ -4,10 +4,9 @@
 //!
 //! Both clients implement `Deref<Target = DavClient>`, so all the associated
 //! functions for [`dav::DavClient`] are usable directly.
-use std::{io, ops::DerefMut};
+use std::io;
 
 use crate::auth::{Auth, AuthError};
-use async_trait::async_trait;
 use dav::DavError;
 use dav::{DavClient, FindCurrentUserPrincipalError};
 use dns::{
@@ -80,68 +79,58 @@ where
     }
 }
 
-/// Trait implementing some common bits between CardDav and CalDav.
+/// A big chunk of the bootstrap logic that's shared between both types.
 ///
-/// This trait is deliberately made private; it's just a convenient recipe to reuse
-/// some bits of code.
-#[async_trait]
-pub(crate) trait DavWithAutoDiscovery:
-    DerefMut<Target = DavClient> + Sized + Send + Sync
-{
-    fn default_port(&self) -> Result<u16, BootstrapError>;
-    fn service(&self) -> Result<DiscoverableService, BootstrapError>;
-    fn set_principal(&mut self, principal: Option<Uri>);
+/// Mutates the `base_url` for the client to the discovered one.
+async fn common_bootstrap(
+    client: &mut DavClient,
+    port: u16,
+    service: DiscoverableService,
+) -> Result<(), BootstrapError> {
+    let domain = client
+        .base_url
+        .host()
+        .ok_or(BootstrapError::InvalidUrl("a host is required"))?;
 
-    /// A big chunk of the bootstrap logic that's shared between both types.
-    ///
-    /// NOTE: This is not public. Both `CalDavClient` and `CardDavClient` wrap this with extra steps.
-    async fn common_bootstrap(mut self) -> Result<Self, BootstrapError> {
-        let domain = self
-            .base_url
-            .host()
-            .ok_or(BootstrapError::InvalidUrl("a host is required"))?;
-        let port = self.default_port()?;
-        let service = self.service()?;
+    let dname = Dname::bytes_from_str(domain)
+        .map_err(|_| BootstrapError::InvalidUrl("invalid domain name"))?;
+    let candidates = {
+        let mut candidates = resolve_srv_record(service, &dname, port)
+            .await
+            .map_err(BootstrapError::DnsError)?;
 
-        let dname = Dname::bytes_from_str(domain)
-            .map_err(|_| BootstrapError::InvalidUrl("invalid domain name"))?;
-        let candidates = {
-            let mut candidates = resolve_srv_record(service, &dname, port)
+        // If there are no SRV records, try the domain/port in the provided URI.
+        if candidates.is_empty() {
+            candidates.push((domain.to_string(), port));
+        }
+        candidates
+    };
+
+    if let Some(path) = find_context_path_via_txt_records(service, &dname).await? {
+        // TODO: validate that the path works on the chosen server.
+        let candidate = &candidates[0];
+
+        client.base_url = Uri::builder()
+            .scheme(service.scheme())
+            .authority(format!("{}:{}", candidate.0, candidate.1))
+            .path_and_query(path)
+            .build()
+            .map_err(BootstrapError::BadSrv)?;
+    } else {
+        for candidate in candidates {
+            if let Ok(Some(url)) = client
+                .find_context_path(service, &candidate.0, candidate.1)
                 .await
-                .map_err(BootstrapError::DnsError)?;
-
-            // If there are no SRV records, try the domain/port in the provided URI.
-            if candidates.is_empty() {
-                candidates.push((domain.to_string(), port));
-            }
-            candidates
-        };
-
-        if let Some(path) = find_context_path_via_txt_records(service, &dname).await? {
-            // TODO: validate that the path works on the chosen server.
-            let candidate = &candidates[0];
-
-            self.base_url = Uri::builder()
-                .scheme(service.scheme())
-                .authority(format!("{}:{}", candidate.0, candidate.1))
-                .path_and_query(path)
-                .build()
-                .map_err(BootstrapError::BadSrv)?;
-        } else {
-            for candidate in candidates {
-                if let Ok(Some(url)) = self
-                    .find_context_path(service, &candidate.0, candidate.1)
-                    .await
-                {
-                    self.base_url = url;
-                    break;
-                }
+            {
+                client.base_url = url;
+                break;
             }
         }
-
-        self.set_principal(self.find_current_user_principal().await?);
-        Ok(self)
     }
+
+    client.principal = client.find_current_user_principal().await?;
+
+    Ok(())
 }
 
 /// See [`FetchedResource`]
