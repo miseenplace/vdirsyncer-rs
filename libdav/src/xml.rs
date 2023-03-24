@@ -787,13 +787,13 @@ where
 /// - If parsing the XML fails in any way.
 /// - If any necessary fields are missing.
 /// - If any unexpected XML nodes are found.
-pub(crate) fn parse_multistatus<F>(raw: &[u8], data: &F::Data) -> Result<Multistatus<F>, Error>
+pub(crate) fn parse_xml<F>(raw: &[u8], data: &F::Data) -> Result<F, Error>
 where
     F: FromXml,
 {
     let mut reader = NsReader::from_reader(raw);
     reader.trim_text(true);
-    Multistatus::from_xml(&mut reader, data)
+    F::from_xml(&mut reader, data)
 }
 
 #[cfg(test)]
@@ -833,7 +833,7 @@ mod more_tests {
   </response>
 </multistatus>"#;
 
-        let parsed = parse_multistatus::<Response<ItemDetails>>(raw, &())
+        let parsed = parse_xml::<Multistatus<Response<ItemDetails>>>(raw, &())
             .unwrap()
             .into_responses();
         assert_eq!(parsed.len(), 2);
@@ -896,7 +896,7 @@ mod more_tests {
         </d:propstat>
     </d:response>
 </d:multistatus>"#;
-        let parsed = parse_multistatus::<Response<ItemDetails>>(raw, &())
+        let parsed = parse_xml::<Multistatus<Response<ItemDetails>>>(raw, &())
             .unwrap()
             .into_responses();
         assert_eq!(parsed.len(), 1);
@@ -926,7 +926,7 @@ mod more_tests {
 		<ns0:status>HTTP/1.1 404 Not Found</ns0:status>
 	</ns0:response>
 </ns0:multistatus>"#;
-        let parsed = parse_multistatus::<Response<Report>>(raw, &ReportField::CALENDAR_DATA)
+        let parsed = parse_xml::<Multistatus<Response<Report>>>(raw, &ReportField::CALENDAR_DATA)
             .unwrap()
             .into_responses();
         assert_eq!(parsed.len(), 2);
@@ -960,7 +960,7 @@ mod more_tests {
     #[test]
     fn test_empty_response() {
         let raw = br#"<multistatus xmlns="DAV:" />"#;
-        let parsed = parse_multistatus::<Response<ItemDetails>>(raw, &())
+        let parsed = parse_xml::<Multistatus<Response<ItemDetails>>>(raw, &())
             .unwrap()
             .into_responses();
         assert_eq!(parsed.len(), 0);
@@ -985,7 +985,7 @@ mod more_tests {
             name: b"displayname".to_vec(),
             namespace: DAV.to_vec(),
         };
-        let parsed = parse_multistatus::<Response<StringProperty>>(raw, &property_data)
+        let parsed = parse_xml::<Multistatus<Response<StringProperty>>>(raw, &property_data)
             .unwrap()
             .into_responses();
         assert_eq!(parsed.len(), 1);

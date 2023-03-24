@@ -273,7 +273,7 @@ impl WebDavClient {
         let (head, body) = self.request(request).await?;
         check_status(head.status)?;
 
-        xml::parse_multistatus::<T>(&body, data).map_err(DavError::from)
+        xml::parse_xml::<Multistatus<T>>(&body, data).map_err(DavError::from)
     }
 
     // Internal wrapper around `http_client.request` that logs all response bodies.
