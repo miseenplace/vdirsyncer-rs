@@ -94,7 +94,7 @@ pub enum FindCurrentUserPrincipalError {
 
 /// A generic webdav client.
 #[derive(Debug)]
-pub struct DavClient {
+pub struct WebDavClient {
     /// Base URL to be used for all requests.
     pub(crate) base_url: Uri,
     auth: Auth,
@@ -113,12 +113,12 @@ pub struct DavClient {
     pub(crate) principal: Option<Uri>,
 }
 
-impl DavClient {
+impl WebDavClient {
     /// Builds a new webdav client.
     ///
     /// Only `https` is enabled by default. Plain-text `http` is only enabled if the
     /// input uri has a scheme of `http` or `caldav`.
-    pub fn new(base_url: Uri, auth: Auth) -> DavClient {
+    pub fn new(base_url: Uri, auth: Auth) -> WebDavClient {
         let builder = HttpsConnectorBuilder::new().with_native_roots();
         let builder = match base_url.scheme() {
             Some(scheme) if scheme.as_str() == "http" => builder.https_or_http(),
@@ -127,7 +127,7 @@ impl DavClient {
         };
 
         let https = builder.enable_http1().build();
-        DavClient {
+        WebDavClient {
             base_url,
             auth,
             http_client: Client::builder().build(https),

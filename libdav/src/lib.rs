@@ -3,12 +3,12 @@
 //! See [`CalDavClient`] and [`CardDavClient`] as a useful entry points.
 //!
 //! Both clients implement `Deref<Target = DavClient>`, so all the associated
-//! functions for [`dav::DavClient`] are usable directly.
+//! functions for [`dav::WebDavClient`] are usable directly.
 use std::io;
 
 use crate::auth::{Auth, AuthError};
 use dav::DavError;
-use dav::{DavClient, FindCurrentUserPrincipalError};
+use dav::{FindCurrentUserPrincipalError, WebDavClient};
 use dns::{
     find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, SrvError, TxtError,
 };
@@ -83,7 +83,7 @@ where
 ///
 /// Mutates the `base_url` for the client to the discovered one.
 async fn common_bootstrap(
-    client: &mut DavClient,
+    client: &mut WebDavClient,
     port: u16,
     service: DiscoverableService,
 ) -> Result<(), BootstrapError> {

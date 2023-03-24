@@ -7,17 +7,17 @@ use crate::common_bootstrap;
 use crate::dav::DavError;
 use crate::dns::DiscoverableService;
 use crate::xml::{ItemDetails, Response, ResponseVariant, SimplePropertyMeta};
-use crate::{dav::DavClient, BootstrapError, FindHomeSetError};
+use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 
 /// A client to communicate with a carddav server.
 ///
-/// Wraps around a [`DavClient`], which provides the underlying webdav functionality.
+/// Wraps around a [`WebDavClient`], which provides the underlying functionality.
 #[derive(Debug)]
 pub struct CardDavClient {
     /// The `base_url` may be (due to bootstrapping discovery) different to the one provided as input.
     ///
     /// See: <https://www.rfc-editor.org/rfc/rfc6764#section-1>
-    dav_client: DavClient,
+    dav_client: WebDavClient,
     /// URL of collections that are either address book collections or ordinary collections
     /// that have child or descendant address book collections owned by the principal.
     /// See: <https://www.rfc-editor.org/rfc/rfc6352#section-7.1.1>
@@ -25,14 +25,14 @@ pub struct CardDavClient {
 }
 
 impl Deref for CardDavClient {
-    type Target = DavClient;
+    type Target = WebDavClient;
 
     fn deref(&self) -> &Self::Target {
         &self.dav_client
     }
 }
 impl DerefMut for CardDavClient {
-    fn deref_mut(&mut self) -> &mut crate::dav::DavClient {
+    fn deref_mut(&mut self) -> &mut crate::dav::WebDavClient {
         &mut self.dav_client
     }
 }
@@ -45,7 +45,7 @@ impl CardDavClient {
         // TODO: check that the URL is http or https (or mailto:?).
 
         Self {
-            dav_client: DavClient::new(base_url, auth),
+            dav_client: WebDavClient::new(base_url, auth),
             addressbook_home_set: None,
         }
     }

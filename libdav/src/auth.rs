@@ -4,7 +4,7 @@ use base64::{prelude::BASE64_STANDARD, write::EncoderWriter};
 use http::{request::Builder, HeaderValue};
 use std::io::Write;
 
-/// Authentication schemes supported by [`DavClient`](crate::dav::DavClient).
+/// Authentication schemes supported by [`WebDavClient`](crate::dav::WebDavClient).
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum Auth {

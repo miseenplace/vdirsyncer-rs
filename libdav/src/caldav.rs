@@ -11,17 +11,17 @@ use crate::xml::{
     ItemDetails, ReportField, Response, ResponseVariant, SimplePropertyMeta, StringProperty,
 };
 use crate::{common_bootstrap, CheckSupportError, FetchedResource};
-use crate::{dav::DavClient, BootstrapError, FindHomeSetError};
+use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 
 /// A client to communicate with a caldav server.
 ///
-/// Wraps around a [`DavClient`], which provides the underlying webdav functionality.
+/// Wraps around a [`WebDavClient`], which provides the underlying functionality.
 #[derive(Debug)]
 pub struct CalDavClient {
     /// The `base_url` may be (due to bootstrapping discovery) different to the one provided as input.
     ///
     /// See: <https://www.rfc-editor.org/rfc/rfc6764#section-1>
-    dav_client: DavClient,
+    dav_client: WebDavClient,
     /// URL of collections that are either calendar collections or ordinary collections
     /// that have child or descendant calendar collections owned by the principal.
     /// See: <https://www.rfc-editor.org/rfc/rfc4791#section-6.2.1>
@@ -29,14 +29,14 @@ pub struct CalDavClient {
 }
 
 impl Deref for CalDavClient {
-    type Target = DavClient;
+    type Target = WebDavClient;
 
     fn deref(&self) -> &Self::Target {
         &self.dav_client
     }
 }
 impl DerefMut for CalDavClient {
-    fn deref_mut(&mut self) -> &mut crate::dav::DavClient {
+    fn deref_mut(&mut self) -> &mut crate::dav::WebDavClient {
         &mut self.dav_client
     }
 }
@@ -52,7 +52,7 @@ impl CalDavClient {
         // TODO: check that the URL is http or https (or mailto:?).
 
         Self {
-            dav_client: DavClient::new(base_url, auth),
+            dav_client: WebDavClient::new(base_url, auth),
             calendar_home_set: None,
         }
     }
@@ -173,7 +173,7 @@ impl CalDavClient {
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](DavClient::request_multistatus).
+    /// See [`request_multistatus`](WebDavClient::request_multistatus).
     pub async fn get_resources<Href>(
         &self,
         calendar_href: Href,
