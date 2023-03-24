@@ -94,22 +94,23 @@ async fn common_bootstrap(
 
     let dname = Dname::bytes_from_str(domain)
         .map_err(|_| BootstrapError::InvalidUrl("invalid domain name"))?;
-    let candidates = {
-        let mut candidates = resolve_srv_record(service, &dname, port)
+    let host_candidates = {
+        let candidates = resolve_srv_record(service, &dname, port)
             .await
             .map_err(BootstrapError::DnsError)?;
 
         // If there are no SRV records, try the domain/port in the provided URI.
         if candidates.is_empty() {
-            candidates.push((domain.to_string(), port));
+            vec![(domain.to_string(), port)]
+        } else {
+            candidates
         }
-        candidates
     };
 
     if let Some(path) = find_context_path_via_txt_records(service, &dname).await? {
-        // TODO: validate that the path works on the chosen server.
-        let candidate = &candidates[0];
+        let candidate = &host_candidates[0];
 
+        // TODO: check `DAV:` capabilities here.
         client.base_url = Uri::builder()
             .scheme(service.scheme())
             .authority(format!("{}:{}", candidate.0, candidate.1))
@@ -117,7 +118,7 @@ async fn common_bootstrap(
             .build()
             .map_err(BootstrapError::UnusableSrv)?;
     } else {
-        for candidate in candidates {
+        for candidate in host_candidates {
             if let Ok(Some(url)) = client
                 .find_context_path(service, &candidate.0, candidate.1)
                 .await
