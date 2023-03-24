@@ -657,10 +657,10 @@ impl std::fmt::Display for CollectionType {
 
 #[inline]
 pub(crate) fn check_status(status: StatusCode) -> Result<(), StatusCode> {
-    if !status.is_success() {
-        Err(status)
-    } else {
+    if status.is_success() {
         Ok(())
+    } else {
+        Err(status)
     }
 }
 

@@ -225,13 +225,13 @@ impl CalDavClient {
             .to_str()?;
 
         debug!("DAV header: '{}'", header);
-        if !header
+        if header
             .split(|c| c == ',')
             .any(|part| part.trim() == "calendar-access")
         {
-            Err(CheckSupportError::NotAdvertised)
-        } else {
             Ok(())
+        } else {
+            Err(CheckSupportError::NotAdvertised)
         }
     }
 
