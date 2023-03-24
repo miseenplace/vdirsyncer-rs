@@ -112,7 +112,6 @@ impl CalDavClient {
         url: &Uri,
     ) -> Result<Vec<(String, Option<String>)>, DavError> {
         let items = self
-            // XXX: depth 1 or infinity?
             .propfind::<ItemDetails>(url, "<resourcetype/><getetag/>", 1, &())
             .await
             .map_err(DavError::from)?
