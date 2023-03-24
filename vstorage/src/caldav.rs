@@ -57,7 +57,7 @@ impl Storage for CalDavStorage {
     async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
         let x = self
             .client
-            .find_calendars(self.client.context_path().clone())
+            .find_calendars(self.client.context_path())
             .await?
             .into_iter()
             .map(|(href, _etag)| {

@@ -44,7 +44,7 @@ async fn main() {
 
     println!("Resolved server URL to: {}", caldav_client.context_path());
 
-    let home_set = caldav_client.calendar_home_set.as_ref().unwrap().clone();
+    let home_set = caldav_client.calendar_home_set.as_ref().unwrap();
     let calendars = caldav_client.find_calendars(home_set).await.unwrap();
 
     println!("found {} calendars...", calendars.len());

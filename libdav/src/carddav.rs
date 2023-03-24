@@ -73,17 +73,13 @@ impl CardDavClient {
 
         // If obtaining a principal fails, the specification says we should query the user. This
         // tries to use the `base_url` first, since the user might have provided it for a reason.
-        let principal_url = client
-            .principal
-            .as_ref()
-            .unwrap_or(&client.base_url)
-            .clone();
+        let principal_url = client.principal.as_ref().unwrap_or(&client.base_url);
         client.addressbook_home_set = client.find_addressbook_home_set(principal_url).await?;
 
         Ok(client)
     }
 
-    async fn find_addressbook_home_set(&self, url: Uri) -> Result<Option<Uri>, FindHomeSetError> {
+    async fn find_addressbook_home_set(&self, url: &Uri) -> Result<Option<Uri>, FindHomeSetError> {
         let property_data = SimplePropertyMeta {
             name: b"addressbook-home-set".to_vec(),
             namespace: crate::xml::CARDDAV.to_vec(),
@@ -108,12 +104,12 @@ impl CardDavClient {
     /// If the HTTP call fails or parsing the XML response fails.
     pub async fn find_addresbooks(
         &self,
-        url: Uri,
+        url: &Uri,
     ) -> Result<Vec<(String, Option<String>)>, DavError> {
         // FIXME: DRY: This is almost a copy-paste of the same method from CalDavClient
         let items = self
             // XXX: depth 1 or infinity?
-            .propfind::<Response<ItemDetails>>(url.clone(), "<resourcetype/><getetag/>", 1, &())
+            .propfind::<Response<ItemDetails>>(url, "<resourcetype/><getetag/>", 1, &())
             .await
             .map_err(DavError::from)?
             .into_iter()

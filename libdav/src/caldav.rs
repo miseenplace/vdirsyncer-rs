@@ -80,17 +80,13 @@ impl CalDavClient {
 
         // If obtaining a principal fails, the specification says we should query the user. This
         // tries to use the `base_url` first, since the user might have provided it for a reason.
-        let principal_url = client
-            .principal
-            .as_ref()
-            .unwrap_or(&client.base_url)
-            .clone();
+        let principal_url = client.principal.as_ref().unwrap_or(&client.base_url);
         client.calendar_home_set = client.find_calendar_home_set(principal_url).await?;
 
         Ok(client)
     }
 
-    async fn find_calendar_home_set(&self, url: Uri) -> Result<Option<Uri>, FindHomeSetError> {
+    async fn find_calendar_home_set(&self, url: &Uri) -> Result<Option<Uri>, FindHomeSetError> {
         let property_data = SimplePropertyMeta {
             name: b"calendar-home-set".to_vec(),
             namespace: crate::xml::CALDAV.to_vec(),
@@ -115,11 +111,11 @@ impl CalDavClient {
     /// If the HTTP call fails or parsing the XML response fails.
     pub async fn find_calendars(
         &self,
-        url: Uri,
+        url: &Uri,
     ) -> Result<Vec<(String, Option<String>)>, DavError> {
         let items = self
             // XXX: depth 1 or infinity?
-            .propfind::<Response<ItemDetails>>(url.clone(), "<resourcetype/><getetag/>", 1, &())
+            .propfind::<Response<ItemDetails>>(url, "<resourcetype/><getetag/>", 1, &())
             .await
             .map_err(DavError::from)?
             .into_iter()
@@ -155,7 +151,7 @@ impl CalDavClient {
         };
 
         self.propfind::<Response<StringProperty>>(
-            url.clone(),
+            &url,
             "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>",
             0,
             &property_data,
@@ -212,7 +208,7 @@ impl CalDavClient {
     /// - This is currently broken on Nextcloud. [Bug report][nextcloud].
     ///
     /// [nextcloud]: https://github.com/nextcloud/server/issues/37374
-    pub async fn check_support(&self, url: Uri) -> Result<(), CheckSupportError> {
+    pub async fn check_support(&self, url: &Uri) -> Result<(), CheckSupportError> {
         let request = self
             .request_builder()?
             .method(Method::OPTIONS)

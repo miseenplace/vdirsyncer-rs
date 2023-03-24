@@ -180,11 +180,7 @@ impl DavClient {
 
         // Try querying the provided base url...
         let maybe_principal = self
-            .find_href_prop_as_uri(
-                self.base_url.clone(),
-                "<current-user-principal/>",
-                &property_data,
-            )
+            .find_href_prop_as_uri(&self.base_url, "<current-user-principal/>", &property_data)
             .await;
 
         match maybe_principal {
@@ -195,7 +191,7 @@ impl DavClient {
 
         // ... Otherwise, try querying the root path.
         let root = self.relative_uri("/")?;
-        self.find_href_prop_as_uri(root, "<current-user-principal/>", &property_data)
+        self.find_href_prop_as_uri(&root, "<current-user-principal/>", &property_data)
             .await
             .map_err(FindCurrentUserPrincipalError::RequestError)
 
@@ -208,12 +204,12 @@ impl DavClient {
     /// Very specific, but de-duplicates a few identical methods.
     pub(crate) async fn find_href_prop_as_uri(
         &self,
-        url: Uri,
+        url: &Uri,
         prop: &str,
         prop_type: &SimplePropertyMeta,
     ) -> Result<Option<Uri>, DavError> {
         let maybe_href = match self
-            .propfind::<Response<HrefProperty>>(url.clone(), prop, 0, prop_type)
+            .propfind::<Response<HrefProperty>>(url, prop, 0, prop_type)
             .await?
             .pop()
         {
@@ -226,7 +222,7 @@ impl DavClient {
                 .try_into()
                 .map_err(|e| DavError::InvalidResponse(Box::from(e)))?;
 
-            let mut parts = url.into_parts();
+            let mut parts = url.clone().into_parts();
             parts.path_and_query = Some(path);
             Some(Uri::from_parts(parts))
                 .transpose()
@@ -245,7 +241,7 @@ impl DavClient {
     /// See [`request_multistatus`](Self::request_multistatus).
     pub async fn propfind<T: FromXml>(
         &self,
-        url: Uri,
+        url: &Uri,
         prop: &str,
         depth: u8,
         data: &T::Data,
@@ -314,7 +310,7 @@ impl DavClient {
             namespace: DAV.to_vec(),
         };
 
-        self.propfind::<Response<StringProperty>>(url.clone(), "<displayname/>", 0, &property_data)
+        self.propfind::<Response<StringProperty>>(&url, "<displayname/>", 0, &property_data)
             .await?
             .pop()
             .ok_or(xml::Error::MissingData("displayname"))
@@ -393,7 +389,7 @@ impl DavClient {
 
         let items = self
             .propfind::<Response<ItemDetails>>(
-                url,
+                &url,
                 "<resourcetype/><getcontenttype/><getetag/>",
                 1,
                 &(),

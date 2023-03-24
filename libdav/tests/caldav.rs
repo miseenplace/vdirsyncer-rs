@@ -50,10 +50,7 @@ async fn test_create_and_delete_collection() {
 
     let caldav_client = create_test_client_from_env().await;
     let home_set = caldav_client.calendar_home_set.as_ref().unwrap().clone();
-    let calendars = caldav_client
-        .find_calendars(home_set.clone())
-        .await
-        .unwrap();
+    let calendars = caldav_client.find_calendars(&home_set).await.unwrap();
 
     let orig_calendar_count = calendars.len();
 
@@ -63,10 +60,7 @@ async fn test_create_and_delete_collection() {
         .await
         .unwrap();
 
-    let calendars = caldav_client
-        .find_calendars(home_set.clone())
-        .await
-        .unwrap();
+    let calendars = caldav_client.find_calendars(&home_set).await.unwrap();
     let new_calendar_count = calendars.len();
 
     assert_eq!(orig_calendar_count + 1, new_calendar_count);
@@ -74,7 +68,7 @@ async fn test_create_and_delete_collection() {
     // Get the etag of the newly created calendar:
     // ASSERTION: this validates that a collection with a matching href was created.
     let etag = caldav_client
-        .find_calendars(home_set.clone())
+        .find_calendars(&home_set)
         .await
         .unwrap()
         .into_iter()
@@ -99,10 +93,7 @@ async fn test_create_and_delete_collection() {
         .await
         .unwrap();
 
-    let calendars = caldav_client
-        .find_calendars(home_set.clone())
-        .await
-        .unwrap();
+    let calendars = caldav_client.find_calendars(&home_set).await.unwrap();
     let third_calendar_count = calendars.len();
 
     assert_eq!(orig_calendar_count, third_calendar_count);
@@ -315,7 +306,7 @@ async fn test_check_support() {
 
     let caldav_client = create_test_client_from_env().await;
     caldav_client
-        .check_support(caldav_client.context_path().clone())
+        .check_support(caldav_client.context_path())
         .await
         .unwrap();
 }

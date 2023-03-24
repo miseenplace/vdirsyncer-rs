@@ -45,11 +45,7 @@ async fn main() {
 
     println!("Resolved server URL to: {}", carddav_client.context_path());
 
-    let home_set = carddav_client
-        .addressbook_home_set
-        .as_ref()
-        .unwrap()
-        .clone();
+    let home_set = carddav_client.addressbook_home_set.as_ref().unwrap();
     let addressbooks = carddav_client.find_addresbooks(home_set).await.unwrap();
 
     println!("found {} addressbooks...", addressbooks.len());
