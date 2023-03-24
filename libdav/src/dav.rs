@@ -98,8 +98,6 @@ pub struct WebDavClient {
     /// Base URL to be used for all requests.
     pub(crate) base_url: Uri,
     auth: Auth,
-    // TODO: we can eventually use a generic connector to allow explicitly
-    // using caldav or caldavs.
     http_client: Client<HttpsConnector<HttpConnector>>,
     /// URL to a principal resource corresponding to the currently authenticated user.
     ///

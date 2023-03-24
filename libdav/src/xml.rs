@@ -228,7 +228,6 @@ impl FromXml for Report {
                     }
                 }
                 (State::CalendarData, (ResolveResult::Unbound, Event::Text(text))) => {
-                    // TODO: can I avoid copying here?
                     data = Some(text.unescape()?.to_string());
                 }
                 (State::CalendarData, (ResolveResult::Unbound, Event::CData(c))) => {
@@ -585,7 +584,6 @@ impl FromXml for StringProperty {
                     let text = std::str::from_utf8(&c.into_inner())
                         .map_err(|e| Error::Parser(quick_xml::Error::NonDecodable(Some(e))))?
                         .to_string();
-                    // TODO: on error, read_to_end to leave parser in a consistent state.
                     value = Some(text);
                 }
                 (_, (_, Event::Eof)) => {
