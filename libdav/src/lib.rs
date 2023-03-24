@@ -36,7 +36,7 @@ pub enum BootstrapError {
     DnsError(SrvError),
 
     #[error("SRV records returned domain/port pair that failed to parse")]
-    BadSrv(http::Error),
+    UnusableSrv(http::Error),
 
     #[error("error resolving context path via TXT records")]
     TxtError(#[from] TxtError),
@@ -59,7 +59,7 @@ impl From<BootstrapError> for io::Error {
             | BootstrapError::TxtError(_)
             | BootstrapError::HomeSet(_)
             | BootstrapError::CurrentPrincipal(_) => io::Error::new(io::ErrorKind::Other, value),
-            BootstrapError::BadSrv(_) => io::Error::new(io::ErrorKind::InvalidData, value),
+            BootstrapError::UnusableSrv(_) => io::Error::new(io::ErrorKind::InvalidData, value),
             BootstrapError::DavError(dav) => io::Error::from(dav),
         }
     }
@@ -115,7 +115,7 @@ async fn common_bootstrap(
             .authority(format!("{}:{}", candidate.0, candidate.1))
             .path_and_query(path)
             .build()
-            .map_err(BootstrapError::BadSrv)?;
+            .map_err(BootstrapError::UnusableSrv)?;
     } else {
         for candidate in candidates {
             if let Ok(Some(url)) = client
