@@ -191,23 +191,17 @@ pub async fn find_context_path_via_txt_records<T: std::convert::AsRef<[u8]>>(
     let question = Question::new_in(full_domain, Rtype::Txt);
 
     let response = resolver.query(question).await?;
-    let record = match response.answer()?.next() {
-        Some(r) => r?,
-        None => return Ok(None),
-    };
-    let parsed_record = match record.into_record::<Txt<_>>()? {
-        Some(r) => r,
-        None => return Ok(None),
-    };
-    let data = parsed_record.data();
-    let bytes = data
+    let Some(record) = response.answer()?.next() else { return Ok(None)};
+    let Some(parsed_record) = record?.into_record::<Txt<_>>()? else { return Ok(None) };
+
+    let bytes = parsed_record
+        .data()
         .text::<Vec<u8>>()
         .expect("record fits in newly created buffer");
-    let mut text = String::from_utf8(bytes)?;
 
-    if text.starts_with("path=") {
-        Ok(Some(text.split_off(5)))
-    } else {
-        Err(TxtError::BadTxt)
-    }
+    let path_result = String::from_utf8(bytes)?
+        .strip_prefix("path=")
+        .ok_or(TxtError::BadTxt)
+        .map(String::from);
+    Some(path_result).transpose()
 }
