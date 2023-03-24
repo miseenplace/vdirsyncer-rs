@@ -208,6 +208,11 @@ impl CalDavClient {
     /// - This is currently broken on Nextcloud. [Bug report][nextcloud].
     ///
     /// [nextcloud]: https://github.com/nextcloud/server/issues/37374
+    ///
+    /// # Errors
+    ///
+    /// If there are any network issues or if the server does not explicitly advertise caldav
+    /// support.
     pub async fn check_support(&self, url: &Uri) -> Result<(), CheckSupportError> {
         let request = self
             .request_builder()?
