@@ -217,19 +217,17 @@ impl WebDavClient {
             None => return Ok(None),
         };
 
-        if let Some(href) = maybe_href {
-            let path = href
-                .try_into()
-                .map_err(|e| DavError::InvalidResponse(Box::from(e)))?;
+        let Some(href) = maybe_href else { return Ok(None) };
 
-            let mut parts = url.clone().into_parts();
-            parts.path_and_query = Some(path);
-            Some(Uri::from_parts(parts))
-                .transpose()
-                .map_err(|e| DavError::InvalidResponse(Box::from(e)))
-        } else {
-            Ok(None)
-        }
+        let path = href
+            .try_into()
+            .map_err(|e| DavError::InvalidResponse(Box::from(e)))?;
+
+        let mut parts = url.clone().into_parts();
+        parts.path_and_query = Some(path);
+        Some(Uri::from_parts(parts))
+            .transpose()
+            .map_err(|e| DavError::InvalidResponse(Box::from(e)))
     }
 
     /// Sends a `PROPFIND` request and parses the result.
