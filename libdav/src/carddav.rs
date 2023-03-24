@@ -6,7 +6,7 @@ use crate::auth::Auth;
 use crate::common_bootstrap;
 use crate::dav::DavError;
 use crate::dns::DiscoverableService;
-use crate::xml::{ItemDetails, Response, ResponseVariant, SimplePropertyMeta};
+use crate::xml::{ItemDetails, ResponseVariant, SimplePropertyMeta};
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 
 /// A client to communicate with a carddav server.
@@ -109,7 +109,7 @@ impl CardDavClient {
         // FIXME: DRY: This is almost a copy-paste of the same method from CalDavClient
         let items = self
             // XXX: depth 1 or infinity?
-            .propfind::<Response<ItemDetails>>(url, "<resourcetype/><getetag/>", 1, &())
+            .propfind::<ItemDetails>(url, "<resourcetype/><getetag/>", 1, &())
             .await
             .map_err(DavError::from)?
             .into_iter()

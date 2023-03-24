@@ -207,7 +207,7 @@ impl WebDavClient {
         prop_type: &SimplePropertyMeta,
     ) -> Result<Option<Uri>, DavError> {
         let maybe_href = match self
-            .propfind::<Response<HrefProperty>>(url, prop, 0, prop_type)
+            .propfind::<HrefProperty>(url, prop, 0, prop_type)
             .await?
             .pop()
         {
@@ -241,7 +241,7 @@ impl WebDavClient {
         prop: &str,
         depth: u8,
         data: &T::Data,
-    ) -> Result<Vec<T>, DavError> {
+    ) -> Result<Vec<Response<T>>, DavError> {
         let request = self
             .request_builder()?
             .method(Method::from_bytes(b"PROPFIND").expect("API for HTTP methods is stupid"))
@@ -306,7 +306,7 @@ impl WebDavClient {
             namespace: DAV.to_vec(),
         };
 
-        self.propfind::<Response<StringProperty>>(&url, "<displayname/>", 0, &property_data)
+        self.propfind::<StringProperty>(&url, "<displayname/>", 0, &property_data)
             .await?
             .pop()
             .ok_or(xml::Error::MissingData("displayname"))
@@ -384,12 +384,7 @@ impl WebDavClient {
         let url = self.relative_uri(collection_href)?;
 
         let items = self
-            .propfind::<Response<ItemDetails>>(
-                &url,
-                "<resourcetype/><getcontenttype/><getetag/>",
-                1,
-                &(),
-            )
+            .propfind::<ItemDetails>(&url, "<resourcetype/><getcontenttype/><getetag/>", 1, &())
             .await?
             .into_iter()
             .filter(|r| r.href != collection_href);
