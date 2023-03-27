@@ -122,10 +122,7 @@ async fn test_create_and_force_delete_collection() {
     assert_eq!(orig_calendar_count + 1, after_creationg_calendar_count);
 
     // Try deleting with the wrong etag.
-    caldav_client
-        .force_delete(&new_collection)
-        .await
-        .unwrap();
+    caldav_client.force_delete(&new_collection).await.unwrap();
 
     let calendars = caldav_client.find_calendars(&home_set).await.unwrap();
     let after_deletion_calendar_count = calendars.len();
