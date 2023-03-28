@@ -8,9 +8,12 @@ triggers:
     condition: failure
     to: Hugo Osvaldo Barrera <hugo@whynothugo.nl>
 tasks:
+  - prepare: |
+      cd vdirsyncer-rs
+      cargo fetch --frozen
   - build: |
       cd vdirsyncer-rs
-      cargo build
+      cargo build --offline
       cargo build --examples
   - lint: |
       cd vdirsyncer-rs
