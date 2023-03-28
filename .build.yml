@@ -14,15 +14,13 @@ tasks:
   - build: |
       cd vdirsyncer-rs
       cargo build --offline
-      cargo build --examples
   - lint: |
       cd vdirsyncer-rs
       cargo fmt --check
       cargo clippy
   - test: |
       cd vdirsyncer-rs
-      cargo test
-      cargo test --doc
+      cargo test  # this includes examples and doctests
   - doc: |
       cd vdirsyncer-rs
-      cargo doc
+      cargo doc  # fails on broken links
