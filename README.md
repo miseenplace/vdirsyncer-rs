@@ -36,6 +36,20 @@ the real server and port automatically.
 DO NOT use the credentials for real/personal/work account for test; these is no
 guarantee that these tests won't delete your data!
 
+# Sending patches
+
+Just once, configure the patches list for this repo:
+
+```
+git config sendemail.to '~whynothugo/vdirsyncer@lists.sr.ht'
+```
+
+Make changes. Run tests. Commit. Then send patches:
+
+```
+git send-email COMMIT_RANGE
+```
+
 # Credits
 
 Special thanks to the [NLnet foundation] that helped receive financial support
