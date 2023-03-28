@@ -10,10 +10,10 @@ triggers:
 tasks:
   - prepare: |
       cd vdirsyncer-rs
-      cargo fetch --frozen
+      cargo fetch --locked  # make sure lockfile is up to date
   - build: |
       cd vdirsyncer-rs
-      cargo build --offline
+      cargo build
   - lint: |
       cd vdirsyncer-rs
       cargo fmt --check
