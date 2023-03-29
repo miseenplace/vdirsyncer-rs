@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use hyper::Uri;
 
-use crate::auth::Auth;
+use crate::builder::{ClientBuilder, NeedsUri};
 use crate::common_bootstrap;
 use crate::dav::DavError;
 use crate::dns::DiscoverableService;
@@ -11,7 +11,32 @@ use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 
 /// A client to communicate with a carddav server.
 ///
-/// Wraps around a [`WebDavClient`], which provides the underlying functionality.
+/// Instances are created via a builder:
+///
+/// ```rust,no_run
+/// # use libdav::CardDavClient;
+/// use http::Uri;
+/// use libdav::auth::Auth;
+///
+/// # tokio::runtime::Runtime::new().unwrap().block_on(async {
+/// let uri = Uri::try_from("https://example.com").unwrap();
+/// let auth = Auth::Basic {
+///     username: String::from("user"),
+///     password: Some(String::from("secret")),
+/// };
+///
+/// let client = CardDavClient::builder()
+///     .with_uri(uri)
+///     .with_auth(auth)
+///     .build()
+///     .auto_bootstrap()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+///
+/// For common cases, [`auto_bootstrap`](Self::auto_bootstrap) should be called on the client to
+/// bootstrap it automatically.
 #[derive(Debug)]
 pub struct CardDavClient {
     /// The `base_url` may be (due to bootstrapping discovery) different to the one provided as input.
@@ -37,17 +62,20 @@ impl DerefMut for CardDavClient {
     }
 }
 
-impl CardDavClient {
-    /// Returns a client without any automatic bootstrapping.
-    ///
-    /// It is generally advised to use [`CardDavClient::auto_bootstrap`] instead.
-    pub fn raw_client(base_url: Uri, auth: Auth) -> Self {
-        // TODO: check that the URL is http or https (or mailto:?).
-
-        Self {
-            dav_client: WebDavClient::new(base_url, auth),
+impl ClientBuilder<CardDavClient, crate::builder::Ready> {
+    /// Return a built client.
+    pub fn build(self) -> CardDavClient {
+        CardDavClient {
+            dav_client: WebDavClient::new(self.state.uri, self.state.auth),
             addressbook_home_set: None,
         }
+    }
+}
+
+impl CardDavClient {
+    /// Creates a new builder. See [`ClientBuilder`] for details.
+    pub fn builder() -> ClientBuilder<Self, NeedsUri> {
+        ClientBuilder::new()
     }
 
     // TODO: methods to serialise and deserialise (mostly to cache all discovery data).
@@ -65,18 +93,17 @@ impl CardDavClient {
     /// parse.
     ///
     /// Does not return an error if DNS records as missing, only if they contain invalid data.
-    pub async fn auto_bootstrap(base_url: Uri, auth: Auth) -> Result<Self, BootstrapError> {
-        let mut client = Self::raw_client(base_url, auth);
-        let port = client.default_port()?;
-        let service = client.service()?;
-        common_bootstrap(&mut client, port, service).await?;
+    pub async fn auto_bootstrap(mut self) -> Result<Self, BootstrapError> {
+        let port = self.default_port()?;
+        let service = self.service()?;
+        common_bootstrap(&mut self, port, service).await?;
 
         // If obtaining a principal fails, the specification says we should query the user. This
         // tries to use the `base_url` first, since the user might have provided it for a reason.
-        let principal_url = client.principal.as_ref().unwrap_or(&client.base_url);
-        client.addressbook_home_set = client.find_addressbook_home_set(principal_url).await?;
+        let principal_url = self.principal.as_ref().unwrap_or(&self.base_url);
+        self.addressbook_home_set = self.find_addressbook_home_set(principal_url).await?;
 
-        Ok(client)
+        Ok(self)
     }
 
     async fn find_addressbook_home_set(&self, url: &Uri) -> Result<Option<Uri>, FindHomeSetError> {

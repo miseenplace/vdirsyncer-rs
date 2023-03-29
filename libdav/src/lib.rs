@@ -17,6 +17,7 @@ use http::StatusCode;
 use hyper::Uri;
 
 pub mod auth;
+pub mod builder;
 mod caldav;
 mod carddav;
 pub mod dav;

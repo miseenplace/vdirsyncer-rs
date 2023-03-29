@@ -24,15 +24,16 @@ async fn create_test_client_from_env() -> CalDavClient {
     let username = std::env::var("CALDAV_USERNAME").unwrap();
     let password = std::env::var("CALDAV_PASSWORD").unwrap();
 
-    CalDavClient::auto_bootstrap(
-        server.parse().unwrap(),
-        Auth::Basic {
+    CalDavClient::builder()
+        .with_uri(server.parse().unwrap())
+        .with_auth(Auth::Basic {
             username,
             password: Some(password),
-        },
-    )
-    .await
-    .unwrap()
+        })
+        .build()
+        .auto_bootstrap()
+        .await
+        .unwrap()
 }
 
 fn random_string(len: usize) -> String {

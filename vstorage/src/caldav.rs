@@ -22,7 +22,12 @@ pub struct CalDavDefinition {
 #[async_trait]
 impl Definition for CalDavDefinition {
     async fn storage(self) -> Result<Box<dyn Storage>> {
-        let unwrapped_client = CalDavClient::auto_bootstrap(self.url, self.auth).await?;
+        let unwrapped_client = CalDavClient::builder()
+            .with_uri(self.url)
+            .with_auth(self.auth)
+            .build()
+            .auto_bootstrap()
+            .await?;
         let client = Arc::from(unwrapped_client);
 
         Ok(Box::from(CalDavStorage { client }))

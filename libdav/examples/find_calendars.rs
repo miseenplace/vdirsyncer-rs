@@ -32,15 +32,16 @@ async fn main() {
     let username = arguments.next().expect("$2 is a valid username");
     let password = arguments.next().expect("$3 is a valid password");
 
-    let caldav_client = CalDavClient::auto_bootstrap(
-        base_url,
-        Auth::Basic {
+    let caldav_client = CalDavClient::builder()
+        .with_uri(base_url)
+        .with_auth(Auth::Basic {
             username,
             password: Some(password),
-        },
-    )
-    .await
-    .unwrap();
+        })
+        .build()
+        .auto_bootstrap()
+        .await
+        .unwrap();
 
     println!("Resolved server URL to: {}", caldav_client.context_path());
 
