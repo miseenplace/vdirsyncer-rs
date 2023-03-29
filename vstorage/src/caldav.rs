@@ -3,7 +3,7 @@
 //! XXX: WARNING: This module is VERY INCOMPLETE!
 
 use std::{
-    io::{Error, Result},
+    io::{Error, ErrorKind, Result},
     sync::Arc,
 };
 
@@ -44,8 +44,15 @@ pub struct CalDavStorage {
 #[async_trait]
 impl Storage for CalDavStorage {
     async fn check(&self) -> Result<()> {
-        // TODO: use https://www.rfc-editor.org/rfc/rfc4791#section-5.1
-        todo!()
+        let uri = &self
+            .client
+            .calendar_home_set
+            .as_ref()
+            .unwrap_or(self.client.context_path());
+        self.client
+            .check_support(uri)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e))
     }
 
     /// Finds existing collections for this storage.
