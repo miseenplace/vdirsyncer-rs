@@ -19,7 +19,7 @@ use http::Uri;
 use libdav::auth::Auth;
 use libdav::CardDavClient;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     let mut arguments = std::env::args();
     arguments
