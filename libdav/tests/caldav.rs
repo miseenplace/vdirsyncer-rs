@@ -276,7 +276,7 @@ async fn test_create_and_fetch_resource() {
     assert_eq!(items.len(), 1);
 
     let fetched = caldav_client
-        .get_resources(&collection, vec![&items[0].href])
+        .get_resources(&collection, &[&items[0].href])
         .await
         .unwrap();
     assert_eq!(fetched.len(), 1);
@@ -311,7 +311,7 @@ async fn test_fetch_missing() {
 
     let missing = format!("{}{}.ics", collection, &random_string(8));
     let fetched = caldav_client
-        .get_resources(&collection, vec![&resource, &missing])
+        .get_resources(&collection, &[&resource, &missing])
         .await
         .unwrap();
     dbg!(&fetched);

@@ -9,10 +9,10 @@ use std::{
 
 use async_trait::async_trait;
 use http::Uri;
-use libdav::auth::Auth;
 use libdav::CalDavClient;
+use libdav::{auth::Auth, dav::CollectionType};
 
-use crate::base::{Collection, Definition, MetadataKind, Storage};
+use crate::base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage};
 
 pub struct CalDavDefinition {
     pub url: Uri,
@@ -80,8 +80,15 @@ impl Storage for CalDavStorage {
         Ok(x)
     }
 
-    async fn create_collection(&mut self, _href: &str) -> Result<Box<dyn Collection>> {
-        todo!()
+    async fn create_collection(&mut self, href: &str) -> Result<Box<dyn Collection>> {
+        self.client
+            .create_collection(href, CollectionType::Calendar)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+        Ok(Box::from(CalDavCollection {
+            href: href.to_string(),
+            client: self.client.clone(),
+        }))
     }
 
     async fn destroy_collection(&mut self, _href: &str) -> Result<()> {
@@ -115,25 +122,62 @@ impl Collection for CalDavCollection {
         &self.href
     }
 
-    async fn list(&self) -> Result<Vec<crate::base::ItemRef>> {
-        todo!()
+    async fn list(&self) -> Result<Vec<ItemRef>> {
+        let response = self.client.list_resources(&self.href).await?;
+        let mut items = Vec::with_capacity(response.len());
+        for r in response {
+            items.push(ItemRef {
+                href: r.href,
+                etag: r.details.etag.ok_or(Error::from(ErrorKind::InvalidData))?,
+            });
+        }
+        Ok(items)
     }
 
-    async fn get(&self, _href: &str) -> Result<(crate::base::Item, crate::base::Etag)> {
-        todo!()
+    async fn get(&self, href: &str) -> Result<(Item, Etag)> {
+        let mut results = self
+            .client
+            .get_resources(&self.href, &[href])
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+
+        if results.len() != 1 {
+            return Err(ErrorKind::InvalidData.into());
+        }
+
+        let item = results.pop().expect("results has exactly one item");
+        if item.href != href {
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!("Requested href: {}, got: {}", href, item.href,),
+            ));
+        }
+
+        let content = item
+            .content
+            .map_err(|e| Error::new(ErrorKind::Other, format!("Got status code: {e}")))?;
+
+        Ok((Item::from(content.data), content.etag))
     }
 
-    async fn get_many(
-        &self,
-        _hrefs: &[&str],
-    ) -> Result<Vec<(crate::base::Href, crate::base::Item, crate::base::Etag)>> {
-        todo!()
+    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Href, Item, Etag)>> {
+        Ok(self
+            .client
+            .get_resources(&self.href, hrefs)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e))?
+            .into_iter()
+            .map(|r| {
+                let content = r.content.unwrap();
+                (r.href, Item::from(content.data), content.etag)
+            })
+            .collect())
     }
 
-    async fn get_all(
-        &self,
-    ) -> Result<Vec<(crate::base::Href, crate::base::Item, crate::base::Etag)>> {
-        todo!()
+    async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>> {
+        let list = self.list().await?;
+        let hrefs = list.iter().map(|i| i.href.as_str()).collect::<Vec<_>>();
+        self.get_many(&hrefs).await
     }
 
     async fn add(&mut self, _item: &crate::base::Item) -> Result<crate::base::ItemRef> {
@@ -149,6 +193,9 @@ impl Collection for CalDavCollection {
         todo!()
     }
 
+    /// # Panics
+    ///
+    /// This function is not implemented.
     async fn set_meta(&mut self, _meta: MetadataKind, _value: &str) -> Result<()> {
         todo!()
     }

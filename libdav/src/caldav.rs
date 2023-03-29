@@ -197,13 +197,14 @@ impl CalDavClient {
     /// # Errors
     ///
     /// See [`request_multistatus`](WebDavClient::request_multistatus).
-    pub async fn get_resources<Href>(
+    pub async fn get_resources<S1, S2>(
         &self,
-        calendar_href: Href,
-        hrefs: Vec<Href>,
+        calendar_href: S1,
+        hrefs: &[S2],
     ) -> Result<Vec<FetchedResource>, GetResourceError>
     where
-        Href: AsRef<str>,
+        S1: AsRef<str>,
+        S2: AsRef<str>,
     {
         let mut body = String::from(
             r#"
