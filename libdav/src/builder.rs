@@ -45,16 +45,20 @@ impl<ClientType> ClientBuilder<ClientType, NeedsUri> {
     }
 
     /// Sets the host and username from an email.
+    ///
+    /// # Caveats
+    ///
+    /// - Only supports emails with up to one `@`. Realistically, this should never be a problem.
+    /// - Quotes are not handled with any special treatment, and will likely misbehave.
+    ///
+    /// Some invalid input MAY parse as valid. This interface is experimental. This should not be a
+    /// problem for normal email addresses.
     pub fn with_email<S: AsRef<str>>(
         self,
         email: S,
     ) -> Result<ClientBuilder<ClientType, NeedsPassword>, WithEmailError> {
         // The `Uri` type is broken for this case. See: https://github.com/hyperium/http/issues/596
-        let mut parts = email.as_ref().split('@');
-        let username = parts
-            .next()
-            .expect("split always yields are least one part");
-        let host = parts.next().unwrap_or("localhost");
+        let (username, host) = split_email(email.as_ref());
         Ok(ClientBuilder {
             state: NeedsPassword {
                 uri: Uri::try_from(host)?,
@@ -105,5 +109,37 @@ impl<ClientType> ClientBuilder<ClientType, NeedsPassword> {
             },
             phantom: self.phantom,
         }
+    }
+}
+
+/// Splits an email into username and host parts
+/// NOTE: this method is not public, so its caveats are listed for the `with_email` function above.
+fn split_email(email: &str) -> (&str, &str) {
+    let mut parts = email.rsplitn(2, '@');
+    let last = parts
+        .next()
+        .expect("split always yields are least one part");
+    match parts.next() {
+        Some(username) => (username, last),
+        None => (last, "localhost"),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::builder::split_email;
+
+    #[test]
+    fn test_split_email() {
+        assert_eq!(
+            split_email("charlie@example.com"),
+            ("charlie", "example.com")
+        );
+        assert_eq!(split_email("root"), ("root", "localhost"));
+        // TODO: Should quotes be removed here?
+        assert_eq!(
+            split_email("\"user@something\"@example.com"),
+            ("\"user@something\"", "example.com")
+        );
     }
 }
