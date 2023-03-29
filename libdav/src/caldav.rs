@@ -48,6 +48,8 @@ pub struct CalDavClient {
     /// URL of collections that are either calendar collections or ordinary collections
     /// that have child or descendant calendar collections owned by the principal.
     /// See: <https://www.rfc-editor.org/rfc/rfc4791#section-6.2.1>
+    ///
+    /// This field is automatically populated by [`auto_bootstrap`][Self::auto_bootstrap].
     pub calendar_home_set: Option<Uri>, // TODO: timeouts
 }
 
