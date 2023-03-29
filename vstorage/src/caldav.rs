@@ -41,9 +41,6 @@ pub struct CalDavStorage {
     client: Arc<CalDavClient>,
 }
 
-// TODO: https://www.rfc-editor.org/rfc/rfc6764 states that we should cache principals and other
-// data. But we don't have an API for storages to expose cachable data. Maybe we should?
-
 #[async_trait]
 impl Storage for CalDavStorage {
     async fn check(&self) -> Result<()> {
