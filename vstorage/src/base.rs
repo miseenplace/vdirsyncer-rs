@@ -59,6 +59,8 @@ pub trait Storage: Sync + Send {
     async fn create_collection(&mut self, href: &str) -> Result<Box<dyn Collection>>;
 
     /// Deletes an existing collection.
+    ///
+    /// A collection must be empty for deletion to succeed.
     async fn destroy_collection(&mut self, href: &str) -> Result<()>;
 
     /// Open an existing collection.

@@ -12,7 +12,7 @@ use std::{
     os::unix::prelude::MetadataExt,
 };
 use tokio::fs::{
-    create_dir, metadata, read_dir, read_to_string, remove_dir_all, DirEntry, File, OpenOptions,
+    create_dir, metadata, read_dir, read_to_string, remove_dir, DirEntry, File, OpenOptions,
 };
 use tokio::io::AsyncWriteExt;
 use tokio_stream::wrappers::ReadDirStream;
@@ -81,7 +81,7 @@ impl Storage for FilesystemStorage {
 
     async fn destroy_collection(&mut self, href: &str) -> Result<()> {
         let path = self.join_collection_href(href)?;
-        remove_dir_all(path).await
+        remove_dir(path).await
     }
 
     fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
