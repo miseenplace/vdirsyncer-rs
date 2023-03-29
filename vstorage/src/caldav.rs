@@ -66,11 +66,11 @@ impl Storage for CalDavStorage {
             .await?
             .into_iter()
             .map(|(href, _etag)| {
-                let collection: Box<dyn Collection> = Box::from(CalDavCollection {
+                CalDavCollection {
                     href,
                     client: self.client.clone(),
-                });
-                collection
+                }
+                .boxed()
             })
             .collect::<Vec<_>>();
         Ok(x)
@@ -85,11 +85,11 @@ impl Storage for CalDavStorage {
     }
 
     fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
-        let b: Box<dyn Collection> = Box::from(CalDavCollection {
+        Ok(CalDavCollection {
             client: self.client.clone(),
             href: href.to_string(),
-        });
-        Ok(b)
+        }
+        .boxed())
     }
 }
 

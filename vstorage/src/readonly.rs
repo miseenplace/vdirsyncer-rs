@@ -50,10 +50,7 @@ impl Storage for ReadOnlyStorage {
     async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
         self.inner.discover_collections().await.map(|v| {
             v.into_iter()
-                .map(|c| {
-                    let b: Box<dyn Collection> = Box::from(ReadOnlyCollection::from(c));
-                    b
-                })
+                .map(|c| ReadOnlyCollection::from(c).boxed())
                 .collect()
         })
     }
@@ -67,10 +64,9 @@ impl Storage for ReadOnlyStorage {
     }
 
     fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
-        self.inner.open_collection(href).map(|c| {
-            let b: Box<dyn Collection> = Box::from(ReadOnlyCollection::from(c));
-            b
-        })
+        self.inner
+            .open_collection(href)
+            .map(|c| ReadOnlyCollection::from(c).boxed())
     }
 }
 

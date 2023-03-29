@@ -125,6 +125,14 @@ pub trait Collection: Sync + Send {
 
     // collections should have non-pub cache of UID->hrefs
     // can this be implemented for Collection?
+
+    /// Shortcut to return a dynamically dispatched Box.
+    fn boxed(self) -> Box<dyn Collection>
+    where
+        Self: Sized + 'static,
+    {
+        Box::from(self)
+    }
 }
 
 /// A reference to an [`Item`] inside a collection.
