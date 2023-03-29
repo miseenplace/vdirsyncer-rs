@@ -17,6 +17,7 @@ pub struct Ready {
     pub(crate) auth: Auth,
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub struct ClientBuilder<ClientType, State> {
     pub(crate) state: State,
     pub(crate) phantom: PhantomData<ClientType>,
@@ -53,6 +54,10 @@ impl<ClientType> ClientBuilder<ClientType, NeedsUri> {
     ///
     /// Some invalid input MAY parse as valid. This interface is experimental. This should not be a
     /// problem for normal email addresses.
+    ///
+    /// # Errors
+    ///
+    /// If building the `base_uri` fails with the host extracted from the email address.
     pub fn with_email<S: AsRef<str>>(
         self,
         email: S,

@@ -76,6 +76,7 @@ impl ClientBuilder<CardDavClient, crate::builder::Ready> {
 
 impl CardDavClient {
     /// Creates a new builder. See [`ClientBuilder`] for details.
+    #[must_use]
     pub fn builder() -> ClientBuilder<Self, NeedsUri> {
         ClientBuilder::new()
     }
