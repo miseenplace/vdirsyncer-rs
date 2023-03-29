@@ -10,6 +10,8 @@ well as crates with associated functionality.
 
 # Contributing
 
+## Integration tests
+
 Some tests are marked with `#[ignore]`. These are not run by default because
 they rely on a server running. To run them with `xandikos`, you can start a
 test server with:
@@ -36,7 +38,25 @@ the real server and port automatically.
 DO NOT use the credentials for real/personal/work account for test; these is no
 guarantee that these tests won't delete your data!
 
-# Sending patches
+## Other test servers
+
+Radicale:
+
+```sh
+docker run --rm --publish 8001:8001 whynothugo/vdirsyncer-devkit-radicale
+```
+
+
+Baikal:
+
+```sh
+docker run --rm --publish 8002:80 whynothugo/vdirsyncer-devkit-baikal
+```
+
+- Cyrus IMAP: Hosted test account by Fastmail.com.
+- Nextcloud: Hosted test account.
+
+## Sending patches
 
 Just once, configure the patches list for this repo:
 
