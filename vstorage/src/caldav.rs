@@ -1,6 +1,4 @@
 //! A [`CalDavStorage`] is a single caldav repository, as specified in rfc4791.
-//!
-//! XXX: WARNING: This module is VERY INCOMPLETE!
 
 use std::{
     io::{Error, ErrorKind, Result},
@@ -91,8 +89,58 @@ impl Storage for CalDavStorage {
         }))
     }
 
-    async fn destroy_collection(&mut self, _href: &str) -> Result<()> {
-        todo!()
+    /// Deletes a caldav collection.
+    ///
+    /// This method does multiple network calls to ensure that the collection is empty. If the
+    /// server property supports `Etag` (it MUST as per the spec), this method guarantees that the
+    /// collection is empty when deleting it.
+    ///
+    /// If the server is not compliant and does not support Etags, possible race conditions could
+    /// occur and if calendar components are added to the collection at the same time, they may be
+    /// deleted.
+    async fn destroy_collection(&mut self, href: &str) -> Result<()> {
+        let mut results = self
+            .client
+            .get_resources(href, &[href])
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+
+        if results.len() != 1 {
+            return Err(ErrorKind::InvalidData.into());
+        }
+
+        let item = results.pop().expect("results has exactly one item");
+        if item.href != href {
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!("Requested href: {}, got: {}", href, item.href,),
+            ));
+        }
+
+        let etag = item
+            .content
+            .map_err(|e| Error::new(ErrorKind::Other, format!("Got status code: {e}")))?
+            .etag;
+        // TODO: specific error kind type for MissingEtag?
+
+        // TODO: if no etag -> use force deletion (and warn)
+        let collection = CalDavCollection {
+            client: self.client.clone(),
+            href: href.to_string(),
+        };
+
+        // TODO: verify that the collection is actually a calendar collection?
+        // This could be done by using discover above.
+        let items = collection.list().await?;
+        if !items.is_empty() {
+            return Err(ErrorKind::DirectoryNotEmpty.into());
+        }
+
+        self.client
+            .delete(href, etag)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+        Ok(())
     }
 
     fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
