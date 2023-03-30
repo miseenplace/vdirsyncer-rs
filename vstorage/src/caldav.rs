@@ -168,7 +168,12 @@ pub struct CalDavCollection {
 #[async_trait]
 impl Collection for CalDavCollection {
     fn id(&self) -> &str {
-        &self.href
+        self.href
+            .strip_suffix('/')
+            .unwrap_or("")
+            .rsplit('/')
+            .next()
+            .expect("rsplit always yields at least one result")
     }
 
     fn href(&self) -> &str {

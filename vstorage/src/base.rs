@@ -83,8 +83,7 @@ pub trait Storage: Sync + Send {
 pub trait Collection: Sync + Send {
     /// A unique identifier for this collection.
     ///
-    /// Href should not change over time, so should be associated with an immutable property of the
-    /// collection (e.g.: a relative URL path, or a directory's filename).
+    /// This string should be filename-safe.
     ///
     /// # Note for implementers
     ///
@@ -96,6 +95,9 @@ pub trait Collection: Sync + Send {
     ///
     /// This value can be used with [`Storage::open_collection`] to later access this same
     /// collection.
+    ///
+    /// Href should not change over time, so should be associated with an immutable property of the
+    /// collection (e.g.: a relative URL path, or a directory's filename).
     ///
     /// The exact meaning of this value is storage-specific, but should be remain consistent.
     fn href(&self) -> &str;
