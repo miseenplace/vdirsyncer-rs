@@ -62,9 +62,14 @@ impl Storage for CalDavStorage {
     /// Collections outside the principal's home can still be found by providing an absolute path
     /// to [`CalDavStorage::open_collection`].
     async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
+        let uri = self
+            .client
+            .calendar_home_set
+            .as_ref()
+            .unwrap_or(self.client.context_path());
         let x = self
             .client
-            .find_calendars(self.client.context_path())
+            .find_calendars(uri)
             .await?
             .into_iter()
             .map(|(href, _etag)| {
