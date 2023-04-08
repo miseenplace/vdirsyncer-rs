@@ -6,11 +6,7 @@
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::{
-    fs::Metadata,
-    io::{Error, ErrorKind, Result},
-    os::unix::prelude::MetadataExt,
-};
+use std::{fs::Metadata, os::unix::prelude::MetadataExt};
 use tokio::fs::{
     create_dir, metadata, read_dir, read_to_string, remove_dir, DirEntry, File, OpenOptions,
 };
@@ -19,6 +15,7 @@ use tokio_stream::wrappers::ReadDirStream;
 use tokio_stream::StreamExt;
 
 use crate::base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage};
+use crate::{Error, ErrorKind, Result};
 
 // TODO: atomic writes
 
@@ -33,12 +30,14 @@ pub struct FilesystemStorage {
 #[async_trait]
 impl Storage for FilesystemStorage {
     async fn check(&self) -> Result<()> {
-        let meta = metadata(&self.definition.path).await?;
+        let meta = metadata(&self.definition.path)
+            .await
+            .map_err(|e| Error::new(ErrorKind::DoesNotExist, e))?;
 
         if meta.is_dir() {
             Ok(())
         } else {
-            Err(Error::from(ErrorKind::NotADirectory))
+            Err(Error::from(ErrorKind::NotAStorage))
         }
     }
 
@@ -53,9 +52,7 @@ impl Storage for FilesystemStorage {
             let dir_name = entry
                 .file_name()
                 .to_str()
-                .ok_or_else(|| {
-                    Error::new(ErrorKind::InvalidFilename, "collection name is not utf8")
-                })?
+                .ok_or_else(|| Error::new(ErrorKind::InvalidData, "collection name is not utf8"))?
                 .to_owned();
 
             collections.push(Box::from(FilesystemCollection {
@@ -81,7 +78,7 @@ impl Storage for FilesystemStorage {
 
     async fn destroy_collection(&mut self, href: &str) -> Result<()> {
         let path = self.join_collection_href(href)?;
-        remove_dir(path).await
+        remove_dir(path).await.map_err(Error::from)
     }
 
     fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
@@ -216,8 +213,8 @@ impl Collection for FilesystemCollection {
         let path = self.path.join(filename);
         let value = match read_to_string(path).await {
             Ok(data) => data,
-            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(e),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(Error::from(e)),
         };
 
         Ok(Some(value))

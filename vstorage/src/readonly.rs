@@ -9,8 +9,8 @@ use async_trait::async_trait;
 
 use crate::base::Collection;
 use crate::base::Storage;
-use std::io;
-use std::io::Result;
+use crate::ErrorKind;
+use crate::Result;
 
 /// A wrapper around a [`Storage`] that disallows any write operations.
 ///
@@ -56,11 +56,11 @@ impl Storage for ReadOnlyStorage {
     }
 
     async fn create_collection(&mut self, _href: &str) -> Result<Box<dyn Collection>> {
-        Err(io::ErrorKind::ReadOnlyFilesystem.into())
+        Err(ErrorKind::ReadOnly.into())
     }
 
     async fn destroy_collection(&mut self, _href: &str) -> Result<()> {
-        Err(io::ErrorKind::ReadOnlyFilesystem.into())
+        Err(ErrorKind::ReadOnly.into())
     }
 
     fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
@@ -102,7 +102,7 @@ impl Collection for ReadOnlyCollection {
     }
 
     async fn add(&mut self, _: &crate::base::Item) -> Result<crate::base::ItemRef> {
-        Err(io::ErrorKind::ReadOnlyFilesystem.into())
+        Err(ErrorKind::ReadOnly.into())
     }
 
     async fn update(
@@ -111,11 +111,11 @@ impl Collection for ReadOnlyCollection {
         _: &str,
         _: &crate::base::Item,
     ) -> Result<crate::base::Etag> {
-        Err(io::ErrorKind::ReadOnlyFilesystem.into())
+        Err(ErrorKind::ReadOnly.into())
     }
 
     async fn set_meta(&mut self, _: crate::base::MetadataKind, _: &str) -> Result<()> {
-        Err(io::ErrorKind::ReadOnlyFilesystem.into())
+        Err(ErrorKind::ReadOnly.into())
     }
 
     async fn get_meta(&self, meta: crate::base::MetadataKind) -> Result<Option<String>> {

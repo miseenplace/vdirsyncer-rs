@@ -5,7 +5,7 @@
 //!
 //! See [`Storage`] as an entry point to this module.
 
-use std::io::Result;
+use crate::Result;
 
 use async_trait::async_trait;
 

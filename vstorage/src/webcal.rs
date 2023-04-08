@@ -9,14 +9,12 @@ use async_trait::async_trait;
 use http::{uri::Scheme, StatusCode, Uri};
 use hyper::{client::HttpConnector, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use std::{
-    io::{Error, ErrorKind, Result},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use crate::{
     base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage},
     simple_component::Component,
+    Error, ErrorKind, Result,
 };
 
 /// A storage which exposes items in remote icalendar resource.
@@ -86,7 +84,7 @@ impl Storage for WebCalStorage {
 
         if !raw.starts_with("BEGIN:VCALENDAR") {
             return Err(Error::new(
-                ErrorKind::Other,
+                ErrorKind::InvalidData,
                 "response for URL doesn't look like a calendar",
             ));
         }
@@ -121,7 +119,7 @@ impl Storage for WebCalStorage {
     fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
         if href != self.inner.definition.collection_name {
             return Err(Error::new(
-                ErrorKind::NotFound,
+                ErrorKind::DoesNotExist,
                 format!("this storage only contains the '{href}' collection"),
             ));
         }
@@ -202,7 +200,7 @@ impl Collection for WebCalCollection {
                     None
                 }
             })
-            .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
+            .ok_or_else(|| Error::from(ErrorKind::DoesNotExist))?;
 
         let hash = item.hash();
         Ok((item, hash))
@@ -310,16 +308,16 @@ async fn fetch_raw(client: &Client<HttpsConnector<HttpConnector>>, url: &Uri) ->
         // TODO: upstream should impl IntoURL for &Uri
         .get(url.clone())
         .await
-        .map_err(|e| Error::new(ErrorKind::Other, e))?;
+        .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
 
     if response.status() != StatusCode::OK {
-        return Err(Error::new(ErrorKind::Other, "request did not return 200"));
+        return Err(Error::new(ErrorKind::Uncategorised, "request did not return 200"));
     }
 
     // TODO: handle non-UTF-8 data.
     hyper::body::to_bytes(response)
         .await
-        .map_err(|e| Error::new(ErrorKind::Other, e))
+        .map_err(|e| Error::new(ErrorKind::Uncategorised, e))
         .map(|bytes| String::from_utf8(bytes.into()))?
         .map_err(|e| Error::new(ErrorKind::InvalidData, e))
 }

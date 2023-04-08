@@ -1,9 +1,6 @@
 //! A [`CalDavStorage`] is a single caldav repository, as specified in rfc4791.
 
-use std::{
-    io::{Error, ErrorKind, Result},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use http::Uri;
@@ -11,10 +8,26 @@ use libdav::CalDavClient;
 use libdav::{auth::Auth, dav::CollectionType};
 
 use crate::base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage};
+use crate::Result;
+use crate::{Error, ErrorKind};
 
 pub struct CalDavDefinition {
     pub url: Uri,
     pub auth: Auth,
+}
+
+impl From<libdav::BootstrapError> for Error {
+    fn from(value: libdav::BootstrapError) -> Self {
+        // TODO: not implemented
+        Error::new(ErrorKind::Uncategorised, value)
+    }
+}
+
+impl From<libdav::dav::DavError> for Error {
+    fn from(value: libdav::dav::DavError) -> Self {
+        // TODO: not implemented
+        Error::new(ErrorKind::Uncategorised, value)
+    }
 }
 
 #[async_trait]
@@ -50,7 +63,7 @@ impl Storage for CalDavStorage {
         self.client
             .check_support(uri)
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, e))
+            .map_err(|e| Error::new(ErrorKind::Uncategorised, e))
     }
 
     /// Finds existing collections for this storage.
@@ -87,7 +100,7 @@ impl Storage for CalDavStorage {
         self.client
             .create_collection(href, CollectionType::Calendar)
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+            .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
         Ok(Box::from(CalDavCollection {
             href: href.to_string(),
             client: self.client.clone(),
@@ -108,7 +121,7 @@ impl Storage for CalDavStorage {
             .client
             .get_resources(href, &[href])
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+            .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
 
         if results.len() != 1 {
             return Err(ErrorKind::InvalidData.into());
@@ -117,14 +130,14 @@ impl Storage for CalDavStorage {
         let item = results.pop().expect("results has exactly one item");
         if item.href != href {
             return Err(Error::new(
-                ErrorKind::Other,
+                ErrorKind::Uncategorised,
                 format!("Requested href: {}, got: {}", href, item.href,),
             ));
         }
 
         let etag = item
             .content
-            .map_err(|e| Error::new(ErrorKind::Other, format!("Got status code: {e}")))?
+            .map_err(|e| Error::new(ErrorKind::Uncategorised, format!("Got status code: {e}")))?
             .etag;
         // TODO: specific error kind type for MissingEtag?
 
@@ -138,13 +151,13 @@ impl Storage for CalDavStorage {
         // This could be done by using discover above.
         let items = collection.list().await?;
         if !items.is_empty() {
-            return Err(ErrorKind::DirectoryNotEmpty.into());
+            return Err(ErrorKind::CollectionNotEmpty.into());
         }
 
         self.client
             .delete(href, etag)
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+            .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
         Ok(())
     }
 
@@ -197,7 +210,7 @@ impl Collection for CalDavCollection {
             .client
             .get_resources(&self.href, &[href])
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+            .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
 
         if results.len() != 1 {
             return Err(ErrorKind::InvalidData.into());
@@ -206,14 +219,14 @@ impl Collection for CalDavCollection {
         let item = results.pop().expect("results has exactly one item");
         if item.href != href {
             return Err(Error::new(
-                ErrorKind::Other,
+                ErrorKind::Uncategorised,
                 format!("Requested href: {}, got: {}", href, item.href,),
             ));
         }
 
         let content = item
             .content
-            .map_err(|e| Error::new(ErrorKind::Other, format!("Got status code: {e}")))?;
+            .map_err(|e| Error::new(ErrorKind::Uncategorised, format!("Got status code: {e}")))?;
 
         Ok((Item::from(content.data), content.etag))
     }
@@ -223,7 +236,7 @@ impl Collection for CalDavCollection {
             .client
             .get_resources(&self.href, hrefs)
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, e))?
+            .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?
             .into_iter()
             .map(|r| {
                 let content = r.content.unwrap();
