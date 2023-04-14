@@ -24,7 +24,7 @@ pub enum DavError {
     #[error("failure parsing XML response")]
     Xml(#[from] crate::xml::Error),
 
-    #[error("a request did not return a successful status code")]
+    #[error("http request returned {0}")]
     BadStatusCode(http::StatusCode),
 
     #[error("failed to build URL with the given input")]
@@ -83,7 +83,7 @@ pub enum ResolveContextPathError {
 
 #[derive(thiserror::Error, Debug)]
 pub enum FindCurrentUserPrincipalError {
-    #[error("error sending or parsing with request")]
+    #[error("error sending or parsing request")]
     RequestError(#[from] DavError),
 
     // XXX: This should not really happen, but the API for `http` won't let us validate this

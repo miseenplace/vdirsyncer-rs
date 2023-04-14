@@ -1,0 +1,13 @@
+[package]
+name = "davcli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libdav = { version = "0.1.0", path = "../libdav" }
+clap = { version = "4.0.0", features = ["derive"] }
+log = "0.4.17"
+termion = "2.0.1"
+anyhow = "1.0.70"
+http = "0.2.9"
+tokio = { version = "1.27.0", default-features = false, features = ["rt", "macros"] }

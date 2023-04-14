@@ -45,7 +45,7 @@ pub enum BootstrapError {
     #[error(transparent)]
     HomeSet(#[from] FindHomeSetError),
 
-    #[error(transparent)]
+    #[error("error querying current user principal")]
     CurrentPrincipal(#[from] FindCurrentUserPrincipalError),
 
     #[error(transparent)]
@@ -172,7 +172,7 @@ pub enum CheckSupportError {
     #[error("internal error with specified authentication")]
     Auth(#[from] crate::AuthError),
 
-    #[error("a request did not return a successful status code")]
+    #[error("http request returned {0}")]
     BadStatusCode(http::StatusCode),
 }
 

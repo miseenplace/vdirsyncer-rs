@@ -3,4 +3,5 @@ members = [
     "vstorage",
     "vdirsyncer",
     "libdav",
+    "davcli",
 ]
