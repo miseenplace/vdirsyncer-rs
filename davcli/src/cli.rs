@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use http::Uri;
 
 #[derive(Clone, ValueEnum)]
 enum Verbosity {
@@ -14,7 +15,7 @@ pub(crate) enum Command {
     /// Perform discovery and print results
     Discover {
         // TODO: flag to specify caldav/carddav
-        base_uri: String,
+        base_uri: Uri,
         username: String,
     },
 }

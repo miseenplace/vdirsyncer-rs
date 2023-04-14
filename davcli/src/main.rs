@@ -36,12 +36,11 @@ fn get_password() -> anyhow::Result<String> {
     }
 }
 
-async fn discover(base_uri: String, username: String) -> anyhow::Result<()> {
-    let parsed_uri: Uri = base_uri.parse().context("failed to parse base_uri")?;
+async fn discover(base_uri: Uri, username: String) -> anyhow::Result<()> {
     let password = get_password().context("failed to determine password")?;
 
     let caldav_client = CalDavClient::builder()
-        .with_uri(parsed_uri)
+        .with_uri(base_uri)
         .with_auth(Auth::Basic {
             username,
             password: Some(password),
