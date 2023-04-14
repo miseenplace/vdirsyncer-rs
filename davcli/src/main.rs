@@ -64,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = cli::Cli::parse();
     match cli.command {
         // TODO: also support email as input?
-        cli::Command::Discover { base_uri, username } => discover(base_uri, username).await?,
+        cli::Command::Discover {} => discover(cli.server.base_uri, cli.server.username).await?,
     }
 
     Ok(())

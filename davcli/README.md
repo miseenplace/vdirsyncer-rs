@@ -27,8 +27,7 @@ Discovery can be used to test if a server exposes its context path and calendar
 home set correctly:
 
 ```console
-echo baikal | davcli discover http://localhost:8002 baikal
-password: 
+> echo baikal | davcli --base-uri http://localhost:8002 --username baikal discover
 Discovery successful.
 - Context path: http://localhost:8002/dav.php
 - Calendar home set: http://localhost:8002/dav.php/calendars/baikal/
@@ -40,7 +39,7 @@ if DNS is correctly configured for a publicly hosted service:
 [rfc6764]: https://www.rfc-editor.org/rfc/rfc6764
 
 ```console
-> davcli -- discover 'https://fastmail.com' vdirsyncer@fastmail.com
+> davcli --base-uri https://fastmail.com --username vdirsyncer@fastmail.com discover
 password: XXX
 Discovery successful.
 - Context path: https://d277161.caldav.fastmail.com/dav/calendars
@@ -51,7 +50,7 @@ Errors should generally be useful (please report an issue if you find an
 obscure error where the underlying issue is not clear):
 
 ```console
-> davcli discover https://fastmail.com wronguser@example.com
+> davcli --base-uri https://fastmail.com --username wronguser@fastmail.com discover
 password: 
 Error: error querying current user principal
 
