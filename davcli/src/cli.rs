@@ -1,5 +1,6 @@
 use clap::{builder::PossibleValue, Args, Parser, Subcommand, ValueEnum};
 use http::Uri;
+use libdav::{auth::Auth, BootstrapError, CalDavClient};
 
 #[derive(Clone, ValueEnum)]
 enum Verbosity {
@@ -30,7 +31,7 @@ impl clap::ValueEnum for DavType {
 }
 
 #[derive(Args)]
-pub(crate) struct ServerDetails {
+pub(crate) struct Server {
     /// A base URL from which to discover the server.
     ///
     /// Examples: `http://localhost:8080`, `https://example.com`.
@@ -46,17 +47,41 @@ pub(crate) struct ServerDetails {
     pub(crate) server_type: DavType,
 }
 
+impl Server {
+    pub(crate) async fn build_client(
+        &self,
+        password: String,
+    ) -> Result<CalDavClient, BootstrapError> {
+        CalDavClient::builder()
+            .with_uri(self.base_uri.clone())
+            .with_auth(Auth::Basic {
+                username: self.username.clone(),
+                password: Some(password),
+            })
+            .build()
+            .auto_bootstrap()
+            .await
+    }
+}
+
 #[derive(Subcommand)]
 pub(crate) enum Command {
     /// Perform discovery and print results
-    Discover {},
+    Discover,
+    ListCollections,
+    ListResources {
+        href: String,
+    },
+    Get {
+        href: String,
+    },
 }
 
 #[derive(Parser)]
 #[clap(author, version = env!("DAVCLI_VERSION"), about, long_about = None)]
 pub(crate) struct Cli {
     #[command(flatten)]
-    pub(crate) server: ServerDetails,
+    pub(crate) server: Server,
 
     #[command(subcommand)]
     pub(crate) command: Command,

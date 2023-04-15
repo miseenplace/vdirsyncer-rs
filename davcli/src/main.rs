@@ -2,8 +2,7 @@ use std::io::Write;
 
 use anyhow::{bail, Context};
 use clap::Parser;
-use http::Uri;
-use libdav::{auth::Auth, CalDavClient};
+use libdav::CalDavClient;
 use termion::input::TermRead;
 
 mod cli;
@@ -36,22 +35,10 @@ fn get_password() -> anyhow::Result<String> {
     }
 }
 
-async fn discover(base_uri: Uri, username: String) -> anyhow::Result<()> {
-    let password = get_password().context("failed to determine password")?;
-
-    let caldav_client = CalDavClient::builder()
-        .with_uri(base_uri)
-        .with_auth(Auth::Basic {
-            username,
-            password: Some(password),
-        })
-        .build()
-        .auto_bootstrap()
-        .await?;
-
+async fn discover(client: CalDavClient) -> anyhow::Result<()> {
     println!("Discovery successful.");
-    println!("- Context path: {}", &caldav_client.context_path());
-    match caldav_client.calendar_home_set {
+    println!("- Context path: {}", &client.context_path());
+    match client.calendar_home_set {
         Some(home_set) => println!("- Calendar home set: {}", home_set),
         None => println!("- Calendar home set not found."),
     }
@@ -59,12 +46,69 @@ async fn discover(base_uri: Uri, username: String) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn get(client: CalDavClient, href: String) -> anyhow::Result<()> {
+    let target_url = client
+        .calendar_home_set
+        .as_ref()
+        .context("No calendar home set available")?
+        .to_string();
+
+    let response = client
+        .get_resources(target_url, &[href])
+        .await?
+        .into_iter()
+        .next()
+        .context("Server returned a response with no resources")?;
+
+    let raw = response
+        .content
+        .as_ref()
+        .map_err(|code| anyhow::anyhow!("Server returned error code: {0}", code))?;
+
+    println!("{:?}", raw);
+
+    Ok(())
+}
+
+async fn list_collections(client: CalDavClient) -> anyhow::Result<()> {
+    let target_url = client
+        .calendar_home_set
+        .as_ref()
+        .context("No calendar home set available")?;
+
+    let response = client.find_calendars(target_url).await?;
+    for (href, _) in response {
+        println!("Found calendar: {}", href);
+    }
+
+    Ok(())
+}
+
+async fn list_resources(client: CalDavClient, href: String) -> anyhow::Result<()> {
+    let resources = client.list_resources(&href).await?;
+    if resources.is_empty() {
+        println!("No items in collection");
+    } else {
+        for resource in resources {
+            println!("Found item: {}", resource.href);
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
+    // TODO: also support email as input?
     let cli = cli::Cli::parse();
+    let password = get_password().context("failed to determine password")?;
+    let client = cli.server.build_client(password).await?;
+
     match cli.command {
-        // TODO: also support email as input?
-        cli::Command::Discover {} => discover(cli.server.base_uri, cli.server.username).await?,
+        cli::Command::Discover => discover(client).await?,
+        cli::Command::Get { href } => get(client, href).await?,
+        cli::Command::ListCollections => list_collections(client).await?,
+        cli::Command::ListResources { href } => list_resources(client, href).await?,
     }
 
     Ok(())
