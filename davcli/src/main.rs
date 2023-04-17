@@ -1,20 +1,8 @@
-use anyhow::{bail, Context};
+use anyhow::Context;
 use clap::Parser;
 use libdav::CalDavClient;
 
 mod cli;
-
-fn get_password() -> anyhow::Result<String> {
-    match std::env::var("DAVCLI_PASSWORD") {
-        Ok(pwd) => Ok(pwd),
-        Err(std::env::VarError::NotPresent) => {
-            bail!("DAVCLI_PASSWORD is not defined");
-        }
-        Err(std::env::VarError::NotUnicode(_)) => {
-            bail!("non-unicode DAVCLI_PASSWORD is unsupported");
-        }
-    }
-}
 
 async fn discover(client: CalDavClient) -> anyhow::Result<()> {
     println!("Discovery successful.");
@@ -82,7 +70,7 @@ async fn list_resources(client: CalDavClient, href: String) -> anyhow::Result<()
 async fn main() -> anyhow::Result<()> {
     // TODO: also support email as input?
     let cli = cli::Cli::parse();
-    let password = get_password().context("failed to determine password")?;
+    let password = std::env::var("DAVCLI_PASSWORD").context("failed to determine password")?;
     let client = cli.server.build_client(password).await?;
 
     match cli.command {
