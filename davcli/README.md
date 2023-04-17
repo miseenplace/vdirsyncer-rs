@@ -65,6 +65,10 @@ Passwords must be provided as the environment variable `DAVCLI_PASSWORD`.
 
 Only password-based authentication is implemented at this time.
 
+Nothing is cached. Ever. Performance is basically the worst possible, so
+there's enormous room for improvement. Caching clients needs to be exposed from
+`libdav`.
+
 # Todo
 
 This documentation should move to a man page which can be published. It is
