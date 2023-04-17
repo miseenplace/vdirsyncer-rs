@@ -18,7 +18,7 @@ use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 /// use http::Uri;
 /// use libdav::auth::Auth;
 ///
-/// # tokio::runtime::Runtime::new().unwrap().block_on(async {
+/// # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
 /// let uri = Uri::try_from("https://example.com").unwrap();
 /// let auth = Auth::Basic {
 ///     username: String::from("user"),

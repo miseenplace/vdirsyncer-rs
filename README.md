@@ -14,9 +14,10 @@ For the original Python implementation see https://github.com/pimutils/vdirsynce
 
 ## Integration tests
 
-Some tests are marked with `#[ignore]`. These are not run by default because
-they rely on a server running. To run them with `xandikos`, you can start a
-test server with:
+A small helper program `live_tests` is available as part of this project. It
+runs a sequence of tests on a real `CalDav` server.
+
+To run them with `xandikos`, you can start a test server with:
 
 ```
 docker run --rm --publish 8000:8000 xandikos \
@@ -27,10 +28,10 @@ And then execute these tests with:
 
 ```sh
 export CALDAV_SERVER=http://localhost:8000
-export CALDAV_USERNAME=test
-export CALDAV_PASSWORD=test
+export CALDAV_USERNAME=xandikos
+export CALDAV_PASSWORD=xandikos
 
-cargo test -- --ignored --test-threads=1
+cargo run -p live_tests
 ```
 
 Test clients use the discovery bootstrapping mechanism, do you can specify your
