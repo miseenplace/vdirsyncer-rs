@@ -27,7 +27,7 @@ Discovery can be used to test if a server exposes its context path and calendar
 home set correctly:
 
 ```console
-> echo baikal | davcli --base-uri http://localhost:8002 --username baikal discover
+> DAVCLI_PASSWORD=baikal davcli --base-uri http://localhost:8002 --username baikal discover
 Discovery successful.
 - Context path: http://localhost:8002/dav.php
 - Calendar home set: http://localhost:8002/dav.php/calendars/baikal/
@@ -39,8 +39,7 @@ if DNS is correctly configured for a publicly hosted service:
 [rfc6764]: https://www.rfc-editor.org/rfc/rfc6764
 
 ```console
-> davcli --base-uri https://fastmail.com --username vdirsyncer@fastmail.com discover
-password: XXX
+> DAVCLI_PASSWORD=baikal davcli --base-uri https://fastmail.com --username vdirsyncer@fastmail.com discover
 Discovery successful.
 - Context path: https://d277161.caldav.fastmail.com/dav/calendars
 - Calendar home set: https://d277161.caldav.fastmail.com/dav/calendars/user/vdirsyncer@fastmail.com/
@@ -50,8 +49,7 @@ Errors should generally be useful (please report an issue if you find an
 obscure error where the underlying issue is not clear):
 
 ```console
-> davcli --base-uri https://fastmail.com --username wronguser@fastmail.com discover
-password: 
+> DAVCLI_PASSWORD=baikal davcli --base-uri https://fastmail.com --username wronguser@fastmail.com discover
 Error: error querying current user principal
 
 Caused by:
@@ -61,11 +59,7 @@ Caused by:
 
 # Credentials
 
-The password will be prompted interactively. It may simply be piped:
-
-    echo "mypassword" | davcli discover https://example.com john
-
-Passwords can also be provided as the environment variable `DAVCLI_PASSWORD`.
+Passwords must be provided as the environment variable `DAVCLI_PASSWORD`.
 
 # Limitations
 

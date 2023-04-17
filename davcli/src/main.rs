@@ -1,36 +1,17 @@
-use std::io::Write;
-
 use anyhow::{bail, Context};
 use clap::Parser;
 use libdav::CalDavClient;
-use termion::input::TermRead;
 
 mod cli;
-
-/// Returns `(username, password)`
-fn prompt_for_password() -> anyhow::Result<String> {
-    let mut stdout = std::io::stdout().lock();
-    let mut stdin = std::io::stdin().lock();
-
-    let password = loop {
-        stdout.write_all(b"password: ")?;
-        stdout.flush()?;
-        if let Some(pwd) = stdin.read_passwd(&mut stdout)? {
-            break pwd;
-        };
-    };
-    stdout.write_all(b"\n")?;
-    stdout.flush()?;
-
-    Ok(password)
-}
 
 fn get_password() -> anyhow::Result<String> {
     match std::env::var("DAVCLI_PASSWORD") {
         Ok(pwd) => Ok(pwd),
-        Err(std::env::VarError::NotPresent) => prompt_for_password(),
+        Err(std::env::VarError::NotPresent) => {
+            bail!("DAVCLI_PASSWORD is not defined");
+        }
         Err(std::env::VarError::NotUnicode(_)) => {
-            bail!("DAVCLI_PASSWORD is not unicode; unsupported")
+            bail!("non-unicode DAVCLI_PASSWORD is unsupported");
         }
     }
 }
