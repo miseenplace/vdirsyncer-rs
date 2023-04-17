@@ -311,7 +311,10 @@ async fn fetch_raw(client: &Client<HttpsConnector<HttpConnector>>, url: &Uri) ->
         .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
 
     if response.status() != StatusCode::OK {
-        return Err(Error::new(ErrorKind::Uncategorised, "request did not return 200"));
+        return Err(Error::new(
+            ErrorKind::Uncategorised,
+            "request did not return 200",
+        ));
     }
 
     // TODO: handle non-UTF-8 data.
