@@ -115,7 +115,7 @@ impl Storage for WebCalStorage {
     }
 
     /// Usable only with the collection name specified in the definition. Any other name will
-    /// return [`ErrorKind::NotFound`]
+    /// return [`ErrorKind::DoesNotExist`]
     fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
         if href != self.inner.definition.collection_name {
             return Err(Error::new(

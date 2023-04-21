@@ -5,7 +5,7 @@ use hyper::{Body, Uri};
 use log::debug;
 
 use crate::builder::{ClientBuilder, NeedsUri};
-use crate::dav::{check_status, DavError, GetResourceError};
+use crate::dav::{check_status, DavError};
 use crate::dns::DiscoverableService;
 use crate::xml::{ItemDetails, ReportField, ResponseVariant, SimplePropertyMeta, StringProperty};
 use crate::{common_bootstrap, CheckSupportError, FetchedResource};
@@ -202,7 +202,7 @@ impl CalDavClient {
         &self,
         calendar_href: S1,
         hrefs: &[S2],
-    ) -> Result<Vec<FetchedResource>, GetResourceError>
+    ) -> Result<Vec<FetchedResource>, DavError>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,

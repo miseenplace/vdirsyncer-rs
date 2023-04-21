@@ -458,14 +458,13 @@ impl WebDavClient {
         href: Href,
         data: Vec<u8>,
         mime_type: MimeType,
-    ) -> Result<Option<Vec<u8>>, CreateResourceError>
+    ) -> Result<Option<Vec<u8>>, DavError>
     where
         Href: AsRef<str>,
         MimeType: AsRef<[u8]>,
     {
         self.put(href, data, Option::<Vec<u8>>::None, mime_type)
             .await
-            .map_err(CreateResourceError)
     }
 
     /// Updates an existing resource
@@ -481,7 +480,7 @@ impl WebDavClient {
         data: Vec<u8>,
         etag: Etag,
         mime_type: MimeType,
-    ) -> Result<Option<Vec<u8>>, UpdateResourceError>
+    ) -> Result<Option<Vec<u8>>, DavError>
     where
         Href: AsRef<str>,
         Etag: AsRef<[u8]>,
@@ -489,7 +488,6 @@ impl WebDavClient {
     {
         self.put(href, data, Some(etag), mime_type)
             .await
-            .map_err(UpdateResourceError)
     }
 
     /// Creates a collection under path `href`.
@@ -506,7 +504,7 @@ impl WebDavClient {
         &self,
         href: Href,
         resourcetype: CollectionType,
-    ) -> Result<(), CreateCollectionError> {
+    ) -> Result<(), DavError> {
         let body = format!(
             r#"
             <mkcol xmlns="DAV:">
@@ -543,7 +541,7 @@ impl WebDavClient {
     /// # Errors
     ///
     /// See [`request_multistatus`](Self::request_multistatus).
-    pub async fn delete<Href, Etag>(&self, href: Href, etag: Etag) -> Result<(), DeleteError>
+    pub async fn delete<Href, Etag>(&self, href: Href, etag: Etag) -> Result<(), DavError>
     where
         Href: AsRef<str>,
         Etag: AsRef<[u8]>,
@@ -573,7 +571,7 @@ impl WebDavClient {
     /// # Errors
     ///
     /// See [`request_multistatus`](Self::request_multistatus).
-    pub async fn force_delete<Href>(&self, href: Href) -> Result<(), DeleteError>
+    pub async fn force_delete<Href>(&self, href: Href) -> Result<(), DavError>
     where
         Href: AsRef<str>,
     {
@@ -595,7 +593,7 @@ impl WebDavClient {
         collection_href: &str,
         body: String,
         data: &ReportField,
-    ) -> Result<Vec<FetchedResource>, GetResourceError> {
+    ) -> Result<Vec<FetchedResource>, DavError> {
         let request = self
             .request_builder()?
             .method(Method::from_bytes(b"REPORT").expect("API for HTTP methods is dumb"))
@@ -687,29 +685,6 @@ pub mod mime_types {
     pub const CALENDAR: &[u8] = b"text/calendar";
     pub const ADDRESSBOOK: &[u8] = b"text/vcard";
 }
-
-macro_rules! decl_error {
-    ($($ident:ident, $msg:expr)*) => ($(
-        #[derive(thiserror::Error, Debug)]
-        #[error("$msg: {0}")]
-        pub struct $ident (pub DavError);
-
-        impl<T> From<T> for $ident
-        where
-            DavError: std::convert::From<T>,
-        {
-            fn from(value: T) -> Self {
-                $ident(DavError::from(value))
-            }
-        }
-    )*)
-}
-
-decl_error!(CreateResourceError, "error creating resources");
-decl_error!(UpdateResourceError, "error updating resources");
-decl_error!(GetResourceError, "error updating resources");
-decl_error!(CreateCollectionError, "error creating collection");
-decl_error!(DeleteError, "error deleting collection");
 
 /// Metadata for a resource.
 ///

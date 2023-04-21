@@ -246,7 +246,6 @@ async fn test_create_and_delete_resource(caldav_client: &CalDavClient) -> anyhow
         )
         .await
         .unwrap_err()
-        .0
     {
         DavError::BadStatusCode(StatusCode::PRECONDITION_FAILED) => {}
         _ => panic!("updating entry with the wrong etag did not return the wrong error type"),
