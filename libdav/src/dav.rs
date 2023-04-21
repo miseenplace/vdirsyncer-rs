@@ -322,6 +322,55 @@ impl WebDavClient {
             .map_err(DavError::from)
     }
 
+    pub async fn propupdate<T: FromXml>(
+        &self,
+        url: &Uri,
+        prop: &str,
+        value: Option<&str>,
+    ) -> Result<(), DavError> {
+        let (action, inner) = match value {
+            Some(value) => {
+                let escaped = quick_xml::escape::partial_escape(value);
+                ("set", format!("<{prop}>{escaped}</{prop}>"))
+            }
+            None => ("remove", format!("<{prop} />")),
+        };
+        let request = self
+            .request_builder()?
+            .method(Method::from_bytes(b"PROPPATCH").expect("ugh"))
+            .uri(url)
+            .header("Content-Type", "application/xml; charset=utf-8")
+            .body(Body::from(format!(
+                r#"<propertyupdate xmlns="DAV:">
+                <{action}>
+                    <prop>
+                        {inner}
+                    </prop>
+                </{action}>
+            </propertyupdate>"#
+            )))?;
+
+        let (head, _body) = self.request(request).await?;
+        check_status(head.status)?;
+
+        // TODO: need to parse multistatus here and check for any errors.
+
+        Ok(())
+    }
+
+    /// Sets the `displayname` for a collection
+    ///
+    /// The `displayname` string is expected not to be escaped.
+    pub async fn set_collection_displayname(
+        &self,
+        href: &str,
+        displayname: Option<&str>,
+    ) -> Result<(), DavError> {
+        let url = self.relative_uri(href)?;
+        self.propupdate::<StringProperty>(&url, "displayname", displayname)
+            .await
+    }
+
     /// Resolve the default context path using a well-known path.
     ///
     /// This only applies for servers supporting webdav extensions like caldav or carddav.

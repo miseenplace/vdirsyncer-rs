@@ -24,6 +24,9 @@ async fn main() -> anyhow::Result<()> {
         test_create_and_force_delete_collection(&client)
             .await
             .context("create and force delete collection"),
+        test_setting_and_getting_displayname(&client)
+            .await
+            .context("create and delete collection"),
         test_create_and_delete_resource(&client)
             .await
             .context("create and delete resource"),
@@ -156,13 +159,56 @@ async fn test_create_and_force_delete_collection(
 
     assert_eq!(orig_calendar_count + 1, after_creationg_calendar_count);
 
-    // Try deleting with the wrong etag.
+    // Force-delete the collection
     caldav_client.force_delete(&new_collection).await?;
 
     let calendars = caldav_client.find_calendars(&home_set).await?;
     let after_deletion_calendar_count = calendars.len();
 
     assert_eq!(orig_calendar_count, after_deletion_calendar_count);
+    Ok(())
+}
+
+async fn test_setting_and_getting_displayname(caldav_client: &CalDavClient) -> anyhow::Result<()> {
+    let home_set = caldav_client
+        .calendar_home_set
+        .as_ref()
+        .context("no calendar home set found for client")?
+        .clone();
+
+    let new_collection = format!("{}{}/", home_set.path(), &random_string(16));
+    caldav_client
+        .create_collection(&new_collection, CollectionType::Calendar)
+        .await?;
+
+    let first_name = "panda-events";
+    caldav_client
+        .set_collection_displayname(&new_collection, Some(first_name))
+        .await
+        .context("setting collection displayname")?;
+
+    let value = caldav_client
+        .get_collection_displayname(&new_collection)
+        .await
+        .context("getting collection displayname")?;
+
+    assert_eq!(value, Some(String::from(first_name)));
+
+    let new_name = "🔥🔥🔥<lol>";
+    caldav_client
+        .set_collection_displayname(&new_collection, Some(new_name))
+        .await
+        .context("setting collection displayname")?;
+
+    let value = caldav_client
+        .get_collection_displayname(&new_collection)
+        .await
+        .context("getting collection displayname")?;
+
+    assert_eq!(value, Some(String::from(new_name)));
+
+    caldav_client.force_delete(&new_collection).await?;
+
     Ok(())
 }
 
