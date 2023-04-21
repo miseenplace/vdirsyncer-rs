@@ -263,11 +263,6 @@ impl Collection for CalDavCollection {
             )
             .await
             .map(|opt| opt.ok_or(Error::new(ErrorKind::InvalidData, "No Etag in response")))?
-            .map(|etag| {
-                // FIXME: etags should always be strings.
-                String::from_utf8(etag)
-                    .map_err(|_e| Error::new(ErrorKind::InvalidData, "Etag is not a valid string"))
-            })?
             .map(|etag| ItemRef { href, etag })
     }
 
@@ -281,11 +276,6 @@ impl Collection for CalDavCollection {
             )
             .await
             .map(|opt| opt.ok_or(Error::new(ErrorKind::InvalidData, "No Etag in response")))?
-            .map(|etag| {
-                // FIXME: etags should always be strings.
-                String::from_utf8(etag)
-                    .map_err(|_e| Error::new(ErrorKind::InvalidData, "Etag is not a valid string"))
-            })?
     }
 
     /// # Panics

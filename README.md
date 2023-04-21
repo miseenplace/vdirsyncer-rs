@@ -10,7 +10,17 @@ well as crates with associated functionality.
 
 For the original Python implementation see https://github.com/pimutils/vdirsyncer.
 
-# Contributing
+# Hacking
+
+## Design considerations
+
+These libraries assume that all etags are valid UTF-8 strings. Any response
+that does not match this expectation is considered invalid. As of HTTP 1.1, all
+header values are restricted to visible characters in the ASCII range (which
+satisfy the expectation).
+
+Initial testing indicates that this is not a problem with any CalDav or CardDav
+servers.
 
 ## Integration tests
 

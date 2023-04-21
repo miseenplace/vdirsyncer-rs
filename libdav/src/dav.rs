@@ -2,7 +2,7 @@
 //!
 //! This mostly implements the necessary bits for the caldav and carddav implementations. It should
 //! not be considered a general purpose webdav implementation.
-use std::{io, iter::once};
+use std::{io, iter::once, string::FromUtf8Error};
 
 use http::{response::Parts, Method, Request, StatusCode, Uri};
 use hyper::{body::Bytes, client::HttpConnector, Body, Client};
@@ -36,6 +36,9 @@ pub enum DavError {
     #[error("internal error with specified authentication")]
     Auth(#[from] crate::AuthError),
 
+    #[error("the server returned an response with an invalid etag header")]
+    InvalidEtag(#[from] FromUtf8Error),
+
     #[error("the server returned an invalid response")]
     InvalidResponse(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -55,7 +58,9 @@ impl From<DavError> for io::Error {
                 io::Error::new(io::ErrorKind::Other, value)
             }
             DavError::InvalidInput(e) => io::Error::new(io::ErrorKind::InvalidInput, e),
-            DavError::InvalidResponse(e) => io::Error::new(io::ErrorKind::InvalidData, e),
+            DavError::InvalidResponse(_) | DavError::InvalidEtag(_) => {
+                io::Error::new(io::ErrorKind::InvalidData, value)
+            }
         }
     }
 }
@@ -421,10 +426,10 @@ impl WebDavClient {
         data: Vec<u8>,
         etag: Option<Etag>,
         mime_type: MimeType,
-    ) -> Result<Option<Vec<u8>>, DavError>
+    ) -> Result<Option<String>, DavError>
     where
         Href: AsRef<str>,
-        Etag: AsRef<[u8]>,
+        Etag: AsRef<str>,
         MimeType: AsRef<[u8]>,
     {
         let mut builder = self
@@ -445,7 +450,11 @@ impl WebDavClient {
 
         // TODO: check multi-response
 
-        let new_etag = head.headers.get("etag").map(|e| e.as_bytes().to_vec());
+        let new_etag = head
+            .headers
+            .get("etag")
+            .map(|hv| String::from_utf8(hv.as_bytes().to_vec()))
+            .transpose()?;
         Ok(new_etag)
     }
 
@@ -461,12 +470,12 @@ impl WebDavClient {
         href: Href,
         data: Vec<u8>,
         mime_type: MimeType,
-    ) -> Result<Option<Vec<u8>>, DavError>
+    ) -> Result<Option<String>, DavError>
     where
         Href: AsRef<str>,
         MimeType: AsRef<[u8]>,
     {
-        self.put(href, data, Option::<Vec<u8>>::None, mime_type)
+        self.put(href, data, Option::<String>::None, mime_type)
             .await
     }
 
@@ -483,14 +492,13 @@ impl WebDavClient {
         data: Vec<u8>,
         etag: Etag,
         mime_type: MimeType,
-    ) -> Result<Option<Vec<u8>>, DavError>
+    ) -> Result<Option<String>, DavError>
     where
         Href: AsRef<str>,
-        Etag: AsRef<[u8]>,
+        Etag: AsRef<str>,
         MimeType: AsRef<[u8]>,
     {
-        self.put(href, data, Some(etag), mime_type)
-            .await
+        self.put(href, data, Some(etag), mime_type).await
     }
 
     /// Creates a collection under path `href`.
@@ -547,7 +555,7 @@ impl WebDavClient {
     pub async fn delete<Href, Etag>(&self, href: Href, etag: Etag) -> Result<(), DavError>
     where
         Href: AsRef<str>,
-        Etag: AsRef<[u8]>,
+        Etag: AsRef<str>,
     {
         let request = self
             .request_builder()?
