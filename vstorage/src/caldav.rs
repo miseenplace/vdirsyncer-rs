@@ -251,7 +251,7 @@ impl Collection for CalDavCollection {
         self.get_many(&hrefs).await
     }
 
-    async fn add(&mut self, _item: &crate::base::Item) -> Result<crate::base::ItemRef> {
+    async fn add(&mut self, _item: &Item) -> Result<ItemRef> {
         todo!()
     }
 
@@ -259,8 +259,8 @@ impl Collection for CalDavCollection {
         &mut self,
         _href: &str,
         _etag: &str,
-        _item: &crate::base::Item,
-    ) -> Result<crate::base::Etag> {
+        _item: &Item,
+    ) -> Result<Etag> {
         todo!()
     }
 
