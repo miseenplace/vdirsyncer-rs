@@ -50,15 +50,21 @@ async fn main() {
 
     println!("found {} calendars...", calendars.len());
 
-    for (ref calendar, ref etag) in calendars {
+    for calendar in calendars {
         let name = caldav_client
-            .get_collection_displayname(calendar)
+            .get_collection_displayname(&calendar.href)
             .await
             .unwrap();
-        let color = caldav_client.get_calendar_colour(calendar).await.unwrap();
-        println!("📅 name: {name:?}, colour: {color:?}, path: {calendar:?}, etag: {etag:?}");
+        let color = caldav_client
+            .get_calendar_colour(&calendar.href)
+            .await
+            .unwrap();
+        println!(
+            "📅 name: {name:?}, colour: {color:?}, path: {:?}, etag: {:?}",
+            &calendar.href, &calendar.etag
+        );
         let items = caldav_client
-            .list_resources(calendar)
+            .list_resources(&calendar.href)
             .await
             .unwrap()
             .into_iter()

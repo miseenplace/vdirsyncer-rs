@@ -86,9 +86,9 @@ impl Storage for CalDavStorage {
             .find_calendars(uri)
             .await?
             .into_iter()
-            .map(|(href, _etag)| {
+            .map(|collection| {
                 CalDavCollection {
-                    href,
+                    href: collection.href,
                     client: self.client.clone(),
                 }
                 .boxed()

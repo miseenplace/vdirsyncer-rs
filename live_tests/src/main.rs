@@ -108,9 +108,9 @@ async fn test_create_and_delete_collection(caldav_client: &CalDavClient) -> anyh
         .find_calendars(&home_set)
         .await?
         .into_iter()
-        .find(|(href, _etag)| href == &new_collection)
+        .find(|collection| collection.href == new_collection)
         .context("created calendar was not returned when finding calendars")?
-        .1;
+        .etag;
 
     // Try deleting with the wrong etag.
     caldav_client

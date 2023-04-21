@@ -705,3 +705,13 @@ pub struct ListedResource {
     pub details: ItemDetails,
     pub href: String,
 }
+
+/// Metadata for a collection.
+///
+/// This type is returned when listing collections. It contains metadata on
+/// collection itself, but not the entires themselves.
+pub struct FoundCollection {
+    pub href: String,
+    pub etag: Option<String>,
+    // TODO: query displayname by default too.
+}

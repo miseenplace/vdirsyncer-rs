@@ -4,7 +4,7 @@ use hyper::Uri;
 
 use crate::builder::{ClientBuilder, NeedsUri};
 use crate::common_bootstrap;
-use crate::dav::DavError;
+use crate::dav::{DavError, FoundCollection};
 use crate::dns::DiscoverableService;
 use crate::xml::{ItemDetails, ResponseVariant, SimplePropertyMeta};
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
@@ -132,10 +132,7 @@ impl CardDavClient {
     /// # Errors
     ///
     /// If the HTTP call fails or parsing the XML response fails.
-    pub async fn find_addresbooks(
-        &self,
-        url: &Uri,
-    ) -> Result<Vec<(String, Option<String>)>, DavError> {
+    pub async fn find_addresbooks(&self, url: &Uri) -> Result<Vec<FoundCollection>, DavError> {
         // FIXME: DRY: This is almost a copy-paste of the same method from CalDavClient
         let items = self
             // XXX: depth 1 or infinity?
@@ -146,7 +143,10 @@ impl CardDavClient {
             .filter_map(|c| match c.variant {
                 ResponseVariant::WithProps { propstats } => {
                     if propstats.iter().any(|p| p.prop.is_address_book) {
-                        Some((c.href, propstats.into_iter().find_map(|p| p.prop.etag)))
+                        Some(FoundCollection {
+                            href: c.href,
+                            etag: propstats.into_iter().find_map(|p| p.prop.etag),
+                        })
                     } else {
                         None
                     }

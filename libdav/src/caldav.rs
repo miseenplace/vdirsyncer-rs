@@ -5,7 +5,7 @@ use hyper::{Body, Uri};
 use log::debug;
 
 use crate::builder::{ClientBuilder, NeedsUri};
-use crate::dav::{check_status, DavError};
+use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
 use crate::xml::{ItemDetails, ReportField, ResponseVariant, SimplePropertyMeta, StringProperty};
 use crate::{common_bootstrap, CheckSupportError, FetchedResource};
@@ -134,10 +134,7 @@ impl CalDavClient {
     /// # Errors
     ///
     /// If the HTTP call fails or parsing the XML response fails.
-    pub async fn find_calendars(
-        &self,
-        url: &Uri,
-    ) -> Result<Vec<(String, Option<String>)>, DavError> {
+    pub async fn find_calendars(&self, url: &Uri) -> Result<Vec<FoundCollection>, DavError> {
         let items = self
             .propfind::<ItemDetails>(url, "<resourcetype/><getetag/>", 1, &())
             .await
@@ -146,7 +143,10 @@ impl CalDavClient {
             .filter_map(|c| match c.variant {
                 ResponseVariant::WithProps { propstats } => {
                     if propstats.iter().any(|p| p.prop.is_calendar) {
-                        Some((c.href, propstats.into_iter().find_map(|p| p.prop.etag)))
+                        Some(FoundCollection {
+                            href: c.href,
+                            etag: propstats.into_iter().find_map(|p| p.prop.etag),
+                        })
                     } else {
                         None
                     }
