@@ -41,8 +41,8 @@ pub trait FromXml: Sized {
     /// Some `FromXml` implementations can be generic and parse data with
     /// dynamic rules. This associated type allows passing such rules.
     ///
-    /// For the general case, just set this to `()`.
-    type Data;
+    /// When unnecessary, just set this to `()`.
+    type ExtractionData;
     /// Builds a new instance by parsing the XML reader.
     ///
     /// The opening tag for this type is expected to have been consumed prior
@@ -53,7 +53,10 @@ pub trait FromXml: Sized {
     ///
     /// - If parsing the XML fails in any way.
     /// - If any mandatory fields are missing.
-    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &Self::Data) -> Result<Self, Error>;
+    fn from_xml<R: BufRead>(
+        reader: &mut NsReader<R>,
+        data: &Self::ExtractionData,
+    ) -> Result<Self, Error>;
 }
 
 /// Details of a single item that are returned when listing them.
@@ -75,7 +78,7 @@ fn s(data: &[u8]) -> Cow<'_, str> {
 }
 
 impl FromXml for ItemDetails {
-    type Data = ();
+    type ExtractionData = ();
 
     fn from_xml<R: BufRead>(reader: &mut NsReader<R>, _: &()) -> Result<ItemDetails, Error> {
         #[derive(Debug)]
@@ -182,7 +185,7 @@ impl ReportField {
 }
 
 impl FromXml for Report {
-    type Data = ReportField;
+    type ExtractionData = ReportField;
 
     fn from_xml<R>(reader: &mut NsReader<R>, field: &ReportField) -> Result<Report, Error>
     where
@@ -300,9 +303,12 @@ impl<T> FromXml for PropStat<T>
 where
     T: FromXml,
 {
-    type Data = T::Data;
+    type ExtractionData = T::ExtractionData;
 
-    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &Self::Data) -> Result<Self, Error> {
+    fn from_xml<R: BufRead>(
+        reader: &mut NsReader<R>,
+        data: &Self::ExtractionData,
+    ) -> Result<Self, Error> {
         #[derive(Debug)]
         enum State {
             PropStat,
@@ -361,9 +367,12 @@ impl<T> FromXml for Response<T>
 where
     T: FromXml,
 {
-    type Data = T::Data;
+    type ExtractionData = T::ExtractionData;
 
-    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &T::Data) -> Result<Self, Error> {
+    fn from_xml<R: BufRead>(
+        reader: &mut NsReader<R>,
+        data: &T::ExtractionData,
+    ) -> Result<Self, Error> {
         #[derive(Debug)]
         enum State {
             Response,
@@ -536,7 +545,7 @@ impl From<Response<StringProperty>> for Option<String> {
 }
 
 impl FromXml for StringProperty {
-    type Data = SimplePropertyMeta;
+    type ExtractionData = SimplePropertyMeta;
 
     fn from_xml<R: BufRead>(
         reader: &mut NsReader<R>,
@@ -643,7 +652,7 @@ impl Response<HrefProperty> {
 }
 
 impl FromXml for HrefProperty {
-    type Data = SimplePropertyMeta;
+    type ExtractionData = SimplePropertyMeta;
 
     fn from_xml<R>(reader: &mut NsReader<R>, data: &SimplePropertyMeta) -> Result<Self, Error>
     where
@@ -728,9 +737,12 @@ impl<F> FromXml for Multistatus<F>
 where
     F: FromXml,
 {
-    type Data = F::Data;
+    type ExtractionData = F::ExtractionData;
 
-    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, data: &Self::Data) -> Result<Self, Error> {
+    fn from_xml<R: BufRead>(
+        reader: &mut NsReader<R>,
+        data: &Self::ExtractionData,
+    ) -> Result<Self, Error> {
         #[derive(Debug)]
         enum State {
             Root,
@@ -787,7 +799,7 @@ where
 /// - If parsing the XML fails in any way.
 /// - If any necessary fields are missing.
 /// - If any unexpected XML nodes are found.
-pub(crate) fn parse_xml<F>(raw: &[u8], data: &F::Data) -> Result<F, Error>
+pub(crate) fn parse_xml<F>(raw: &[u8], data: &F::ExtractionData) -> Result<F, Error>
 where
     F: FromXml,
 {

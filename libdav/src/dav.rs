@@ -248,7 +248,7 @@ impl WebDavClient {
         url: &Uri,
         prop: &str,
         depth: u8,
-        data: &T::Data,
+        data: &T::ExtractionData,
     ) -> Result<Vec<Response<T>>, DavError> {
         let request = self
             .request_builder()?
@@ -276,7 +276,7 @@ impl WebDavClient {
     pub async fn request_multistatus<T: FromXml>(
         &self,
         request: Request<Body>,
-        data: &T::Data,
+        data: &T::ExtractionData,
     ) -> Result<Multistatus<T>, DavError> {
         let (head, body) = self.request(request).await?;
         check_status(head.status)?;
