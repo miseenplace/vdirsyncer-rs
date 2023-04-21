@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use http::Uri;
+use libdav::dav::mime_types;
 use libdav::CalDavClient;
 use libdav::{auth::Auth, dav::CollectionType};
 
@@ -251,17 +252,40 @@ impl Collection for CalDavCollection {
         self.get_many(&hrefs).await
     }
 
-    async fn add(&mut self, _item: &Item) -> Result<ItemRef> {
-        todo!()
+    async fn add(&mut self, item: &Item) -> Result<ItemRef> {
+        let href = item.ident();
+        self.client
+            // FIXME: should not copy data here?
+            .create_resource(
+                &href,
+                item.as_str().as_bytes().to_vec(),
+                mime_types::CALENDAR,
+            )
+            .await
+            .map(|opt| opt.ok_or(Error::new(ErrorKind::InvalidData, "No Etag in response")))?
+            .map(|etag| {
+                // FIXME: etags should always be strings.
+                String::from_utf8(etag)
+                    .map_err(|_e| Error::new(ErrorKind::InvalidData, "Etag is not a valid string"))
+            })?
+            .map(|etag| ItemRef { href, etag })
     }
 
-    async fn update(
-        &mut self,
-        _href: &str,
-        _etag: &str,
-        _item: &Item,
-    ) -> Result<Etag> {
-        todo!()
+    async fn update(&mut self, href: &str, etag: &str, item: &Item) -> Result<Etag> {
+        self.client
+            .update_resource(
+                href,
+                item.as_str().as_bytes().to_vec(),
+                etag,
+                mime_types::CALENDAR,
+            )
+            .await
+            .map(|opt| opt.ok_or(Error::new(ErrorKind::InvalidData, "No Etag in response")))?
+            .map(|etag| {
+                // FIXME: etags should always be strings.
+                String::from_utf8(etag)
+                    .map_err(|_e| Error::new(ErrorKind::InvalidData, "Etag is not a valid string"))
+            })?
     }
 
     /// # Panics
