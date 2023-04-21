@@ -1,4 +1,7 @@
 //! Generic webdav implementation.
+//!
+//! This mostly implements the necessary bits for the caldav and carddav implementations. It should
+//! not be considered a general purpose webdav implementation.
 use std::{io, iter::once};
 
 use http::{response::Parts, Method, Request, StatusCode, Uri};
