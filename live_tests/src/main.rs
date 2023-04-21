@@ -1,5 +1,5 @@
 use anyhow::{bail, Context};
-use http::StatusCode;
+use http::{StatusCode, Uri};
 use libdav::{
     auth::Auth,
     dav::{mime_types, CollectionType, DavError},
@@ -7,6 +7,11 @@ use libdav::{
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::fmt::Write;
+
+struct TestData {
+    client: CalDavClient,
+    home_set: Uri,
+}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -17,26 +22,33 @@ async fn main() -> anyhow::Result<()> {
         .context("could not initialise test client")?;
     println!("🗓️ Running tests for: {}", client.context_path());
 
+    let home_set = client
+        .calendar_home_set
+        .as_ref()
+        .context("no calendar home set found for client")?
+        .clone();
+    let test_data = TestData { client, home_set };
+
     let results = vec![
-        test_create_and_delete_collection(&client)
+        test_create_and_delete_collection(&test_data)
             .await
             .context("create and delete collection"),
-        test_create_and_force_delete_collection(&client)
+        test_create_and_force_delete_collection(&test_data)
             .await
             .context("create and force delete collection"),
-        test_setting_and_getting_displayname(&client)
+        test_setting_and_getting_displayname(&test_data)
             .await
             .context("create and delete collection"),
-        test_create_and_delete_resource(&client)
+        test_create_and_delete_resource(&test_data)
             .await
             .context("create and delete resource"),
-        test_create_and_fetch_resource(&client)
+        test_create_and_fetch_resource(&test_data)
             .await
             .context("create and fetch resource"),
-        test_fetch_missing(&client)
+        test_fetch_missing(&test_data)
             .await
             .context("attempt to fetch inexistant resource"),
-        test_check_support(&client)
+        test_check_support(&test_data)
             .await
             .context("check that server advertises caldav support"),
     ];
@@ -85,30 +97,27 @@ fn random_string(len: usize) -> String {
         .collect()
 }
 
-async fn test_create_and_delete_collection(caldav_client: &CalDavClient) -> anyhow::Result<()> {
-    let home_set = caldav_client
-        .calendar_home_set
-        .as_ref()
-        .context("no calendar home set found for client")?
-        .clone();
-    let calendars = caldav_client.find_calendars(&home_set).await?;
+async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Result<()> {
+    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
 
     let orig_calendar_count = calendars.len();
 
-    let new_collection = format!("{}{}/", home_set.path(), &random_string(16));
-    caldav_client
+    let new_collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    test_data
+        .client
         .create_collection(&new_collection, CollectionType::Calendar)
         .await?;
 
-    let calendars = caldav_client.find_calendars(&home_set).await?;
+    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
     let new_calendar_count = calendars.len();
 
     assert_eq!(orig_calendar_count + 1, new_calendar_count);
 
     // Get the etag of the newly created calendar:
     // ASSERTION: this validates that a collection with a matching href was created.
-    let etag = caldav_client
-        .find_calendars(&home_set)
+    let etag = test_data
+        .client
+        .find_calendars(&test_data.home_set)
         .await?
         .into_iter()
         .find(|collection| collection.href == new_collection)
@@ -116,7 +125,8 @@ async fn test_create_and_delete_collection(caldav_client: &CalDavClient) -> anyh
         .etag;
 
     // Try deleting with the wrong etag.
-    caldav_client
+    test_data
+        .client
         .delete(&new_collection, "wrong-etag")
         .await
         .unwrap_err();
@@ -127,9 +137,9 @@ async fn test_create_and_delete_collection(caldav_client: &CalDavClient) -> anyh
     };
 
     // Delete the calendar
-    caldav_client.delete(new_collection, etag).await?;
+    test_data.client.delete(new_collection, etag).await?;
 
-    let calendars = caldav_client.find_calendars(&home_set).await?;
+    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
     let third_calendar_count = calendars.len();
 
     assert_eq!(orig_calendar_count, third_calendar_count);
@@ -137,57 +147,48 @@ async fn test_create_and_delete_collection(caldav_client: &CalDavClient) -> anyh
     Ok(())
 }
 
-async fn test_create_and_force_delete_collection(
-    caldav_client: &CalDavClient,
-) -> anyhow::Result<()> {
-    let home_set = caldav_client
-        .calendar_home_set
-        .as_ref()
-        .context("no calendar home set found for client")?
-        .clone();
-    let calendars = caldav_client.find_calendars(&home_set).await?;
+async fn test_create_and_force_delete_collection(test_data: &TestData) -> anyhow::Result<()> {
+    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
 
     let orig_calendar_count = calendars.len();
 
-    let new_collection = format!("{}{}/", home_set.path(), &random_string(16));
-    caldav_client
+    let new_collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    test_data
+        .client
         .create_collection(&new_collection, CollectionType::Calendar)
         .await?;
 
-    let calendars = caldav_client.find_calendars(&home_set).await?;
+    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
     let after_creationg_calendar_count = calendars.len();
 
     assert_eq!(orig_calendar_count + 1, after_creationg_calendar_count);
 
     // Force-delete the collection
-    caldav_client.force_delete(&new_collection).await?;
+    test_data.client.force_delete(&new_collection).await?;
 
-    let calendars = caldav_client.find_calendars(&home_set).await?;
+    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
     let after_deletion_calendar_count = calendars.len();
 
     assert_eq!(orig_calendar_count, after_deletion_calendar_count);
     Ok(())
 }
 
-async fn test_setting_and_getting_displayname(caldav_client: &CalDavClient) -> anyhow::Result<()> {
-    let home_set = caldav_client
-        .calendar_home_set
-        .as_ref()
-        .context("no calendar home set found for client")?
-        .clone();
-
-    let new_collection = format!("{}{}/", home_set.path(), &random_string(16));
-    caldav_client
+async fn test_setting_and_getting_displayname(test_data: &TestData) -> anyhow::Result<()> {
+    let new_collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    test_data
+        .client
         .create_collection(&new_collection, CollectionType::Calendar)
         .await?;
 
     let first_name = "panda-events";
-    caldav_client
+    test_data
+        .client
         .set_collection_displayname(&new_collection, Some(first_name))
         .await
         .context("setting collection displayname")?;
 
-    let value = caldav_client
+    let value = test_data
+        .client
         .get_collection_displayname(&new_collection)
         .await
         .context("getting collection displayname")?;
@@ -195,19 +196,21 @@ async fn test_setting_and_getting_displayname(caldav_client: &CalDavClient) -> a
     assert_eq!(value, Some(String::from(first_name)));
 
     let new_name = "🔥🔥🔥<lol>";
-    caldav_client
+    test_data
+        .client
         .set_collection_displayname(&new_collection, Some(new_name))
         .await
         .context("setting collection displayname")?;
 
-    let value = caldav_client
+    let value = test_data
+        .client
         .get_collection_displayname(&new_collection)
         .await
         .context("getting collection displayname")?;
 
     assert_eq!(value, Some(String::from(new_name)));
 
-    caldav_client.force_delete(&new_collection).await?;
+    test_data.client.force_delete(&new_collection).await?;
 
     Ok(())
 }
@@ -230,26 +233,22 @@ fn minimal_icalendar() -> anyhow::Result<Vec<u8>> {
     Ok(entry.into())
 }
 
-async fn test_create_and_delete_resource(caldav_client: &CalDavClient) -> anyhow::Result<()> {
-    let home_set = caldav_client
-        .calendar_home_set
-        .as_ref()
-        .context("no calendar home set found for client")?
-        .clone();
-
-    let collection = format!("{}{}/", home_set.path(), &random_string(16));
-    caldav_client
+async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result<()> {
+    let collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    test_data
+        .client
         .create_collection(&collection, CollectionType::Calendar)
         .await?;
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
     let content = minimal_icalendar()?;
 
-    caldav_client
+    test_data
+        .client
         .create_resource(&resource, content.clone(), mime_types::CALENDAR)
         .await?;
 
-    let items = caldav_client.list_resources(&collection).await?;
+    let items = test_data.client.list_resources(&collection).await?;
     assert_eq!(items.len(), 1);
 
     let updated_entry = String::from_utf8(content)?
@@ -258,13 +257,15 @@ async fn test_create_and_delete_resource(caldav_client: &CalDavClient) -> anyhow
         .to_vec();
 
     // ASSERTION: deleting with a wrong etag fails.
-    caldav_client
+    test_data
+        .client
         .delete(&resource, "wrong-lol")
         .await
         .unwrap_err();
 
     // ASSERTION: creating conflicting resource fails.
-    caldav_client
+    test_data
+        .client
         .create_resource(&resource, updated_entry.clone(), mime_types::CALENDAR)
         .await
         .unwrap_err();
@@ -283,7 +284,8 @@ async fn test_create_and_delete_resource(caldav_client: &CalDavClient) -> anyhow
         .context("todo")?;
 
     // ASSERTION: updating with wrong etag fails
-    match caldav_client
+    match test_data
+        .client
         .update_resource(
             &resource,
             updated_entry.clone(),
@@ -298,14 +300,15 @@ async fn test_create_and_delete_resource(caldav_client: &CalDavClient) -> anyhow
     }
 
     // ASSERTION: updating with correct etag work
-    caldav_client
+    test_data
+        .client
         .update_resource(&resource, updated_entry, &etag, mime_types::CALENDAR)
         .await?;
 
     // ASSERTION: deleting with outdated etag fails
-    caldav_client.delete(&resource, &etag).await.unwrap_err();
+    test_data.client.delete(&resource, &etag).await.unwrap_err();
 
-    let items = caldav_client.list_resources(&collection).await?;
+    let items = test_data.client.list_resources(&collection).await?;
     assert_eq!(items.len(), 1);
 
     let etag = items
@@ -321,34 +324,31 @@ async fn test_create_and_delete_resource(caldav_client: &CalDavClient) -> anyhow
         .context("todo")?;
 
     // ASSERTION: deleting with correct etag works
-    caldav_client.delete(&resource, &etag).await?;
+    test_data.client.delete(&resource, &etag).await?;
 
-    let items = caldav_client.list_resources(&collection).await?;
+    let items = test_data.client.list_resources(&collection).await?;
     assert_eq!(items.len(), 0);
     Ok(())
 }
 
-async fn test_create_and_fetch_resource(caldav_client: &CalDavClient) -> anyhow::Result<()> {
-    let home_set = caldav_client
-        .calendar_home_set
-        .as_ref()
-        .context("no calendar home set found for client")?
-        .clone();
-
-    let collection = format!("{}{}/", home_set.path(), &random_string(16));
-    caldav_client
+async fn test_create_and_fetch_resource(test_data: &TestData) -> anyhow::Result<()> {
+    let collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    test_data
+        .client
         .create_collection(&collection, CollectionType::Calendar)
         .await?;
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
-    caldav_client
+    test_data
+        .client
         .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
         .await?;
 
-    let items = caldav_client.list_resources(&collection).await?;
+    let items = test_data.client.list_resources(&collection).await?;
     assert_eq!(items.len(), 1);
 
-    let fetched = caldav_client
+    let fetched = test_data
+        .client
         .get_resources(&collection, &[&items[0].href])
         .await?;
     assert_eq!(fetched.len(), 1);
@@ -362,25 +362,22 @@ async fn test_create_and_fetch_resource(caldav_client: &CalDavClient) -> anyhow:
     Ok(())
 }
 
-async fn test_fetch_missing(caldav_client: &CalDavClient) -> anyhow::Result<()> {
-    let home_set = caldav_client
-        .calendar_home_set
-        .as_ref()
-        .context("no calendar home set found for client")?
-        .clone();
-
-    let collection = format!("{}{}/", home_set.path(), &random_string(16));
-    caldav_client
+async fn test_fetch_missing(test_data: &TestData) -> anyhow::Result<()> {
+    let collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    test_data
+        .client
         .create_collection(&collection, CollectionType::Calendar)
         .await?;
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
-    caldav_client
+    test_data
+        .client
         .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
         .await?;
 
     let missing = format!("{}{}.ics", collection, &random_string(8));
-    let fetched = caldav_client
+    let fetched = test_data
+        .client
         .get_resources(&collection, &[&resource, &missing])
         .await?;
     log::debug!("{:?}", &fetched);
@@ -404,9 +401,10 @@ async fn test_fetch_missing(caldav_client: &CalDavClient) -> anyhow::Result<()> 
     Ok(())
 }
 
-async fn test_check_support(caldav_client: &CalDavClient) -> anyhow::Result<()> {
-    caldav_client
-        .check_support(caldav_client.context_path())
+async fn test_check_support(test_data: &TestData) -> anyhow::Result<()> {
+    test_data
+        .client
+        .check_support(test_data.client.context_path())
         .await?;
 
     Ok(())
