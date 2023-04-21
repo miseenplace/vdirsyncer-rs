@@ -1,3 +1,9 @@
+//! Common types used by caldav and carddav builder.
+//!
+//! See [`CalDavClient::builder`] and [`CrdlDavClient::builder`] as entry points.
+//!
+//! [`CalDavClient::builder`]: `crate::CalDavClient::builder`
+//! [`CrdlDavClient::builder`]: `crate::CardDavClient::builder`
 use std::marker::PhantomData;
 
 use email_address::EmailAddress;
