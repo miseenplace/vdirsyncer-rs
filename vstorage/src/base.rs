@@ -81,16 +81,6 @@ pub trait Storage: Sync + Send {
 /// [`get_many`]: Self::get_many
 #[async_trait]
 pub trait Collection: Sync + Send {
-    /// A unique identifier for this collection.
-    ///
-    /// This string should be filename-safe.
-    ///
-    /// # Note for implementers
-    ///
-    /// It the underlying implementation has native immutable IDs for collections, that should
-    /// always be preferred.
-    fn id(&self) -> &str;
-
     /// The path to this collection inside the storage.
     ///
     /// This value can be used with [`Storage::open_collection`] to later access this same

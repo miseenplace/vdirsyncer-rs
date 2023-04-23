@@ -264,10 +264,6 @@ impl Collection for FilesystemCollection {
         Ok(etag)
     }
 
-    fn id(&self) -> &str {
-        &self.dir_name
-    }
-
     fn href(&self) -> &str {
         &self.dir_name
     }

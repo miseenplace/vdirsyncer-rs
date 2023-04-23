@@ -72,10 +72,6 @@ impl Storage for ReadOnlyStorage {
 
 #[async_trait]
 impl Collection for ReadOnlyCollection {
-    fn id(&self) -> &str {
-        self.inner.id()
-    }
-
     fn href(&self) -> &str {
         self.inner.href()
     }

@@ -290,10 +290,6 @@ impl Collection for WebCalCollection {
         ))
     }
 
-    fn id(&self) -> &str {
-        self.inner.definition.collection_name.as_str()
-    }
-
     fn href(&self) -> &str {
         ""
     }
@@ -347,7 +343,7 @@ mod test {
         let collection = &storage.open_collection("holidays").unwrap();
         let discovery = &storage.discover_collections().await.unwrap();
 
-        assert_eq!(&collection.id(), &discovery.first().unwrap().id());
+        assert_eq!(&collection.href(), &discovery.first().unwrap().href());
 
         let item_refs = collection.list().await.unwrap();
 
