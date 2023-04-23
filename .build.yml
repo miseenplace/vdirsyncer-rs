@@ -3,6 +3,7 @@ packages:
   - cargo
   - rust
   - rustfmt
+  - rust-clippy
 environment:
   CARGO_TERM_COLOR: always
 triggers:
