@@ -128,13 +128,19 @@ impl CalDavClient {
 
     /// Find calendars collections under the given `url`.
     ///
-    /// Returns absolute paths to each calendar and their respective etag, if any. This method
-    /// should be called with the `calendar_home_set` URL to find the current user's calendars.
+    /// It `url` is not specified, this client's calendar home set is used instead. If no calendar
+    /// home set has been found, then the server's context path will be used. When using a client
+    /// bootstrapped via automatic discovery, passing `None` will usually yield the expected
+    /// results.
     ///
     /// # Errors
     ///
     /// If the HTTP call fails or parsing the XML response fails.
-    pub async fn find_calendars(&self, url: &Uri) -> Result<Vec<FoundCollection>, DavError> {
+    pub async fn find_calendars(
+        &self,
+        url: Option<&Uri>,
+    ) -> Result<Vec<FoundCollection>, DavError> {
+        let url = url.unwrap_or(self.calendar_home_set.as_ref().unwrap_or(&self.base_url));
         let items = self
             .propfind::<ItemDetails>(url, "<resourcetype/><getetag/>", 1, &())
             .await

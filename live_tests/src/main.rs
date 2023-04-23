@@ -16,7 +16,7 @@ struct TestData {
 impl TestData {
     async fn calendar_count(&self) -> anyhow::Result<usize> {
         self.client
-            .find_calendars(&self.home_set)
+            .find_calendars(None)
             .await
             .map(|calendars| calendars.len())
             .context("fetch calendar count")
@@ -124,7 +124,7 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
     // ASSERTION: this validates that a collection with a matching href was created.
     let etag = test_data
         .client
-        .find_calendars(&test_data.home_set)
+        .find_calendars(None)
         .await?
         .into_iter()
         .find(|collection| collection.href == new_collection)

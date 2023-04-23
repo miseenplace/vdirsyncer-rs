@@ -126,13 +126,19 @@ impl CardDavClient {
 
     /// Find address book collections under the given `url`.
     ///
-    /// Returns absolute paths to each addressbook and their respective etag. This method should be
-    /// called with the `addressbook_home_set` URL to find the current user's address books.
+    /// It `url` is not specified, this client's address book home set is used instead. If no
+    /// address book home set has been found, then the server's context path will be used. When
+    /// using a client bootstrapped via automatic discovery, passing `None` will usually yield the
+    /// expected results.
     ///
     /// # Errors
     ///
     /// If the HTTP call fails or parsing the XML response fails.
-    pub async fn find_addresbooks(&self, url: &Uri) -> Result<Vec<FoundCollection>, DavError> {
+    pub async fn find_addresbooks(
+        &self,
+        url: Option<&Uri>,
+    ) -> Result<Vec<FoundCollection>, DavError> {
+        let url = url.unwrap_or(self.addressbook_home_set.as_ref().unwrap_or(&self.base_url));
         // FIXME: DRY: This is almost a copy-paste of the same method from CalDavClient
         let items = self
             // XXX: depth 1 or infinity?

@@ -40,12 +40,7 @@ async fn get(client: CalDavClient, href: String) -> anyhow::Result<()> {
 }
 
 async fn list_collections(client: CalDavClient) -> anyhow::Result<()> {
-    let target_url = client
-        .calendar_home_set
-        .as_ref()
-        .context("No calendar home set available")?;
-
-    let response = client.find_calendars(target_url).await?;
+    let response = client.find_calendars(None).await?;
     for collection in response {
         println!("Found calendar: {}", collection.href);
     }
