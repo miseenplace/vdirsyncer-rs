@@ -13,6 +13,16 @@ struct TestData {
     home_set: Uri,
 }
 
+impl TestData {
+    async fn calendar_count(&self) -> anyhow::Result<usize> {
+        self.client
+            .find_calendars(&self.home_set)
+            .await
+            .map(|calendars| calendars.len())
+            .context("fetch calendar count")
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     simple_logger::init_with_level(log::Level::Error).expect("logger configuration is valid");
@@ -98,9 +108,7 @@ fn random_string(len: usize) -> String {
 }
 
 async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Result<()> {
-    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
-
-    let orig_calendar_count = calendars.len();
+    let orig_calendar_count = test_data.calendar_count().await?;
 
     let new_collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
     test_data
@@ -108,8 +116,7 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
         .create_collection(&new_collection, CollectionType::Calendar)
         .await?;
 
-    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
-    let new_calendar_count = calendars.len();
+    let new_calendar_count = test_data.calendar_count().await?;
 
     assert_eq!(orig_calendar_count + 1, new_calendar_count);
 
@@ -139,18 +146,14 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
     // Delete the calendar
     test_data.client.delete(new_collection, etag).await?;
 
-    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
-    let third_calendar_count = calendars.len();
-
+    let third_calendar_count = test_data.calendar_count().await?;
     assert_eq!(orig_calendar_count, third_calendar_count);
 
     Ok(())
 }
 
 async fn test_create_and_force_delete_collection(test_data: &TestData) -> anyhow::Result<()> {
-    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
-
-    let orig_calendar_count = calendars.len();
+    let orig_calendar_count = test_data.calendar_count().await?;
 
     let new_collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
     test_data
@@ -158,18 +161,15 @@ async fn test_create_and_force_delete_collection(test_data: &TestData) -> anyhow
         .create_collection(&new_collection, CollectionType::Calendar)
         .await?;
 
-    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
-    let after_creationg_calendar_count = calendars.len();
-
+    let after_creationg_calendar_count = test_data.calendar_count().await?;
     assert_eq!(orig_calendar_count + 1, after_creationg_calendar_count);
 
     // Force-delete the collection
     test_data.client.force_delete(&new_collection).await?;
 
-    let calendars = test_data.client.find_calendars(&test_data.home_set).await?;
-    let after_deletion_calendar_count = calendars.len();
-
+    let after_deletion_calendar_count = test_data.calendar_count().await?;
     assert_eq!(orig_calendar_count, after_deletion_calendar_count);
+
     Ok(())
 }
 
