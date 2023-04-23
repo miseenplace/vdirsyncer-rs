@@ -24,32 +24,9 @@ servers.
 
 ## Integration tests
 
-A small helper program `live_tests` is available as part of this project. It
-runs a sequence of tests on a real `CalDav` server.
-
-To run them with `xandikos`, you can start a test server with:
-
-```
-docker run --rm --publish 8000:8000 xandikos \
-  xandikos -d /tmp/dav -l 0.0.0.0 -p 8000 --autocreate --dump-dav-xml
-```
-
-And then execute these tests with:
-
-```sh
-export CALDAV_SERVER=http://localhost:8000
-export CALDAV_USERNAME=xandikos
-export CALDAV_PASSWORD=xandikos
-
-cargo run -p live_tests
-```
-
-Test clients use the discovery bootstrapping mechanism, do you can specify your
-providers main site as URL as `CALDAV_SERVER` and DNS discovery should resolve
-the real server and port automatically.
-
-DO NOT use the credentials for real/personal/work account for test; these is no
-guarantee that these tests won't delete your data!
+A small integration tests helper program is available as part of this project.
+It runs a sequence of tests on a real `CalDav` server. See
+`live_tests/README.md` for full details.
 
 ## Other test servers
 
