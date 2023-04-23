@@ -59,7 +59,7 @@ impl<ClientType> ClientBuilder<ClientType, NeedsUri> {
     /// If building the `base_uri` fails with the host extracted from the email address.
     pub fn with_email<S: AsRef<str>>(
         self,
-        email: EmailAddress,
+        email: &EmailAddress,
     ) -> Result<ClientBuilder<ClientType, NeedsPassword>, WithEmailError> {
         // The `Uri` type is broken for this case. See: https://github.com/hyperium/http/issues/596
 

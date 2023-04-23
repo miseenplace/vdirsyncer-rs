@@ -4,15 +4,13 @@ use libdav::CalDavClient;
 
 mod cli;
 
-async fn discover(client: CalDavClient) -> anyhow::Result<()> {
+fn discover(client: CalDavClient) {
     println!("Discovery successful.");
     println!("- Context path: {}", &client.context_path());
     match client.calendar_home_set {
-        Some(home_set) => println!("- Calendar home set: {}", home_set),
+        Some(home_set) => println!("- Calendar home set: {home_set}"),
         None => println!("- Calendar home set not found."),
     }
-
-    Ok(())
 }
 
 async fn get(client: CalDavClient, href: String) -> anyhow::Result<()> {
@@ -29,12 +27,13 @@ async fn get(client: CalDavClient, href: String) -> anyhow::Result<()> {
         .next()
         .context("Server returned a response with no resources")?;
 
-    let raw = response
+    let raw = &response
         .content
         .as_ref()
-        .map_err(|code| anyhow::anyhow!("Server returned error code: {0}", code))?;
+        .map_err(|code| anyhow::anyhow!("Server returned error code: {0}", code))?
+        .data;
 
-    println!("{:?}", raw);
+    println!("{raw}");
 
     Ok(())
 }
@@ -69,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
     let client = cli.server.build_client(password).await?;
 
     match cli.command {
-        cli::Command::Discover => discover(client).await?,
+        cli::Command::Discover => discover(client),
         cli::Command::Get { href } => get(client, href).await?,
         cli::Command::ListCollections => list_collections(client).await?,
         cli::Command::ListResources { href } => list_resources(client, href).await?,

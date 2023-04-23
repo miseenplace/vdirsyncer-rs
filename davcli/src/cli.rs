@@ -97,11 +97,10 @@ impl Cli {
     pub(crate) fn log_level(&self) -> log::Level {
         match self.verbose {
             Some(Verbosity::Error) => log::Level::Error,
-            Some(Verbosity::Warn) => log::Level::Warn,
+            Some(Verbosity::Warn) | None => log::Level::Warn,
             Some(Verbosity::Info) => log::Level::Info,
             Some(Verbosity::Debug) => log::Level::Debug,
             Some(Verbosity::Trace) => log::Level::Trace,
-            None => log::Level::Warn,
         }
     }
 }

@@ -29,6 +29,7 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
+    #[must_use]
     pub const fn as_str(&self) -> &'static str {
         match self {
             ErrorKind::DoesNotExist => "resource does not exist",

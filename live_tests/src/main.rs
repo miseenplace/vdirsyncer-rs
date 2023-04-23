@@ -64,9 +64,9 @@ async fn main() -> anyhow::Result<()> {
     ];
 
     let mut failed = 0;
-    for ref result in results.iter() {
+    for result in &results {
         if let Err(err) = result {
-            println!("🔥 Test failed: {:?}", err);
+            println!("🔥 Test failed: {err:?}");
             failed += 1;
             println!("-----");
         }
@@ -74,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
     let total = results.len();
     let passed = total - failed;
 
-    println!("✅ Tests passed: {}/{}", passed, total);
+    println!("✅ Tests passed: {passed}/{total}");
     if failed > 0 {
         std::process::exit(1);
     }
@@ -138,10 +138,7 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
         .await
         .unwrap_err();
 
-    let etag = match etag {
-        Some(e) => e,
-        None => bail!("deletion is only supported on servers which provide etags"),
-    };
+    let Some(etag) = etag else { bail!("deletion is only supported on servers which provide etags") };
 
     // Delete the calendar
     test_data.client.delete(new_collection, etag).await?;
