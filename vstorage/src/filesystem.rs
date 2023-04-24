@@ -1,5 +1,8 @@
 //! Implements reading/writing entries from a local filesystem [`vdir`].
 //!
+//! - The `href` for an items is its filename relative to its parent directory.
+//! - The `href` for a collection is its absolute path. This may change in future.
+//!
 //! [`vdir`]: https://vdirsyncer.pimutils.org/en/stable/vdir.html
 #![allow(clippy::module_name_repetitions)]
 
