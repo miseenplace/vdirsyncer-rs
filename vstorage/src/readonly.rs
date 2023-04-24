@@ -36,26 +36,17 @@ pub struct ReadOnlyStorage {
     inner: Box<dyn Storage>,
 }
 
-/// A wrapper around a [`Collection`] that disallows any write operations.
-pub struct ReadOnlyCollection {
-    inner: Box<dyn Collection>,
-}
-
 #[async_trait]
 impl Storage for ReadOnlyStorage {
     async fn check(&self) -> Result<()> {
         self.inner.check().await
     }
 
-    async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
-        self.inner.discover_collections().await.map(|v| {
-            v.into_iter()
-                .map(|c| ReadOnlyCollection::from(c).boxed())
-                .collect()
-        })
+    async fn discover_collections(&self) -> Result<Vec<Collection>> {
+        self.inner.discover_collections().await
     }
 
-    async fn create_collection(&mut self, _href: &str) -> Result<Box<dyn Collection>> {
+    async fn create_collection(&mut self, _href: &str) -> Result<Collection> {
         Err(ErrorKind::ReadOnly.into())
     }
 
@@ -63,46 +54,48 @@ impl Storage for ReadOnlyStorage {
         Err(ErrorKind::ReadOnly.into())
     }
 
-    fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
-        self.inner
-            .open_collection(href)
-            .map(|c| ReadOnlyCollection::from(c).boxed())
-    }
-}
-
-#[async_trait]
-impl Collection for ReadOnlyCollection {
-    fn href(&self) -> &str {
-        self.inner.href()
+    fn open_collection(&self, href: &str) -> Result<Collection> {
+        self.inner.open_collection(href)
     }
 
-    async fn list(&self) -> Result<Vec<crate::base::ItemRef>> {
-        self.inner.list().await
+    async fn list_items(&self, collection: &Collection) -> Result<Vec<crate::base::ItemRef>> {
+        self.inner.list_items(collection).await
     }
 
-    async fn get(&self, href: &str) -> Result<(crate::base::Item, crate::base::Etag)> {
-        self.inner.get(href).await
-    }
-
-    async fn get_many(
+    async fn get_item(
         &self,
+        collection: &Collection,
+        href: &str,
+    ) -> Result<(crate::base::Item, crate::base::Etag)> {
+        self.inner.get_item(collection, href).await
+    }
+
+    async fn get_many_items(
+        &self,
+        collection: &Collection,
         hrefs: &[&str],
     ) -> Result<Vec<(crate::base::Href, crate::base::Item, crate::base::Etag)>> {
-        self.inner.get_many(hrefs).await
+        self.inner.get_many_items(collection, hrefs).await
     }
 
-    async fn get_all(
+    async fn get_all_items(
         &self,
+        collection: &Collection,
     ) -> Result<Vec<(crate::base::Href, crate::base::Item, crate::base::Etag)>> {
-        self.inner.get_all().await
+        self.inner.get_all_items(collection).await
     }
 
-    async fn add(&mut self, _: &crate::base::Item) -> Result<crate::base::ItemRef> {
+    async fn add_item(
+        &mut self,
+        _: &Collection,
+        _: &crate::base::Item,
+    ) -> Result<crate::base::ItemRef> {
         Err(ErrorKind::ReadOnly.into())
     }
 
-    async fn update(
+    async fn update_item(
         &mut self,
+        _: &Collection,
         _: &str,
         _: &str,
         _: &crate::base::Item,
@@ -110,23 +103,26 @@ impl Collection for ReadOnlyCollection {
         Err(ErrorKind::ReadOnly.into())
     }
 
-    async fn set_meta(&mut self, _: crate::base::MetadataKind, _: &str) -> Result<()> {
+    async fn set_collection_meta(
+        &mut self,
+        _: &Collection,
+        _: crate::base::MetadataKind,
+        _: &str,
+    ) -> Result<()> {
         Err(ErrorKind::ReadOnly.into())
     }
 
-    async fn get_meta(&self, meta: crate::base::MetadataKind) -> Result<Option<String>> {
-        self.inner.get_meta(meta).await
+    async fn get_collection_meta(
+        &self,
+        collection: &Collection,
+        meta: crate::base::MetadataKind,
+    ) -> Result<Option<String>> {
+        self.inner.get_collection_meta(collection, meta).await
     }
 }
 
 impl From<Box<dyn Storage>> for ReadOnlyStorage {
     fn from(value: Box<dyn Storage>) -> Self {
-        Self { inner: value }
-    }
-}
-
-impl From<Box<dyn Collection>> for ReadOnlyCollection {
-    fn from(value: Box<dyn Collection>) -> Self {
         Self { inner: value }
     }
 }

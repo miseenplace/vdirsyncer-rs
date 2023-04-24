@@ -13,6 +13,7 @@ use http::Uri;
 use std::path::PathBuf;
 use vstorage::base::Collection;
 use vstorage::base::Definition;
+use vstorage::base::Storage;
 use vstorage::filesystem::FilesystemDefinition;
 use vstorage::webcal::WebCalDefinition;
 
@@ -51,7 +52,7 @@ async fn main() {
         .await
         .expect("can create fs collection");
 
-    let copied = copy_collection(webcal_collection, fs_collection).await;
+    let copied = copy_collection(&webcal, webcal_collection, &mut fs, fs_collection).await;
 
     println!("Copied {copied} items");
 }
@@ -60,12 +61,21 @@ async fn main() {
 ///
 /// NOTE: This function serves an extra purpose: the validates that the `Collection` trait is
 /// object safe and works well when used in such way.
-async fn copy_collection(source: Box<dyn Collection>, mut target: Box<dyn Collection>) -> usize {
+async fn copy_collection(
+    source_storage: &Box<dyn Storage>,
+    source_collection: Collection,
+    target_storage: &mut Box<dyn Storage>,
+    target_collection: Collection,
+) -> usize {
     let mut count = 0;
-    for (_href, item, _etag) in source.get_all().await.expect("webcal remote has items") {
+    for (_href, item, _etag) in source_storage
+        .get_all_items(&source_collection)
+        .await
+        .expect("webcal remote has items")
+    {
         count += 1;
-        target
-            .add(&item)
+        target_storage
+            .add_item(&target_collection, &item)
             .await
             .expect("write to local filesystem collection");
     }

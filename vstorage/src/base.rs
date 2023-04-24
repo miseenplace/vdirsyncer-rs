@@ -53,10 +53,10 @@ pub trait Storage: Sync + Send {
     async fn check(&self) -> Result<()>;
 
     /// Finds existing collections for this storage.
-    async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>>;
+    async fn discover_collections(&self) -> Result<Vec<Collection>>;
 
     /// Creates a new collection.
-    async fn create_collection(&mut self, href: &str) -> Result<Box<dyn Collection>>;
+    async fn create_collection(&mut self, href: &str) -> Result<Collection>;
 
     /// Deletes an existing collection.
     ///
@@ -65,9 +65,58 @@ pub trait Storage: Sync + Send {
 
     /// Open an existing collection.
     ///
-    /// This method DOES NOT check the existence of the collection. If existence needs to be
-    /// verified, use [`Self::discover_collections`] to enumerate all collections instead.
-    fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>>;
+    /// This method DOES NOT check the existence of the collection.
+    fn open_collection(&self, href: &str) -> Result<Collection>;
+
+    /// Returns the value of a property for a given collection.
+    async fn get_collection_meta(
+        &self,
+        collection: &Collection,
+        meta: MetadataKind,
+    ) -> Result<Option<String>>;
+
+    /// Sets the value of a property for a given collection.
+    async fn set_collection_meta(
+        &mut self,
+        collection: &Collection,
+        meta: MetadataKind,
+        value: &str,
+    ) -> Result<()>;
+
+    /// Enumerates items in a given collection.
+    async fn list_items(&self, collection: &Collection) -> Result<Vec<ItemRef>>;
+
+    /// Fetch a single item from given collection.
+    async fn get_item(&self, collection: &Collection, href: &str) -> Result<(Item, Etag)>;
+
+    /// Fetch multiple items.
+    ///
+    /// Similar to [`Storage::get_item`], but optimised to minimise the amount of IO required.
+    /// Duplicate `href`s will be ignored.
+    async fn get_many_items(
+        &self,
+        collection: &Collection,
+        hrefs: &[&str],
+    ) -> Result<Vec<(Href, Item, Etag)>>;
+
+    /// Fetch all items from a given collection.
+    // TODO: provide a generic implementation.
+    async fn get_all_items(&self, collection: &Collection) -> Result<Vec<(Href, Item, Etag)>>;
+
+    /// Saves a new item into a given collection
+    async fn add_item(&mut self, collection: &Collection, item: &Item) -> Result<ItemRef>;
+
+    /// Updates an existing item in a given collection.
+    async fn update_item(
+        &mut self,
+        collection: &Collection,
+        href: &str,
+        etag: &str,
+        item: &Item,
+    ) -> Result<Etag>;
+
+    // collections should have non-pub cache of UID->hrefs
+    // can this be implemented for Collection?
 }
 
 /// A collection may, for example, be an address book or a calendar.
@@ -76,11 +125,13 @@ pub trait Storage: Sync + Send {
 /// zero or more items (e.g.: an address book contains events). Each item is addressed by an
 /// [`Href`].
 ///
-/// Collections never cache data locally. For reading items in bulk, prefer [`get_many`].
-///
-/// [`get_many`]: Self::get_many
-#[async_trait]
-pub trait Collection: Sync + Send {
+/// Collections never cache data locally. For reading items in bulk, prefer
+/// [`Storage::get_many_items`].
+pub struct Collection {
+    href: String,
+}
+
+impl Collection {
     /// The path to this collection inside the storage.
     ///
     /// This value can be used with [`Storage::open_collection`] to later access this same
@@ -89,43 +140,14 @@ pub trait Collection: Sync + Send {
     /// Href should not change over time, so should be associated with an immutable property of the
     /// collection (e.g.: a relative URL path, or a directory's filename).
     ///
-    /// The exact meaning of this value is storage-specific, but should be remain consistent.
-    fn href(&self) -> &str;
+    /// The exact meaning of this value is storage-specific, but should be remain consistent with a
+    /// storage.
+    pub fn href(&self) -> &str {
+        &self.href
+    }
 
-    /// Enumerates items in this collection.
-    async fn list(&self) -> Result<Vec<ItemRef>>;
-
-    /// Fetch a single item.
-    async fn get(&self, href: &str) -> Result<(Item, Etag)>;
-
-    /// Fetch multiple items. Similar to [`Collection::get`], but optimised to minimise the amount of IO
-    /// required. Duplicate `href`s will be ignored.
-    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Href, Item, Etag)>>;
-
-    /// Fetch all items in the collection.
-    async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>>;
-
-    /// Saves a new item into the collection
-    async fn add(&mut self, item: &Item) -> Result<ItemRef>;
-
-    /// Updates an existing item in the collection.
-    async fn update(&mut self, href: &str, etag: &str, item: &Item) -> Result<Etag>;
-
-    /// Sets the value of a property for this collection.
-    async fn set_meta(&mut self, meta: MetadataKind, value: &str) -> Result<()>;
-
-    /// Returns the value of a property for this collection.
-    async fn get_meta(&self, meta: MetadataKind) -> Result<Option<String>>;
-
-    // collections should have non-pub cache of UID->hrefs
-    // can this be implemented for Collection?
-
-    /// Shortcut to return a dynamically dispatched Box.
-    fn boxed(self) -> Box<dyn Collection>
-    where
-        Self: Sized + 'static,
-    {
-        Box::from(self)
+    pub(crate) fn new(href: String) -> Collection {
+        Collection { href }
     }
 }
 
@@ -137,7 +159,7 @@ pub struct ItemRef {
 
 /// Metadata types supported by storages.
 ///
-/// See also [`Collection::get_meta`] and [`Collection::set_meta`].
+/// See also [`Storage::get_collection_meta`] and [`Storage::set_collection_meta`].
 #[non_exhaustive]
 #[derive(Copy, Clone)]
 pub enum MetadataKind {
@@ -240,7 +262,6 @@ mod tests {
     // so this is not really a problem.
 
     use super::Item;
-    use crate::base::Collection;
     use crate::base::Storage;
 
     fn item_from_raw(raw: String) -> Item {
@@ -313,11 +334,5 @@ mod tests {
     fn test_storage_is_object_safe() {
         #[allow(dead_code)]
         fn dummy(_: Box<dyn Storage>) {}
-    }
-
-    #[test]
-    fn test_collection_is_object_safe() {
-        #[allow(dead_code)]
-        fn dummy(_: Box<dyn Collection>) {}
     }
 }

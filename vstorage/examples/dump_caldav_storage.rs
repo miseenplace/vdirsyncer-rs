@@ -34,20 +34,26 @@ async fn create_vdir_from_env() -> Box<dyn Storage> {
 }
 #[tokio::main]
 async fn main() {
-    let caldav_client = create_caldav_from_env().await;
-    let mut vdir_client = create_vdir_from_env().await;
+    let caldav_storage = create_caldav_from_env().await;
+    let mut vdir_storage = create_vdir_from_env().await;
 
-    let collections = caldav_client.discover_collections().await.unwrap();
+    let collections = caldav_storage.discover_collections().await.unwrap();
 
     println!("Found {} collections", collections.len());
     for collection in collections {
         println!("Creating {}", collection.href());
-        let new_collection = vdir_client
-            .create_collection(collection.id())
+        let collection_name = collection
+            .href()
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .expect("collection has at least one path segument");
+        let new_collection = vdir_storage
+            .create_collection(collection_name)
             .await
             .unwrap();
 
-        copy_collection(collection, new_collection).await;
+        copy_collection(&caldav_storage, collection, &mut vdir_storage, new_collection).await;
     }
 }
 
@@ -55,12 +61,21 @@ async fn main() {
 ///
 /// NOTE: This function serves an extra purpose: the validates that the `Collection` trait is
 /// object safe and works well when used in such way.
-async fn copy_collection(source: Box<dyn Collection>, mut target: Box<dyn Collection>) -> usize {
+async fn copy_collection(
+    source_storage: &Box<dyn Storage>,
+    source_collection: Collection,
+    target_storage: &mut Box<dyn Storage>,
+    target_collection: Collection,
+) -> usize {
     let mut count = 0;
-    for (_href, item, _etag) in source.get_all().await.expect("webcal remote has items") {
+    for (_href, item, _etag) in source_storage
+        .get_all_items(&source_collection)
+        .await
+        .expect("webcal remote has items")
+    {
         count += 1;
-        target
-            .add(&item)
+        target_storage
+            .add_item(&target_collection, &item)
             .await
             .expect("write to local filesystem collection");
     }

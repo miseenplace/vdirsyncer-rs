@@ -75,32 +75,23 @@ impl Storage for CalDavStorage {
     ///
     /// Collections outside the principal's home can still be found by providing an absolute path
     /// to [`CalDavStorage::open_collection`].
-    async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
+    async fn discover_collections(&self) -> Result<Vec<Collection>> {
         let x = self
             .client
             .find_calendars(None)
             .await?
             .into_iter()
-            .map(|collection| {
-                CalDavCollection {
-                    href: collection.href,
-                    client: self.client.clone(),
-                }
-                .boxed()
-            })
+            .map(|collection| Collection::new(collection.href))
             .collect::<Vec<_>>();
         Ok(x)
     }
 
-    async fn create_collection(&mut self, href: &str) -> Result<Box<dyn Collection>> {
+    async fn create_collection(&mut self, href: &str) -> Result<Collection> {
         self.client
             .create_collection(href, CollectionType::Calendar)
             .await
             .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
-        Ok(Box::from(CalDavCollection {
-            href: href.to_string(),
-            client: self.client.clone(),
-        }))
+        Ok(Collection::new(href.to_string()))
     }
 
     /// Deletes a caldav collection.
@@ -138,14 +129,11 @@ impl Storage for CalDavStorage {
         // TODO: specific error kind type for MissingEtag?
 
         // TODO: if no etag -> use force deletion (and warn)
-        let collection = CalDavCollection {
-            client: self.client.clone(),
-            href: href.to_string(),
-        };
+        let collection = Collection::new(href.to_string());
 
         // TODO: verify that the collection is actually a calendar collection?
         // This could be done by using discover above.
-        let items = collection.list().await?;
+        let items = self.list_items(&collection).await?;
         if !items.is_empty() {
             return Err(ErrorKind::CollectionNotEmpty.into());
         }
@@ -157,31 +145,12 @@ impl Storage for CalDavStorage {
         Ok(())
     }
 
-    fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
-        Ok(CalDavCollection {
-            client: self.client.clone(),
-            href: href.to_string(),
-        }
-        .boxed())
-    }
-}
-
-/// A caldav collection
-///
-/// The "collection" concept from `vstorage` maps 1:1 with the "collection" concept in caldav.
-pub struct CalDavCollection {
-    client: Arc<CalDavClient>,
-    href: String,
-}
-
-#[async_trait]
-impl Collection for CalDavCollection {
-    fn href(&self) -> &str {
-        &self.href
+    fn open_collection(&self, href: &str) -> Result<Collection> {
+        Ok(Collection::new(href.to_string()))
     }
 
-    async fn list(&self) -> Result<Vec<ItemRef>> {
-        let response = self.client.list_resources(&self.href).await?;
+    async fn list_items(&self, collection: &Collection) -> Result<Vec<ItemRef>> {
+        let response = self.client.list_resources(collection.href()).await?;
         let mut items = Vec::with_capacity(response.len());
         for r in response {
             items.push(ItemRef {
@@ -192,10 +161,10 @@ impl Collection for CalDavCollection {
         Ok(items)
     }
 
-    async fn get(&self, href: &str) -> Result<(Item, Etag)> {
+    async fn get_item(&self, collection: &Collection, href: &str) -> Result<(Item, Etag)> {
         let mut results = self
             .client
-            .get_resources(&self.href, &[href])
+            .get_resources(&collection.href(), &[href])
             .await
             .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
 
@@ -218,10 +187,14 @@ impl Collection for CalDavCollection {
         Ok((Item::from(content.data), content.etag))
     }
 
-    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Href, Item, Etag)>> {
+    async fn get_many_items(
+        &self,
+        collection: &Collection,
+        hrefs: &[&str],
+    ) -> Result<Vec<(Href, Item, Etag)>> {
         Ok(self
             .client
-            .get_resources(&self.href, hrefs)
+            .get_resources(&collection.href(), hrefs)
             .await
             .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?
             .into_iter()
@@ -232,14 +205,16 @@ impl Collection for CalDavCollection {
             .collect())
     }
 
-    async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>> {
-        let list = self.list().await?;
+    async fn get_all_items(&self, collection: &Collection) -> Result<Vec<(Href, Item, Etag)>> {
+        let list = self.list_items(collection).await?;
         let hrefs = list.iter().map(|i| i.href.as_str()).collect::<Vec<_>>();
-        self.get_many(&hrefs).await
+        self.get_many_items(collection, &hrefs).await
     }
 
-    async fn add(&mut self, item: &Item) -> Result<ItemRef> {
-        let href = item.ident();
+    async fn add_item(&mut self, collection: &Collection, item: &Item) -> Result<ItemRef> {
+        let href = join_hrefs(collection.href(), &item.ident());
+        // TODO: ident: .chars().filter(char::is_ascii_alphanumeric)
+
         self.client
             // FIXME: should not copy data here?
             .create_resource(
@@ -252,7 +227,14 @@ impl Collection for CalDavCollection {
             .map(|etag| ItemRef { href, etag })
     }
 
-    async fn update(&mut self, href: &str, etag: &str, item: &Item) -> Result<Etag> {
+    async fn update_item(
+        &mut self,
+        _collection: &Collection,
+        href: &str,
+        etag: &str,
+        item: &Item,
+    ) -> Result<Etag> {
+        // TODO: check that href is a sub-path of collection.href?
         self.client
             .update_resource(
                 href,
@@ -267,7 +249,12 @@ impl Collection for CalDavCollection {
     /// # Panics
     ///
     /// This function is not implemented.
-    async fn set_meta(&mut self, _meta: MetadataKind, _value: &str) -> Result<()> {
+    async fn set_collection_meta(
+        &mut self,
+        _collection: &Collection,
+        _meta: MetadataKind,
+        _value: &str,
+    ) -> Result<()> {
         todo!()
     }
 
@@ -279,12 +266,34 @@ impl Collection for CalDavCollection {
     /// # Errors
     ///
     /// If the underlying HTTP connection fails or if the server returns invalid data.
-    async fn get_meta(&self, meta: MetadataKind) -> Result<Option<String>> {
+    async fn get_collection_meta(
+        &self,
+        collection: &Collection,
+        meta: MetadataKind,
+    ) -> Result<Option<String>> {
         let result = match meta {
-            MetadataKind::DisplayName => self.client.get_collection_displayname(&self.href).await,
-            MetadataKind::Colour => self.client.get_calendar_colour(&self.href).await,
+            MetadataKind::DisplayName => {
+                self.client
+                    .get_collection_displayname(collection.href())
+                    .await
+            }
+            MetadataKind::Colour => self.client.get_calendar_colour(collection.href()).await,
         };
 
         result.map_err(Error::from)
     }
+}
+
+fn join_hrefs(collection_href: &str, item_href: &str) -> String {
+    if item_href.starts_with('/') {
+        return item_href.to_string();
+    }
+
+    let mut href = collection_href
+        .strip_suffix('/')
+        .unwrap_or(collection_href)
+        .to_string();
+    href.push('/');
+    href.push_str(item_href);
+    href
 }

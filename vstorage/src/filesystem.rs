@@ -21,8 +21,7 @@ use crate::{Error, ErrorKind, Result};
 
 /// A filesystem directory containing zero or more directories.
 ///
-/// Each child directory is treated as `FilesystemCollection`]. Nested subdirectories are strictly
-/// not supported.
+/// Each child directory is treated as [`Collection`]. Nested subdirectories are not supported.
 pub struct FilesystemStorage {
     definition: Arc<FilesystemDefinition>,
 }
@@ -41,39 +40,31 @@ impl Storage for FilesystemStorage {
         }
     }
 
-    async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
+    async fn discover_collections(&self) -> Result<Vec<Collection>> {
         let mut entries = read_dir(&self.definition.path).await?;
 
-        let mut collections = Vec::<Box<dyn Collection>>::new();
+        let mut collections = Vec::<Collection>::new();
         while let Some(entry) = entries.next_entry().await? {
             if !metadata(entry.path()).await?.is_dir() {
                 continue;
             }
-            let dir_name = entry
+            let href = entry
                 .file_name()
                 .to_str()
                 .ok_or_else(|| Error::new(ErrorKind::InvalidData, "collection name is not utf8"))?
                 .to_owned();
 
-            collections.push(Box::from(FilesystemCollection {
-                dir_name,
-                path: entry.path(),
-                definition: self.definition.clone(),
-            }));
+            collections.push(Collection::new(href));
         }
 
         Ok(collections)
     }
 
-    async fn create_collection(&mut self, href: &str) -> Result<Box<dyn Collection>> {
+    async fn create_collection(&mut self, href: &str) -> Result<Collection> {
         let path = self.join_collection_href(href)?;
         create_dir(&path).await?;
 
-        Ok(Box::from(FilesystemCollection {
-            dir_name: href.to_owned(),
-            path,
-            definition: self.definition.clone(),
-        }))
+        self.open_collection(href)
     }
 
     async fn destroy_collection(&mut self, href: &str) -> Result<()> {
@@ -81,19 +72,167 @@ impl Storage for FilesystemStorage {
         remove_dir(path).await.map_err(Error::from)
     }
 
-    fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
-        let path = self.join_collection_href(href)?;
+    fn open_collection(&self, href: &str) -> Result<Collection> {
+        let href = self
+            .join_collection_href(href)?
+            .to_str()
+            .ok_or_else(|| Error::new(ErrorKind::InvalidData, "collection name is not utf8"))?
+            .to_string();
 
-        Ok(Box::from(FilesystemCollection {
-            dir_name: href.to_owned(),
-            path,
-            definition: self.definition.clone(),
-        }))
+        Ok(Collection::new(href))
+    }
+
+    async fn list_items(&self, collection: &Collection) -> Result<Vec<ItemRef>> {
+        let path = self.collection_path(collection);
+        let mut read_dir = ReadDirStream::new(read_dir(path).await?);
+
+        let mut items = Vec::new();
+        while let Some(entry) = read_dir.next().await {
+            let entry = entry?;
+            let href = entry
+                .file_name()
+                .to_str()
+                .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Filename is not valid UTF-8"))?
+                .into();
+            let etag = etag_for_direntry(&entry).await?;
+            let item = ItemRef { href, etag };
+            items.push(item);
+        }
+
+        Ok(items)
+    }
+
+    async fn get_item(&self, collection: &Collection, href: &str) -> Result<(Item, Etag)> {
+        let path = self.collection_path(collection).join(href);
+        let meta = metadata(&path).await?;
+
+        let item = Item::from(read_to_string(&path).await?);
+        let etag = etag_for_metadata(&meta);
+
+        Ok((item, etag))
+    }
+
+    async fn get_many_items(
+        &self,
+        collection: &Collection,
+        hrefs: &[&str],
+    ) -> Result<Vec<(Href, Item, Etag)>> {
+        // No specialisation for this type; it's fast enough for now.
+        let mut items = Vec::with_capacity(hrefs.len());
+        for href in hrefs {
+            let (item, etag) = self.get_item(collection, href).await?;
+            items.push((String::from(*href), item, etag));
+        }
+        Ok(items)
+    }
+
+    async fn get_all_items(&self, collection: &Collection) -> Result<Vec<(Href, Item, Etag)>> {
+        let mut read_dir = read_dir(self.collection_path(collection)).await?;
+
+        let mut items = Vec::new();
+        while let Some(entry) = read_dir.next_entry().await? {
+            let href: String = entry
+                .file_name()
+                .to_str()
+                .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Filename is not valid UTF-8"))?
+                .into();
+            let etag = etag_for_direntry(&entry).await?;
+            let item = Item::from(read_to_string(&href).await?);
+            items.push((href, item, etag));
+        }
+
+        Ok(items)
+    }
+
+    async fn set_collection_meta(
+        &mut self,
+        collection: &Collection,
+        meta: MetadataKind,
+        value: &str,
+    ) -> Result<()> {
+        let filename = filename_for_collection_meta(meta);
+
+        let path = self.collection_path(collection).join(filename);
+        let mut file = File::create(path).await?;
+
+        file.write_all(value.as_bytes()).await?;
+        Ok(())
+    }
+
+    async fn get_collection_meta(
+        &self,
+        collection: &Collection,
+        meta: MetadataKind,
+    ) -> Result<Option<String>> {
+        let filename = filename_for_collection_meta(meta);
+
+        let path = self.collection_path(collection).join(filename);
+        let value = match read_to_string(path).await {
+            Ok(data) => data,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(Error::from(e)),
+        };
+
+        Ok(Some(value))
+    }
+
+    async fn add_item(&mut self, collection: &Collection, item: &Item) -> Result<ItemRef> {
+        // TODO: We only need to remove a few "illegal" characters, so this is a bit too strict.
+        let basename = item
+            .ident()
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect::<String>();
+        let href = format!("{}.{}", basename, self.definition.extension);
+
+        let filename = self.collection_path(collection).join(&href);
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&filename)
+            .await?;
+        file.write_all(item.as_str().as_bytes()).await?;
+
+        let item_ref = ItemRef {
+            href,
+            etag: etag_for_path::<PathBuf>(&filename).await?,
+        };
+        Ok(item_ref)
+    }
+
+    async fn update_item(
+        &mut self,
+        collection: &Collection,
+        href: &str,
+        etag: &str,
+        item: &Item,
+    ) -> Result<Etag> {
+        let filename = self.collection_path(collection).join(href);
+
+        let actual_etag = etag_for_path::<PathBuf>(&filename).await?;
+        if etag != actual_etag {
+            return Err(Error::new(ErrorKind::InvalidData, "wrong etag"));
+        }
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(false)
+            .open(&filename)
+            .await?;
+        file.write_all(item.as_str().as_bytes()).await?;
+
+        let etag = etag_for_path::<PathBuf>(&filename).await?;
+        Ok(etag)
     }
 }
 
 impl FilesystemStorage {
-    // Joins an href to the collection's path.
+    fn collection_path(&self, collection: &Collection) -> PathBuf {
+        self.definition.path.join(collection.href())
+    }
+
+    // Joins an href to the storage's path.
     //
     // # Errors
     //
@@ -125,147 +264,6 @@ impl Definition for FilesystemDefinition {
         Ok(Box::from(FilesystemStorage {
             definition: Arc::from(self),
         }))
-    }
-}
-
-/// A collection backed by a filesystem directory.
-///
-/// See documentation for [`vdir`](https://vdirsyncer.pimutils.org/en/stable/vdir.html) for
-/// details.
-pub struct FilesystemCollection {
-    dir_name: String,
-    path: PathBuf,
-    definition: Arc<FilesystemDefinition>,
-}
-
-#[async_trait]
-impl Collection for FilesystemCollection {
-    async fn list(&self) -> Result<Vec<ItemRef>> {
-        let mut read_dir = ReadDirStream::new(read_dir(&self.path).await?);
-
-        let mut items = Vec::new();
-        while let Some(entry) = read_dir.next().await {
-            let entry = entry?;
-            let href = entry
-                .file_name()
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Filename is not valid UTF-8"))?
-                .into();
-            let etag = etag_for_direntry(&entry).await?;
-            let item = ItemRef { href, etag };
-            items.push(item);
-        }
-
-        Ok(items)
-    }
-
-    async fn get(&self, href: &str) -> Result<(Item, Etag)> {
-        let path = self.path.join(href);
-        let meta = metadata(&path).await?;
-
-        let item = Item::from(read_to_string(&path).await?);
-        let etag = etag_for_metadata(&meta);
-
-        Ok((item, etag))
-    }
-
-    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Href, Item, Etag)>> {
-        // No specialisation for this type; it's fast enough for now.
-        let mut items = Vec::with_capacity(hrefs.len());
-        for href in hrefs {
-            let (item, etag) = self.get(href).await?;
-            items.push((String::from(*href), item, etag));
-        }
-        Ok(items)
-    }
-
-    async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>> {
-        let mut read_dir = read_dir(&self.path).await?;
-
-        let mut items = Vec::new();
-        while let Some(entry) = read_dir.next_entry().await? {
-            let href: String = entry
-                .file_name()
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Filename is not valid UTF-8"))?
-                .into();
-            let etag = etag_for_direntry(&entry).await?;
-            let item = Item::from(read_to_string(&href).await?);
-            items.push((href, item, etag));
-        }
-
-        Ok(items)
-    }
-
-    async fn set_meta(&mut self, meta: MetadataKind, value: &str) -> Result<()> {
-        let filename = filename_for_collection_meta(meta);
-
-        let path = self.path.join(filename);
-        let mut file = File::create(path).await?;
-
-        file.write_all(value.as_bytes()).await?;
-        Ok(())
-    }
-
-    async fn get_meta(&self, meta: MetadataKind) -> Result<Option<String>> {
-        let filename = filename_for_collection_meta(meta);
-
-        let path = self.path.join(filename);
-        let value = match read_to_string(path).await {
-            Ok(data) => data,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(Error::from(e)),
-        };
-
-        Ok(Some(value))
-    }
-
-    async fn add(&mut self, item: &Item) -> Result<ItemRef> {
-        // TODO: We only need to remove a few "illegal" characters, so this is a bit too strict.
-        let basename = item
-            .ident()
-            .chars()
-            .filter(char::is_ascii_alphanumeric)
-            .collect::<String>();
-        let href = format!("{}.{}", basename, self.definition.extension);
-
-        let filename = self.path.join(&href);
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&filename)
-            .await?;
-        file.write_all(item.as_str().as_bytes()).await?;
-
-        let item_ref = ItemRef {
-            href,
-            etag: etag_for_path::<PathBuf>(&filename).await?,
-        };
-        Ok(item_ref)
-    }
-
-    async fn update(&mut self, href: &str, etag: &str, item: &Item) -> Result<Etag> {
-        let filename = self.path.join(href);
-
-        let actual_etag = etag_for_path::<PathBuf>(&filename).await?;
-        if etag != actual_etag {
-            return Err(Error::new(ErrorKind::InvalidData, "wrong etag"));
-        }
-
-        let mut file = OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(false)
-            .open(&filename)
-            .await?;
-        file.write_all(item.as_str().as_bytes()).await?;
-
-        let etag = etag_for_path::<PathBuf>(&filename).await?;
-        Ok(etag)
-    }
-
-    fn href(&self) -> &str {
-        &self.dir_name
     }
 }
 
@@ -306,8 +304,8 @@ mod tests {
 
         let mut storage = definition.storage().await.unwrap();
         let collection = storage.create_collection("test").await.unwrap();
-        let displayname = collection
-            .get_meta(crate::base::MetadataKind::DisplayName)
+        let displayname = storage
+            .get_collection_meta(&collection, crate::base::MetadataKind::DisplayName)
             .await
             .unwrap();
 

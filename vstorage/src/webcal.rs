@@ -92,14 +92,14 @@ impl Storage for WebCalStorage {
     }
 
     /// Returns a single collection with the name specified in the definition.
-    async fn discover_collections(&self) -> Result<Vec<Box<dyn Collection>>> {
-        Ok(vec![Box::from(WebCalCollection {
-            inner: self.inner.clone(),
-        })])
+    async fn discover_collections(&self) -> Result<Vec<Collection>> {
+        Ok(vec![Collection::new(
+            self.inner.definition.collection_name.clone(),
+        )])
     }
 
     /// Unsupported for this storage type.
-    async fn create_collection(&mut self, _: &str) -> Result<Box<dyn Collection>> {
+    async fn create_collection(&mut self, _: &str) -> Result<Collection> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "creating collections via webcal is not supported",
@@ -116,43 +116,24 @@ impl Storage for WebCalStorage {
 
     /// Usable only with the collection name specified in the definition. Any other name will
     /// return [`ErrorKind::DoesNotExist`]
-    fn open_collection(&self, href: &str) -> Result<Box<dyn Collection>> {
+    fn open_collection(&self, href: &str) -> Result<Collection> {
         if href != self.inner.definition.collection_name {
             return Err(Error::new(
                 ErrorKind::DoesNotExist,
                 format!("this storage only contains the '{href}' collection"),
             ));
         }
-        Ok(Box::from(WebCalCollection {
-            inner: self.inner.clone(),
-        }))
+        Ok(Collection::new(
+            self.inner.definition.collection_name.clone(),
+        ))
     }
-}
 
-/// A collection of items in a webcal storage.
-///
-/// For this collection type, the `Href` is the UID of the entries. There is no other way to
-/// address individual entries, so this is essentially the only choice.
-///
-/// The fact that `Href = UID` is a quirk specific to this storage type, and should not be relied
-/// upon in general.
-pub struct WebCalCollection {
-    inner: Arc<WebCalInner>,
-}
-
-impl PartialEq for &WebCalCollection {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner.definition.eq(&other.inner.definition)
-    }
-}
-
-#[async_trait]
-impl Collection for WebCalCollection {
     /// Enumerates items in this collection.
     ///
     /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. If some
-    /// items need to be read as well, it is generally best to use [`WebCalCollection::get_all`] instead.
-    async fn list(&self) -> Result<Vec<ItemRef>> {
+    /// items need to be read as well, it is generally best to use
+    /// [`WebCalStorage::get_all_items`] instead.
+    async fn list_items(&self, _collection: &Collection) -> Result<Vec<ItemRef>> {
         let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
@@ -179,10 +160,8 @@ impl Collection for WebCalCollection {
     /// Returns a single item from the collection.
     ///
     /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. It is
-    /// strongly recommended to use [`WebCalCollection::get_all`] instead.
-    ///
-    /// [`get_many`]: crate::base::Collection::get_many
-    async fn get(&self, href: &str) -> Result<(Item, Etag)> {
+    /// strongly recommended to use [`WebCalStorage::get_all_items`] instead.
+    async fn get_item(&self, _collection: &Collection, href: &str) -> Result<(Item, Etag)> {
         let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
@@ -209,8 +188,12 @@ impl Collection for WebCalCollection {
     /// Returns multiple items from the collection.
     ///
     /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. It is
-    /// generally best to use [`WebCalCollection::get_all`] instead.
-    async fn get_many(&self, hrefs: &[&str]) -> Result<Vec<(Href, Item, Etag)>> {
+    /// generally best to use [`WebCalStorage::get_all_items`] instead.
+    async fn get_many_items(
+        &self,
+        _collection: &Collection,
+        hrefs: &[&str],
+    ) -> Result<Vec<(Href, Item, Etag)>> {
         let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
@@ -236,7 +219,7 @@ impl Collection for WebCalCollection {
     /// Fetch all items in the collection.
     ///
     /// Performs a single HTTP(s) request to fetch all items.
-    async fn get_all(&self) -> Result<Vec<(Href, Item, Etag)>> {
+    async fn get_all_items(&self, _collection: &Collection) -> Result<Vec<(Href, Item, Etag)>> {
         let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
@@ -258,7 +241,7 @@ impl Collection for WebCalCollection {
     }
 
     /// Unsupported for this storage type.
-    async fn add(&mut self, _: &Item) -> Result<ItemRef> {
+    async fn add_item(&mut self, _collection: &Collection, _: &Item) -> Result<ItemRef> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "creating collections via webcal is not supported",
@@ -266,7 +249,13 @@ impl Collection for WebCalCollection {
     }
 
     /// Unsupported for this storage type.
-    async fn update(&mut self, _: &str, _: &str, _: &Item) -> Result<Etag> {
+    async fn update_item(
+        &mut self,
+        _collection: &Collection,
+        _: &str,
+        _: &str,
+        _: &Item,
+    ) -> Result<Etag> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "updating items via webcal is not supported",
@@ -274,7 +263,12 @@ impl Collection for WebCalCollection {
     }
 
     /// Unsupported for this storage type.
-    async fn set_meta(&mut self, _: MetadataKind, _: &str) -> Result<()> {
+    async fn set_collection_meta(
+        &mut self,
+        _collection: &Collection,
+        _: MetadataKind,
+        _: &str,
+    ) -> Result<()> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "setting metadata via webcal is not supported",
@@ -282,16 +276,16 @@ impl Collection for WebCalCollection {
     }
 
     /// Unsupported for this storage type.
-    async fn get_meta(&self, _: MetadataKind) -> Result<Option<String>> {
+    async fn get_collection_meta(
+        &self,
+        _collection: &Collection,
+        _: MetadataKind,
+    ) -> Result<Option<String>> {
         // TODO: return None?
         Err(Error::new(
             ErrorKind::Unsupported,
             "getting metadata via webcal is not supported",
         ))
-    }
-
-    fn href(&self) -> &str {
-        ""
     }
 }
 
@@ -345,16 +339,19 @@ mod test {
 
         assert_eq!(&collection.href(), &discovery.first().unwrap().href());
 
-        let item_refs = collection.list().await.unwrap();
+        let item_refs = storage.list_items(collection).await.unwrap();
 
         for item_ref in &item_refs {
-            let (_item, etag) = collection.get(&item_ref.href).await.unwrap();
+            let (_item, etag) = storage.get_item(collection, &item_ref.href).await.unwrap();
             // Might file if upstream file mutates between requests.
             assert_eq!(etag, item_ref.etag);
         }
 
         let hrefs: Vec<&str> = item_refs.iter().map(|r| r.href.as_ref()).collect();
-        let many = collection.get_many(&hrefs.clone()).await.unwrap();
+        let many = storage
+            .get_many_items(collection, &hrefs.clone())
+            .await
+            .unwrap();
 
         assert_eq!(many.len(), hrefs.len());
         assert_eq!(many.len(), item_refs.len());
