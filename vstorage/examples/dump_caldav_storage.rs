@@ -53,7 +53,13 @@ async fn main() {
             .await
             .unwrap();
 
-        copy_collection(&caldav_storage, collection, &mut vdir_storage, new_collection).await;
+        copy_collection(
+            &caldav_storage,
+            collection,
+            &mut vdir_storage,
+            new_collection,
+        )
+        .await;
     }
 }
 
