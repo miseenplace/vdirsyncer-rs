@@ -40,5 +40,5 @@ Test clients use the discovery bootstrapping mechanism, do you can specify your
 providers main site as URL as `CALDAV_SERVER` and DNS discovery should resolve
 the real server and port automatically.
 
-DO NOT use the credentials for real/personal/work account for test; these is no
-guarantee that these tests won't delete your data!
+**DO NOT use the credentials for real/personal/work account for test; these
+tests will likely destroy your data!**
