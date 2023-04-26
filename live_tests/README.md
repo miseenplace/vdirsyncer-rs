@@ -31,12 +31,10 @@ docker run --rm --publish 8000:8000 xandikos \
 And then execute these tests with:
 
 ```sh
-export CALDAV_SERVER=http://localhost:8000
-export CALDAV_USERNAME=xandikos
-export CALDAV_PASSWORD=xandikos
-
-cargo run -p live_tests
+cargo run -p live_tests -- live_tests/xandikos.profile
 ```
+
+Check the shipped `.profile` files for a reference on their format.
 
 Test clients use the discovery bootstrapping mechanism, do you can specify your
 providers main site as URL as `CALDAV_SERVER` and DNS discovery should resolve

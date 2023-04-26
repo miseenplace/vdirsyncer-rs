@@ -6,14 +6,64 @@ use libdav::{
     CalDavClient,
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use std::fmt::Write;
+use std::{fmt::Write, fs::File, io::Read, path::Path};
+
+/// A profile for a test server
+///
+/// Profiles are expected to be defined in files which specify details for connecting
+/// to the server and exceptions to rules for tests (e.g.: expected failures).
+#[derive(serde::Deserialize, Debug)]
+struct Profile {
+    host: String,
+    username: String,
+    password: String,
+    // TODO: allow specifying expected failures in each profile
+}
+
+impl Profile {
+    /// Load a profile from a given path.
+    fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+        let mut file = File::open(path.as_ref()).context("could not open profile file")?;
+        // toml crate won't allow reading from a file.
+        // See: https://github.com/toml-rs/toml/pull/349
+        let mut config = Vec::new();
+        file.read_to_end(&mut config)?;
+
+        Ok(toml::de::from_str(std::str::from_utf8(&config)?)?)
+    }
+}
 
 struct TestData {
     client: CalDavClient,
     home_set: Uri,
+    #[allow(dead_code)] // TODO: will be used for expected failures.
+    profile: Profile,
 }
 
 impl TestData {
+    async fn from_profile(profile: Profile) -> anyhow::Result<Self> {
+        let client = CalDavClient::builder()
+            .with_uri(profile.host.parse()?)
+            .with_auth(Auth::Basic {
+                username: profile.username.clone(),
+                password: Some(profile.password.clone()),
+            })
+            .build()
+            .auto_bootstrap()
+            .await
+            .context("could not initialise test client")?;
+        let home_set = client
+            .calendar_home_set
+            .as_ref()
+            .context("no calendar home set found")?
+            .clone();
+        Ok(TestData {
+            client,
+            home_set,
+            profile,
+        })
+    }
+
     async fn calendar_count(&self) -> anyhow::Result<usize> {
         self.client
             .find_calendars(None)
@@ -27,17 +77,15 @@ impl TestData {
 async fn main() -> anyhow::Result<()> {
     simple_logger::init_with_level(log::Level::Error).expect("logger configuration is valid");
 
-    let client = create_test_client_from_env()
-        .await
-        .context("could not initialise test client")?;
-    println!("🗓️ Running tests for: {}", client.context_path());
+    let mut args = std::env::args_os();
+    let cmd = args.next().expect("Argument zero must be defined");
+    let profile_path = args
+        .next()
+        .context(format!("Usage: {} PROFILE", cmd.to_string_lossy()))?;
 
-    let home_set = client
-        .calendar_home_set
-        .as_ref()
-        .context("no calendar home set found for client")?
-        .clone();
-    let test_data = TestData { client, home_set };
+    let profile = Profile::load(profile_path)?;
+    let test_data = TestData::from_profile(profile).await?;
+    println!("🗓️ Running tests for: {}", test_data.client.context_path());
 
     let results = vec![
         test_create_and_delete_collection(&test_data)
@@ -80,23 +128,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-async fn create_test_client_from_env() -> anyhow::Result<CalDavClient> {
-    let server = std::env::var("CALDAV_SERVER").context("Could not read CALDAV_SERVER")?;
-    let username = std::env::var("CALDAV_USERNAME").context("Could not read CALDAV_USERNAME")?;
-    let password = std::env::var("CALDAV_PASSWORD").context("Could not read CALDAV_PASSWORD")?;
-
-    let client = CalDavClient::builder()
-        .with_uri(server.parse()?)
-        .with_auth(Auth::Basic {
-            username,
-            password: Some(password),
-        })
-        .build()
-        .auto_bootstrap()
-        .await?;
-    Ok(client)
 }
 
 fn random_string(len: usize) -> String {
