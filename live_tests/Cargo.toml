@@ -13,3 +13,4 @@ simple_logger = { version = "2.3.0", default-features = false, features = ["colo
 anyhow = { version = "1.0.70", features = ["backtrace"] }
 serde = { version = "1.0.159", features = ["derive"] }
 toml = "0.7.3"
+strum = { version = "0.24", features = ["derive"] }

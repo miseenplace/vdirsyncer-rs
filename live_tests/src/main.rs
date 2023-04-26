@@ -6,7 +6,9 @@ use libdav::{
     CalDavClient,
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use serde::Deserialize;
 use std::{fmt::Write, fs::File, io::Read, path::Path};
+use strum::{EnumIter, IntoEnumIterator};
 
 /// A profile for a test server
 ///
@@ -18,6 +20,8 @@ struct Profile {
     username: String,
     password: String,
     // TODO: allow specifying expected failures in each profile
+    #[serde(default = "Vec::new")]
+    xfail: Vec<Test>,
 }
 
 impl Profile {
@@ -73,6 +77,33 @@ impl TestData {
     }
 }
 
+#[derive(Debug, PartialEq, EnumIter, Deserialize, strum::Display, Clone, Copy)]
+enum Test {
+    CreateAndDeleteCollection,
+    CreateAndForceDeleteCollection,
+    SetAndGetDisplayName,
+    CreateAndDeleteResource,
+    CreateAndFetchResource,
+    FetchMissingResource,
+    CheckAdvertisesSupport,
+}
+
+impl Test {
+    async fn exec(&self, test_data: &TestData) -> anyhow::Result<()> {
+        match self {
+            Test::CreateAndDeleteCollection => test_create_and_delete_collection(test_data).await,
+            Test::CreateAndForceDeleteCollection => {
+                test_create_and_force_delete_collection(test_data).await
+            }
+            Test::SetAndGetDisplayName => test_setting_and_getting_displayname(test_data).await,
+            Test::CreateAndDeleteResource => test_create_and_delete_resource(test_data).await,
+            Test::CreateAndFetchResource => test_create_and_fetch_resource(test_data).await,
+            Test::FetchMissingResource => test_fetch_missing(test_data).await,
+            Test::CheckAdvertisesSupport => test_check_support(test_data).await,
+        }
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     simple_logger::init_with_level(log::Level::Error).expect("logger configuration is valid");
@@ -83,46 +114,34 @@ async fn main() -> anyhow::Result<()> {
         .next()
         .context(format!("Usage: {} PROFILE", cmd.to_string_lossy()))?;
 
-    let profile = Profile::load(profile_path)?;
+    let profile = Profile::load(&profile_path)?;
     let test_data = TestData::from_profile(profile).await?;
-    println!("🗓️ Running tests for: {}", test_data.client.context_path());
+    println!("🗓️ Running tests for: {}", profile_path.to_string_lossy());
 
-    let results = vec![
-        test_create_and_delete_collection(&test_data)
-            .await
-            .context("create and delete collection"),
-        test_create_and_force_delete_collection(&test_data)
-            .await
-            .context("create and force delete collection"),
-        test_setting_and_getting_displayname(&test_data)
-            .await
-            .context("create and delete collection"),
-        test_create_and_delete_resource(&test_data)
-            .await
-            .context("create and delete resource"),
-        test_create_and_fetch_resource(&test_data)
-            .await
-            .context("create and fetch resource"),
-        test_fetch_missing(&test_data)
-            .await
-            .context("attempt to fetch inexistant resource"),
-        test_check_support(&test_data)
-            .await
-            .context("check that server advertises caldav support"),
-    ];
+    let tests = Test::iter();
+    let mut results = Vec::with_capacity(tests.len());
+    for test in tests {
+        results.push((test, test.exec(&test_data).await));
+    }
 
     let mut failed = 0;
-    for result in &results {
-        if let Err(err) = result {
-            println!("🔥 Test failed: {err:?}");
+    for (test, result) in &results {
+        if test_data.profile.xfail.contains(test) {
+            if result.is_ok() {
+                println!("- {}: ⛔ expected failure but passed", test);
+            } else {
+                println!("- {}: ⚠️ expected failure", test);
+            }
+        } else if let Err(err) = result {
+            println!("- {}: ⛔ failed: {}\n-----", test, err);
             failed += 1;
-            println!("-----");
-        }
+        } else {
+            println!("- {}: ✅ passed", test);
+        };
     }
-    let total = results.len();
-    let passed = total - failed;
 
-    println!("✅ Tests passed: {passed}/{total}");
+    println!("✅ Tests {} completed.\n", results.len());
+
     if failed > 0 {
         std::process::exit(1);
     }
