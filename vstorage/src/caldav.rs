@@ -220,6 +220,7 @@ impl Storage for CalDavStorage {
                 mime_types::CALENDAR,
             )
             .await
+            // FIXME: etag may be missing. In such case, we should fetch it.
             .map(|opt| opt.ok_or(Error::new(ErrorKind::InvalidData, "No Etag in response")))?
             .map(|etag| ItemRef { href, etag })
     }
@@ -240,6 +241,7 @@ impl Storage for CalDavStorage {
                 mime_types::CALENDAR,
             )
             .await
+            // FIXME: etag may be missing. In such case, we should fetch it.
             .map(|opt| opt.ok_or(Error::new(ErrorKind::InvalidData, "No Etag in response")))?
     }
 
