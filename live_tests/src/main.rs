@@ -7,8 +7,8 @@ use libdav::{
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::Deserialize;
-use std::{collections::HashMap, fmt::Write, fs::File, io::Read, path::Path};
-use strum::{EnumIter, IntoEnumIterator};
+use std::{collections::HashMap, fmt::Write, fs::File, io::Read, path::Path, str::FromStr};
+use strum::{EnumIter, EnumString, IntoEnumIterator};
 
 /// A profile for a test server
 ///
@@ -77,7 +77,9 @@ impl TestData {
     }
 }
 
-#[derive(Debug, PartialEq, EnumIter, Deserialize, strum::Display, Clone, Copy, Hash, Eq)]
+#[derive(
+    Debug, PartialEq, EnumIter, Deserialize, strum::Display, Clone, Copy, Hash, Eq, EnumString,
+)]
 enum Test {
     CreateAndDeleteCollection,
     CreateAndForceDeleteCollection,
@@ -116,11 +118,24 @@ async fn main() -> anyhow::Result<()> {
         .next()
         .context(format!("Usage: {} PROFILE", cmd.to_string_lossy()))?;
 
+    let tests = {
+        let test_names = args.collect::<Vec<_>>();
+        let mut tests = Vec::new();
+        for name in test_names {
+            tests.push(Test::from_str(&name.to_string_lossy())?);
+        }
+
+        if tests.is_empty() {
+            Test::iter().collect()
+        } else {
+            tests
+        }
+    };
+
     println!("🗓️ Running tests for: {}", profile_path.to_string_lossy());
     let profile = Profile::load(&profile_path)?;
     let test_data = TestData::from_profile(profile).await?;
 
-    let tests = Test::iter();
     let mut results = Vec::with_capacity(tests.len());
     for test in tests {
         results.push((test, test.exec(&test_data).await));
