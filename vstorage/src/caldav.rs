@@ -1,7 +1,5 @@
 //! A [`CalDavStorage`] is a single caldav repository, as specified in rfc4791.
 
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use http::Uri;
 use libdav::dav::mime_types;
@@ -34,13 +32,12 @@ impl From<libdav::dav::DavError> for Error {
 #[async_trait]
 impl Definition for CalDavDefinition {
     async fn storage(self) -> Result<Box<dyn Storage>> {
-        let unwrapped_client = CalDavClient::builder()
+        let client = CalDavClient::builder()
             .with_uri(self.url)
             .with_auth(self.auth)
             .build()
             .auto_bootstrap()
             .await?;
-        let client = Arc::from(unwrapped_client);
 
         Ok(Box::from(CalDavStorage { client }))
     }
@@ -50,7 +47,7 @@ impl Definition for CalDavDefinition {
 ///
 /// A single storage represents a single server with a specific set of credentials.
 pub struct CalDavStorage {
-    client: Arc<CalDavClient>,
+    client: CalDavClient,
 }
 
 #[async_trait]

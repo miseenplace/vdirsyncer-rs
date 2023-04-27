@@ -8,7 +8,6 @@
 
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::{fs::Metadata, os::unix::prelude::MetadataExt};
 use tokio::fs::{
     create_dir, metadata, read_dir, read_to_string, remove_dir, DirEntry, File, OpenOptions,
@@ -26,7 +25,7 @@ use crate::{Error, ErrorKind, Result};
 ///
 /// Each child directory is treated as [`Collection`]. Nested subdirectories are not supported.
 pub struct FilesystemStorage {
-    definition: Arc<FilesystemDefinition>,
+    definition: FilesystemDefinition,
 }
 
 #[async_trait]
@@ -264,9 +263,7 @@ pub struct FilesystemDefinition {
 #[async_trait]
 impl Definition for FilesystemDefinition {
     async fn storage(self) -> Result<Box<dyn Storage>> {
-        Ok(Box::from(FilesystemStorage {
-            definition: Arc::from(self),
-        }))
+        Ok(Box::from(FilesystemStorage { definition: self }))
     }
 }
 

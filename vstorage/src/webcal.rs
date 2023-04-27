@@ -9,7 +9,6 @@ use async_trait::async_trait;
 use http::{uri::Scheme, StatusCode, Uri};
 use hyper::{client::HttpConnector, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use std::sync::Arc;
 
 use crate::{
     base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage},
@@ -26,7 +25,8 @@ use crate::{
 /// This storage is a bit of an odd one (since in reality, there's no concept of collections in
 /// webcal. The extra abstraction layer is here merely to match the format of other storages.
 pub struct WebCalStorage {
-    inner: Arc<WebCalInner>,
+    definition: WebCalDefinition,
+    http_client: Client<HttpsConnector<HttpConnector>>,
 }
 
 /// Definition for a [`WebCalStorage`].
@@ -36,12 +36,6 @@ pub struct WebCalDefinition {
     pub url: Uri,
     /// The name to be given to the single collection available.
     pub collection_name: String,
-}
-
-/// A holder of data shared across the storage and its collections.
-struct WebCalInner {
-    definition: Arc<WebCalDefinition>,
-    http_client: Client<HttpsConnector<HttpConnector>>,
 }
 
 #[async_trait]
@@ -67,10 +61,8 @@ impl Definition for WebCalDefinition {
             .enable_http1()
             .build();
         Ok(Box::from(WebCalStorage {
-            inner: Arc::from(WebCalInner {
-                definition: Arc::new(self),
-                http_client: Client::builder().build(https),
-            }),
+            definition: self,
+            http_client: Client::builder().build(https),
         }))
     }
 }
@@ -80,7 +72,7 @@ impl Storage for WebCalStorage {
     /// Checks that the remove resource exists and whether it looks like an icalendar resource.
     async fn check(&self) -> Result<()> {
         // TODO: Should map status codes to io::Error. if 404 -> NotFound, etc.
-        let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
+        let raw = fetch_raw(&self.http_client, &self.definition.url).await?;
 
         if !raw.starts_with("BEGIN:VCALENDAR") {
             return Err(Error::new(
@@ -94,7 +86,7 @@ impl Storage for WebCalStorage {
     /// Returns a single collection with the name specified in the definition.
     async fn discover_collections(&self) -> Result<Vec<Collection>> {
         Ok(vec![Collection::new(
-            self.inner.definition.collection_name.clone(),
+            self.definition.collection_name.clone(),
         )])
     }
 
@@ -117,15 +109,13 @@ impl Storage for WebCalStorage {
     /// Usable only with the collection name specified in the definition. Any other name will
     /// return [`ErrorKind::DoesNotExist`]
     fn open_collection(&self, href: &str) -> Result<Collection> {
-        if href != self.inner.definition.collection_name {
+        if href != self.definition.collection_name {
             return Err(Error::new(
                 ErrorKind::DoesNotExist,
                 format!("this storage only contains the '{href}' collection"),
             ));
         }
-        Ok(Collection::new(
-            self.inner.definition.collection_name.clone(),
-        ))
+        Ok(Collection::new(self.definition.collection_name.clone()))
     }
 
     /// Enumerates items in this collection.
@@ -134,7 +124,7 @@ impl Storage for WebCalStorage {
     /// items need to be read as well, it is generally best to use
     /// [`WebCalStorage::get_all_items`] instead.
     async fn list_items(&self, _collection: &Collection) -> Result<Vec<ItemRef>> {
-        let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
+        let raw = fetch_raw(&self.http_client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -162,7 +152,7 @@ impl Storage for WebCalStorage {
     /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. It is
     /// strongly recommended to use [`WebCalStorage::get_all_items`] instead.
     async fn get_item(&self, _collection: &Collection, href: &str) -> Result<(Item, Etag)> {
-        let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
+        let raw = fetch_raw(&self.http_client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -194,7 +184,7 @@ impl Storage for WebCalStorage {
         _collection: &Collection,
         hrefs: &[&str],
     ) -> Result<Vec<(Href, Item, Etag)>> {
-        let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
+        let raw = fetch_raw(&self.http_client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
@@ -220,7 +210,7 @@ impl Storage for WebCalStorage {
     ///
     /// Performs a single HTTP(s) request to fetch all items.
     async fn get_all_items(&self, _collection: &Collection) -> Result<Vec<(Href, Item, Etag)>> {
-        let raw = fetch_raw(&self.inner.http_client, &self.inner.definition.url).await?;
+        let raw = fetch_raw(&self.http_client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
         //       complicate inlining VTIMEZONEs that are at the end.
