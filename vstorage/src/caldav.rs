@@ -247,14 +247,26 @@ impl Storage for CalDavStorage {
 
     /// # Panics
     ///
-    /// This function is not implemented.
+    /// Setting colour is not implemented.
     async fn set_collection_meta(
         &mut self,
-        _collection: &Collection,
-        _meta: MetadataKind,
-        _value: &str,
+        collection: &Collection,
+        meta: MetadataKind,
+        value: &str,
     ) -> Result<()> {
-        todo!()
+        match meta {
+            MetadataKind::DisplayName => {
+                self.client
+                    .set_collection_displayname(collection.href(), Some(value))
+                    .await
+            }
+            MetadataKind::Colour => {
+                self.client
+                    .set_calendar_colour(collection.href(), Some(value))
+                    .await
+            }
+        }
+        .map_err(Error::from)
     }
 
     /// Read metadata from a collection.
