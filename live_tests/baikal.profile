@@ -3,6 +3,6 @@
 host = "http://localhost:8002"
 username = "baikal"
 password = "baikal"
-xfail = [
-  "CreateAndDeleteCollection"  # server does not return etags
-]
+
+[xfail]
+CreateAndDeleteCollection = "server does not return etags"

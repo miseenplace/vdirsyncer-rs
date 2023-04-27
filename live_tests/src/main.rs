@@ -7,7 +7,7 @@ use libdav::{
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::Deserialize;
-use std::{fmt::Write, fs::File, io::Read, path::Path};
+use std::{collections::HashMap, fmt::Write, fs::File, io::Read, path::Path};
 use strum::{EnumIter, IntoEnumIterator};
 
 /// A profile for a test server
@@ -19,8 +19,8 @@ struct Profile {
     host: String,
     username: String,
     password: String,
-    #[serde(default = "Vec::new")]
-    xfail: Vec<Test>,
+    #[serde(default = "HashMap::new")]
+    xfail: HashMap<Test, String>,
 }
 
 impl Profile {
@@ -77,7 +77,7 @@ impl TestData {
     }
 }
 
-#[derive(Debug, PartialEq, EnumIter, Deserialize, strum::Display, Clone, Copy)]
+#[derive(Debug, PartialEq, EnumIter, Deserialize, strum::Display, Clone, Copy, Hash, Eq)]
 enum Test {
     CreateAndDeleteCollection,
     CreateAndForceDeleteCollection,
@@ -128,11 +128,11 @@ async fn main() -> anyhow::Result<()> {
 
     let mut failed = 0;
     for (test, result) in &results {
-        if test_data.profile.xfail.contains(test) {
+        if let Some(reason) = test_data.profile.xfail.get(test) {
             if result.is_ok() {
                 println!("- {}: ⛔ expected failure but passed", test);
             } else {
-                println!("- {}: ⚠️ expected failure", test);
+                println!("- {}: ⚠️ expected failure: {}", test, reason);
             }
         } else if let Err(err) = result {
             println!("- {}: ⛔ failed: {}", test, err);
