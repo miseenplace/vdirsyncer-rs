@@ -116,9 +116,9 @@ async fn main() -> anyhow::Result<()> {
         .next()
         .context(format!("Usage: {} PROFILE", cmd.to_string_lossy()))?;
 
+    println!("🗓️ Running tests for: {}", profile_path.to_string_lossy());
     let profile = Profile::load(&profile_path)?;
     let test_data = TestData::from_profile(profile).await?;
-    println!("🗓️ Running tests for: {}", profile_path.to_string_lossy());
 
     let tests = Test::iter();
     let mut results = Vec::with_capacity(tests.len());
