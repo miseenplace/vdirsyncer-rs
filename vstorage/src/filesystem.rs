@@ -198,7 +198,7 @@ impl Storage for FilesystemStorage {
 
         let item_ref = ItemRef {
             href,
-            etag: etag_for_path::<PathBuf>(&filename).await?,
+            etag: etag_for_path(&filename).await?,
         };
         Ok(item_ref)
     }
@@ -212,7 +212,7 @@ impl Storage for FilesystemStorage {
     ) -> Result<Etag> {
         let filename = self.collection_path(collection).join(href);
 
-        let actual_etag = etag_for_path::<PathBuf>(&filename).await?;
+        let actual_etag = etag_for_path(&filename).await?;
         if etag != actual_etag {
             return Err(Error::new(ErrorKind::InvalidData, "wrong etag"));
         }
@@ -225,7 +225,7 @@ impl Storage for FilesystemStorage {
             .await?;
         file.write_all(item.as_str().as_bytes()).await?;
 
-        let etag = etag_for_path::<PathBuf>(&filename).await?;
+        let etag = etag_for_path(&filename).await?;
         Ok(etag)
     }
 }
@@ -270,7 +270,7 @@ impl Definition for FilesystemDefinition {
     }
 }
 
-async fn etag_for_path<P: AsRef<Path>>(path: &Path) -> Result<Etag> {
+async fn etag_for_path<P: AsRef<Path>>(path: P) -> Result<Etag> {
     let metadata = metadata(path).await?;
     Ok(etag_for_metadata(&metadata))
 }
