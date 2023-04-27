@@ -19,7 +19,6 @@ struct Profile {
     host: String,
     username: String,
     password: String,
-    // TODO: allow specifying expected failures in each profile
     #[serde(default = "Vec::new")]
     xfail: Vec<Test>,
 }
