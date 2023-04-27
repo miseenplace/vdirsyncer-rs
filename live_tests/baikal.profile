@@ -5,4 +5,4 @@ username = "baikal"
 password = "baikal"
 
 [xfail]
-CreateAndDeleteCollection = "server does not return etags"
+CreateAndDeleteCollection = "https://github.com/sabre-io/Baikal/issues/1182"
