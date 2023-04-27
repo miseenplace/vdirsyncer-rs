@@ -176,8 +176,8 @@ impl CalDavClient {
 
         let property_data = SimplePropertyMeta {
             name: b"calendar-color".to_vec(),
-            // XXX: prop_namespace: b"http://apple.com/ns/ical/".to_vec(),
-            namespace: b"DAV:".to_vec(),
+            namespace: b"http://apple.com/ns/ical/".to_vec(),
+            // TODO: fastmail uses namespace=="DAV:" in responses. Needs to be reported.
         };
 
         self.propfind::<StringProperty>(
@@ -192,6 +192,24 @@ impl CalDavClient {
             "calendar-color",
         )))
         .map(Option::<String>::from)
+    }
+
+    /// Sets the `displayname` for a collection
+    ///
+    /// The `displayname` string is expected not to be escaped.
+    pub async fn set_calendar_colour(
+        &self,
+        href: &str,
+        colour: Option<&str>,
+    ) -> Result<(), DavError> {
+        let url = self.relative_uri(href)?;
+        self.propupdate::<StringProperty>(
+            &url,
+            "calendar-color",
+            "http://apple.com/ns/ical/",
+            colour,
+        )
+        .await
     }
 
     // TODO: get_calendar_description ("calendar-description", "urn:ietf:params:xml:ns:caldav")

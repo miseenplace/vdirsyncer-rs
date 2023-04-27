@@ -326,12 +326,16 @@ impl WebDavClient {
         &self,
         url: &Uri,
         prop: &str,
+        prop_ns: &str,
         value: Option<&str>,
     ) -> Result<(), DavError> {
         let (action, inner) = match value {
             Some(value) => {
                 let escaped = quick_xml::escape::partial_escape(value);
-                ("set", format!("<{prop}>{escaped}</{prop}>"))
+                (
+                    "set",
+                    format!("<{prop} xmlns=\"{prop_ns}\">{escaped}</{prop}>"),
+                )
             }
             None => ("remove", format!("<{prop} />")),
         };
@@ -367,7 +371,7 @@ impl WebDavClient {
         displayname: Option<&str>,
     ) -> Result<(), DavError> {
         let url = self.relative_uri(href)?;
-        self.propupdate::<StringProperty>(&url, "displayname", displayname)
+        self.propupdate::<StringProperty>(&url, "displayname", "DAV:", displayname)
             .await
     }
 
