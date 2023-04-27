@@ -3,42 +3,61 @@
 This subproject builds a single binary that runs some integration tests with
 real caldav servers.
 
-These started out as unit tests, but there's a few goals with don't fit in
-within Rust's unit tests model. In particular, test output really need to be
-modelled as:
+See the [initial intro] for this tool.
 
-- Passed
-- Skipped (missing server support)
-- Failed
-
-For example, if a server does not support creating collections, we cannot test
-deleting collections either, so that second test is skipped (not failed).
+[initial intro]: https://whynothugo.nl/journal/2023/04/27/libdav-live-test-results/
 
 # Status
 
-This works mostly to count how many tests pass, but further refactoring is
-required to properly model skipped tests and to properly count the total.
+The code isn't pretty but it works.
 
 # Running these tests
 
-To run them with `xandikos`, you can start a test server with:
+You'll need a "profile" file with credentials an expected failures for a
+server. For example:
 
+```toml
+host = "http://example.com"
+username = "testuser"
+password = "password"
 ```
-docker run --rm --publish 8000:8000 xandikos \
+
+Then run:
+
+```sh
+cargo run -p live_tests -- example.profile
+```
+
+**DO NOT use the credentials for real/personal/work account for these tests**.
+Doing so will almost definitely result in data loss.
+
+# Running with dockerised servers
+
+This repository includes a few sample profiles that work with dockerised caldav
+servers. These can be run easily with:
+
+```sh
+# radicale
+docker run --rm --publish 8001:8001 whynothugo/vdirsyncer-devkit-radicale
+
+# xandikos
+docker run --rm --publish 8000:8000 xandikos 
   xandikos -d /tmp/dav -l 0.0.0.0 -p 8000 --autocreate --dump-dav-xml
+
+# baikal
+docker run --rm --publish 8002:80 whynothugo/vdirsyncer-devkit-baikal
 ```
 
 And then execute these tests with:
 
 ```sh
-cargo run -p live_tests -- live_tests/xandikos.profile
-```
+cargo build -p live_tests || exit
 
-Check the shipped `.profile` files for a reference on their format.
+./target/debug/live_tests live_tests/xandikos.profile
+./target/debug/live_tests live_tests/baikal.profile
+./target/debug/live_tests live_tests/radicale.profile
+```
 
 Test clients use the discovery bootstrapping mechanism, do you can specify your
 providers main site as URL as `CALDAV_SERVER` and DNS discovery should resolve
 the real server and port automatically.
-
-**DO NOT use the credentials for real/personal/work account for test; these
-tests will likely destroy your data!**
