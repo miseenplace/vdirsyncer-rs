@@ -83,6 +83,7 @@ enum Test {
     CreateAndDeleteCollection,
     CreateAndForceDeleteCollection,
     SetAndGetDisplayName,
+    SetAndGetColour,
     CreateAndDeleteResource,
     CreateAndFetchResource,
     FetchMissingResource,
@@ -97,6 +98,7 @@ impl Test {
                 test_create_and_force_delete_collection(test_data).await
             }
             Test::SetAndGetDisplayName => test_setting_and_getting_displayname(test_data).await,
+            Test::SetAndGetColour => test_setting_and_getting_colour(test_data).await,
             Test::CreateAndDeleteResource => test_create_and_delete_resource(test_data).await,
             Test::CreateAndFetchResource => test_create_and_fetch_resource(test_data).await,
             Test::FetchMissingResource => test_fetch_missing(test_data).await,
@@ -257,6 +259,35 @@ async fn test_setting_and_getting_displayname(test_data: &TestData) -> anyhow::R
         .context("getting collection displayname")?;
 
     assert_eq!(value, Some(String::from(new_name)));
+
+    test_data.client.force_delete(&new_collection).await?;
+
+    Ok(())
+}
+
+async fn test_setting_and_getting_colour(test_data: &TestData) -> anyhow::Result<()> {
+    let new_collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    test_data
+        .client
+        .create_collection(&new_collection, CollectionType::Calendar)
+        .await?;
+
+    let first_name = "#ff00ff";
+    test_data
+        .client
+        .set_calendar_colour(&new_collection, Some(first_name))
+        .await
+        .context("setting collection colour")?;
+
+    let value = test_data
+        .client
+        .get_calendar_colour(&new_collection)
+        .await
+        .context("getting collection colour")?;
+
+    if value != Some(String::from(first_name)) {
+        bail!("did not get back the same colour we set");
+    };
 
     test_data.client.force_delete(&new_collection).await?;
 
