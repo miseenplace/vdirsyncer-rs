@@ -6,7 +6,7 @@ use std::io::Write;
 
 /// Authentication schemes supported by [`WebDavClient`](crate::dav::WebDavClient).
 #[non_exhaustive]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Auth {
     None,
     Basic {

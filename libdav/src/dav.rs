@@ -101,7 +101,7 @@ pub enum FindCurrentUserPrincipalError {
 }
 
 /// A generic webdav client.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WebDavClient {
     /// Base URL to be used for all requests.
     pub(crate) base_url: Uri,

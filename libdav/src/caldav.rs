@@ -39,7 +39,7 @@ use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 ///
 /// For common cases, [`auto_bootstrap`](Self::auto_bootstrap) should be called on the client to
 /// bootstrap it automatically.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CalDavClient {
     /// The `base_url` may be (due to bootstrapping discovery) different to the one provided as input.
     ///

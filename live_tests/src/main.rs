@@ -14,7 +14,7 @@ use strum::{EnumIter, IntoEnumIterator};
 ///
 /// Profiles are expected to be defined in files which specify details for connecting
 /// to the server and exceptions to rules for tests (e.g.: expected failures).
-#[derive(serde::Deserialize, Debug)]
+#[derive(serde::Deserialize, Debug, Clone)]
 struct Profile {
     host: String,
     username: String,
@@ -37,6 +37,7 @@ impl Profile {
     }
 }
 
+#[derive(Clone)]
 struct TestData {
     client: CalDavClient,
     home_set: Uri,
