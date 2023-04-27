@@ -133,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("- {}: ⚠️ expected failure", test);
             }
         } else if let Err(err) = result {
-            println!("- {}: ⛔ failed: {}\n-----", test, err);
+            println!("- {}: ⛔ failed: {}", test, err);
             failed += 1;
         } else {
             println!("- {}: ✅ passed", test);
