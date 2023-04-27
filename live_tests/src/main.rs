@@ -142,7 +142,7 @@ async fn main() -> anyhow::Result<()> {
         };
     }
 
-    println!("✅ Tests {} completed.\n", results.len());
+    println!("✅ {} tests completed.\n", results.len());
 
     if failed > 0 {
         std::process::exit(1);
