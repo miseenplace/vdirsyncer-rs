@@ -36,7 +36,7 @@ pub(crate) struct Server {
     ///
     /// Examples: `http://localhost:8080`, `https://example.com`.
     #[arg(long)]
-    pub(crate) base_uri: Uri,
+    pub(crate) server_url: Uri,
 
     /// Username for authentication.
     #[arg(long)]
@@ -53,7 +53,7 @@ impl Server {
         password: String,
     ) -> Result<CalDavClient, BootstrapError> {
         CalDavClient::builder()
-            .with_uri(self.base_uri.clone())
+            .with_uri(self.server_url.clone())
             .with_auth(Auth::Basic {
                 username: self.username.clone(),
                 password: Some(password),
