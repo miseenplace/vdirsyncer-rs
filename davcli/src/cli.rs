@@ -1,6 +1,8 @@
-use clap::{builder::PossibleValue, Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use http::Uri;
 use libdav::{auth::Auth, BootstrapError, CalDavClient};
+
+use crate::{caldav::CalDavArgs, carddav::CardDavArgs};
 
 #[derive(Clone, ValueEnum)]
 enum Verbosity {
@@ -9,25 +11,6 @@ enum Verbosity {
     Info,
     Debug,
     Trace,
-}
-#[derive(Clone, Default)]
-pub(crate) enum DavType {
-    #[default]
-    CalDav,
-    CardDav,
-}
-
-impl clap::ValueEnum for DavType {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[DavType::CalDav, DavType::CardDav]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        match self {
-            DavType::CalDav => Some(PossibleValue::new("caldav")),
-            DavType::CardDav => Some(PossibleValue::new("carddav")),
-        }
-    }
 }
 
 #[derive(Args)]
@@ -41,10 +24,6 @@ pub(crate) struct Server {
     /// Username for authentication.
     #[arg(long)]
     pub(crate) username: String,
-
-    /// Server type.
-    #[arg(long, value_enum, default_value_t)]
-    pub(crate) server_type: DavType,
 }
 
 impl Server {
@@ -66,23 +45,15 @@ impl Server {
 
 #[derive(Subcommand)]
 pub(crate) enum Command {
-    /// Perform discovery and print results
-    Discover,
-    ListCollections,
-    ListResources {
-        href: String,
-    },
-    Get {
-        href: String,
-    },
+    /// Operate on a CalDav server.
+    Caldav(CalDavArgs),
+    /// Operate on a CardDav server.
+    Carddav(CardDavArgs),
 }
 
 #[derive(Parser)]
 #[clap(author, version = env!("DAVCLI_VERSION"), about, long_about = None)]
 pub(crate) struct Cli {
-    #[command(flatten)]
-    pub(crate) server: Server,
-
     #[command(subcommand)]
     pub(crate) command: Command,
 
@@ -94,6 +65,13 @@ pub(crate) struct Cli {
 }
 
 impl Cli {
+    pub(crate) fn execute(self) -> anyhow::Result<()> {
+        match self.command {
+            Command::Caldav(cmd) => cmd.execute(),
+            Command::Carddav(cmd) => cmd.execute(),
+        }
+    }
+
     /// Returns the desired log level based on the amount of `-v` flags.
     /// The default log level is WARN.
     pub(crate) fn log_level(&self) -> log::Level {
