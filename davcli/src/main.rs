@@ -64,6 +64,8 @@ async fn list_resources(client: CalDavClient, href: String) -> anyhow::Result<()
 async fn main() -> anyhow::Result<()> {
     // TODO: also support email as input?
     let cli = cli::Cli::parse();
+    simple_logger::init_with_level(cli.log_level()).expect("logger configuration is valid");
+
     let password = std::env::var("DAVCLI_PASSWORD").context("failed to determine password")?;
     let client = cli.server.build_client(password).await?;
 

@@ -87,6 +87,8 @@ pub(crate) struct Cli {
     pub(crate) command: Command,
 
     /// Change logging verbosity
+    ///
+    /// Logging is always directed to `stderr`.
     #[clap(short, long)]
     verbose: Option<Verbosity>,
 }

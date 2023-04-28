@@ -266,6 +266,7 @@ dependencies = [
  "http",
  "libdav",
  "log",
+ "simple_logger 4.1.0",
  "tokio",
 ]
 
@@ -661,7 +662,7 @@ dependencies = [
  "log",
  "rand",
  "serde",
- "simple_logger",
+ "simple_logger 2.3.0",
  "strum",
  "tokio",
  "toml",
@@ -1041,6 +1042,18 @@ dependencies = [
  "colored",
  "log",
  "winapi",
+]
+
+[[package]]
+name = "simple_logger"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e78beb34673091ccf96a8816fce8bfd30d1292c7621ca2bcb5f2ba0fae4f558d"
+dependencies = [
+ "atty",
+ "colored",
+ "log",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
