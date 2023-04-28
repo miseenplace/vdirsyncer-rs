@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use libdav::CalDavClient;
+use libdav::{auth::Auth, CalDavClient};
 use log::info;
 
 use crate::cli::Server;
@@ -26,11 +26,26 @@ pub struct CalDavArgs {
     command: CalDavCommand,
 }
 
+impl Server {
+    async fn caldav_client(&self) -> anyhow::Result<CalDavClient> {
+        let password = std::env::var("DAVCLI_PASSWORD").context("failed to determine password")?;
+        CalDavClient::builder()
+            .with_uri(self.server_url.clone())
+            .with_auth(Auth::Basic {
+                username: self.username.clone(),
+                password: Some(password),
+            })
+            .build()
+            .auto_bootstrap()
+            .await
+            .map_err(anyhow::Error::from)
+    }
+}
+
 impl CalDavArgs {
     #[tokio::main(flavor = "current_thread")]
     pub(crate) async fn execute(self) -> anyhow::Result<()> {
-        let password = std::env::var("DAVCLI_PASSWORD").context("failed to determine password")?;
-        let client = self.server.build_client(password).await?;
+        let client = self.server.caldav_client().await?;
 
         match self.command {
             CalDavCommand::Discover => discover(client),

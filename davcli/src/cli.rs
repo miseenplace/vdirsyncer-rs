@@ -1,6 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use http::Uri;
-use libdav::{auth::Auth, BootstrapError, CalDavClient};
 
 use crate::{caldav::CalDavArgs, carddav::CardDavArgs};
 
@@ -24,23 +23,6 @@ pub(crate) struct Server {
     /// Username for authentication.
     #[arg(long)]
     pub(crate) username: String,
-}
-
-impl Server {
-    pub(crate) async fn build_client(
-        &self,
-        password: String,
-    ) -> Result<CalDavClient, BootstrapError> {
-        CalDavClient::builder()
-            .with_uri(self.server_url.clone())
-            .with_auth(Auth::Basic {
-                username: self.username.clone(),
-                password: Some(password),
-            })
-            .build()
-            .auto_bootstrap()
-            .await
-    }
 }
 
 #[derive(Subcommand)]
