@@ -1,6 +1,7 @@
 use anyhow::Context;
 use clap::Parser;
 use libdav::CalDavClient;
+use log::info;
 
 mod cli;
 
@@ -41,7 +42,7 @@ async fn get(client: CalDavClient, href: String) -> anyhow::Result<()> {
 async fn list_collections(client: CalDavClient) -> anyhow::Result<()> {
     let response = client.find_calendars(None).await?;
     for collection in response {
-        println!("Found calendar: {}", collection.href);
+        println!("{}", collection.href);
     }
 
     Ok(())
@@ -50,10 +51,10 @@ async fn list_collections(client: CalDavClient) -> anyhow::Result<()> {
 async fn list_resources(client: CalDavClient, href: String) -> anyhow::Result<()> {
     let resources = client.list_resources(&href).await?;
     if resources.is_empty() {
-        println!("No items in collection");
+        info!("No items in collection");
     } else {
         for resource in resources {
-            println!("Found item: {}", resource.href);
+            println!("{}", resource.href);
         }
     }
 
