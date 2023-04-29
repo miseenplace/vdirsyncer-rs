@@ -25,7 +25,7 @@ pub type Etag = String;
 /// Filesystem, this the file's relative path, etc. `Href`s MUST be valid UTF-8 sequences.
 pub type Href = String;
 
-/// Implementation-specific definition.
+/// Implementation-specific storage definition.
 ///
 /// This type carries any configuration required to define a storage instances. This include
 /// this like URL or TLS for network-based storages, or path and file extensions for filesystem
