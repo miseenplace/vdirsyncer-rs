@@ -5,6 +5,15 @@ use log::info;
 
 use crate::cli::Server;
 
+#[derive(Parser)]
+pub struct CalDavArgs {
+    #[command(flatten)]
+    pub(crate) server: Server,
+
+    #[command(subcommand)]
+    command: CalDavCommand,
+}
+
 #[derive(Subcommand)]
 pub(crate) enum CalDavCommand {
     /// Perform discovery and print results
@@ -15,15 +24,6 @@ pub(crate) enum CalDavCommand {
     ListCalendarComponents { collection_href: String },
     /// Fetches a single calendar component.
     Get { resource_href: String },
-}
-
-#[derive(Parser)]
-pub struct CalDavArgs {
-    #[command(flatten)]
-    pub(crate) server: Server,
-
-    #[command(subcommand)]
-    command: CalDavCommand,
 }
 
 impl Server {
