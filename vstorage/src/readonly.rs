@@ -1,9 +1,9 @@
 //! Wrappers for using storages in read-only mode.
 //!
-//! These wrappers wrap around a normal [`Storage`] instance, but return [`ReadOnlyFilesystem`] for
+//! These wrappers wrap around a normal [`Storage`] instance, but return [`ReadOnly`] for
 //! any write operations.
 //!
-//! [`ReadOnlyFilesystem`]: std::io::ErrorKind::ReadOnlyFilesystem
+//! [`ReadOnly`]: ErrorKind::ReadOnly
 
 use async_trait::async_trait;
 
