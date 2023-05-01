@@ -7,7 +7,7 @@ pub mod caldav;
 pub mod filesystem;
 pub mod readonly;
 mod simple_component;
-pub mod util;
+mod util;
 pub mod webcal;
 
 type Result<T> = std::result::Result<T, crate::Error>;

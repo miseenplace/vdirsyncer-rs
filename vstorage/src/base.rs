@@ -205,12 +205,16 @@ impl Item {
 
     /// Returns the hash of the raw content.
     ///
-    /// This is usable for etags (and status file).
+    /// This does some minimal normalisations of the items before hashing:
     ///
-    /// Please see the details for [`util::hash`]. This is not a generic hashing
-    /// function and has some special considerations for our specific use-cases.
+    /// - Ignores the `PROPID` field. Two item where only this field varies are
+    ///   considered equivalent.
+    ///
+    /// This is used as a fallback when a storage backend doesn't provide [`Etag`] values, or when
+    /// an item is missing its `UID`.
     ///
     /// [`util::hash`]: crate::util::hash
+    /// [`Etag`]: crate::base::Etag
     #[must_use]
     pub fn hash(&self) -> String {
         // TODO: Need to keep in mind that:
@@ -218,7 +222,7 @@ impl Item {
         //  - Some props may be re-sorted, but the Item is still the same.
         //
         //  See vdirsyncer's vobject.py for details on this.
-        crate::util::hash(&(self.raw))
+        crate::util::hash(&self.raw)
     }
 
     /// A unique identifier for this item. Is either the UID (if any), or the hash of its contents.
