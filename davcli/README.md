@@ -6,50 +6,44 @@
 [Chat](irc://ircs.libera.chat:6697/#pimutils)
 
 **`davcli`** is a command line tool to interact with CalDav and CardDav
-servers. It is mostly a simple interface to `libdav`, and part of the
-vdirsyncer project.
+servers. It is simple interface to `libdav`, and part of the vdirsyncer
+project.
 
 # Goals
 
 The main goal of this project is to provide a simple command line interface to
 expose simple caldav and carddav operations; essentially equivalents to `ls`,
-`cp`, `mkdir`, etc.
+`cat`, `mkdir`, etc (plus discovery).
 
-This tool is still a work in progress. Currently, only the `discover` command
-is implemented.
+Output is printed to `stdout` in a very clean format (e.g.: so you can use this
+in shell scripts) and all logging is printed to `stderr`.
 
-Additionally, the serves as a simpler interface to test our underlying
-`libdav`'s implementation with different server installations.
+The output of `--help` should be sufficient to find the basic subcommands, and
+appending `--help` to any of these should provide enough information to
+understand their usage. If anything is not clear, that is considered a bug.
 
-## Discovery
+# Discovery
 
-Discovery can be used to test if a server exposes its context path and calendar
-home set correctly:
+The `discover` subcommand can be used to test if a server publishes its context
+path and calendar home set correctly.
 
-```console
-> DAVCLI_PASSWORD=baikal davcli --base-uri http://localhost:8002 --username baikal discover
-Discovery successful.
-- Context path: http://localhost:8002/dav.php
-- Calendar home set: http://localhost:8002/dav.php/calendars/baikal/
-```
-
-Discovery also does DNS resolution based on [rfc6764], so can be used to test
+This uses DNS-based discovery as described in [rfc6764], so can be used to test
 if DNS is correctly configured for a publicly hosted service:
 
 [rfc6764]: https://www.rfc-editor.org/rfc/rfc6764
 
 ```console
-> DAVCLI_PASSWORD=baikal davcli --base-uri https://fastmail.com --username vdirsyncer@fastmail.com discover
+> DAVCLI_PASSWORD=XXX davcli caldav --server-url https://fastmail.com --username vdirsyncer@fastmail.com discover
 Discovery successful.
 - Context path: https://d277161.caldav.fastmail.com/dav/calendars
 - Calendar home set: https://d277161.caldav.fastmail.com/dav/calendars/user/vdirsyncer@fastmail.com/
 ```
 
 Errors should generally be useful (please report an issue if you find an
-obscure error where the underlying issue is not clear):
+obscure error where the underlying root cause is not clear):
 
 ```console
-> DAVCLI_PASSWORD=baikal davcli --base-uri https://fastmail.com --username wronguser@fastmail.com discover
+> DAVCLI_PASSWORD=wrong_password davcli --base-uri https://fastmail.com --username wronguser@fastmail.com discover
 Error: error querying current user principal
 
 Caused by:
@@ -57,22 +51,34 @@ Caused by:
     1: http request returned 401 Unauthorized
 ```
 
-# Credentials
+[The introductory article for davcli][intro] for more details.
 
-Passwords must be provided as the environment variable `DAVCLI_PASSWORD`.
+[intro]: https://whynothugo.nl/journal/2023/05/01/introducing-davcli/
+
+# Authentication
+
+Passwords must be provided as the environment variable `DAVCLI_PASSWORD`. Only
+password-based authentication is implemented at this time.
 
 # Limitations
 
-Only password-based authentication is implemented at this time.
-
 Nothing is cached. Ever. Performance is basically the worst possible, so
-there's enormous room for improvement. Caching clients needs to be exposed from
-`libdav`.
+there's enormous room for improvement. A caching mechanism needs to be exposed
+by `libdav`.
+
+# Building from source
+
+```console
+$ git clone https://git.sr.ht/~whynothugo/vdirsyncer-rs
+$ cd vdirsyncer-rs
+$ cargo build --release --package davcli
+```
+
+The resulting binary will be located in `./target/release/davcli`.
 
 # Todo
 
-This documentation should move to a man page which can be published. It is
-basically stashed away in a git repository right now.
+This documentation should move to a man page which can be published.
 
 # Licence
 
