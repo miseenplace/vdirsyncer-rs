@@ -44,8 +44,17 @@ impl Definition for WebCalDefinition {
     ///
     /// Unlike other [`Storage`] implementations, this one allows only a single collection.
     async fn storage(self) -> Result<Box<dyn Storage>> {
-        match &self.url.scheme().map(Scheme::as_str) {
-            Some("http" | "https") => {}
+        let proto = match &self.url.scheme().map(Scheme::as_str) {
+            Some("http") => HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .https_or_http()
+                .enable_http1()
+                .build(),
+            Some("https") => HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .https_only()
+                .enable_http1()
+                .build(),
             // TODO: support webcal and webcals
             Some(_) => {
                 return Err(Error::new(
@@ -54,15 +63,10 @@ impl Definition for WebCalDefinition {
                 ));
             }
             None => todo!(),
-        }
-        let https = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_only()
-            .enable_http1()
-            .build();
+        };
         Ok(Box::from(WebCalStorage {
             definition: self,
-            http_client: Client::builder().build(https),
+            http_client: Client::builder().build(proto),
         }))
     }
 }
