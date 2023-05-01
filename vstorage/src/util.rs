@@ -9,7 +9,7 @@ pub(crate) fn hash<S: AsRef<str>>(input: S) -> String {
     let mut hasher = Sha256::new();
     for line in input.as_ref().split_inclusive("\r\n") {
         // Hint: continuation lines always start with a space.
-        if line.starts_with("PROD_ID") {
+        if line.starts_with("PRODID") {
             // These get continuously mutated and result in noise when determining if two
             // components are equivalent.
             continue;
@@ -19,4 +19,36 @@ pub(crate) fn hash<S: AsRef<str>>(input: S) -> String {
     format!("{:X}", hasher.finalize())
 }
 
-// TODO: add tests for the `hash` method! Compare to the hash of the item with no PRODID.
+#[cfg(test)]
+mod test {
+    use crate::util::hash;
+
+    #[test]
+    fn compare_hashing_with_and_without_prodid() {
+        let without_prodid = vec![
+            "BEGIN:VCALENDAR",
+            "BEGIN:VEVENT",
+            "DTSTART:19970714T170000Z",
+            "DTEND:19970715T035959Z",
+            "SUMMARY:Bastille Day Party",
+            "UID:11bb6bed-c29b-4999-a627-12dee35f8395",
+            "END:VEVENT",
+            "END:VCALENDAR",
+        ]
+        .join("\r\n");
+        let with_prodid = vec![
+            "PRODID:test-client",
+            "BEGIN:VCALENDAR",
+            "BEGIN:VEVENT",
+            "DTSTART:19970714T170000Z",
+            "DTEND:19970715T035959Z",
+            "SUMMARY:Bastille Day Party",
+            "UID:11bb6bed-c29b-4999-a627-12dee35f8395",
+            "END:VEVENT",
+            "END:VCALENDAR",
+        ]
+        .join("\r\n");
+
+        assert_eq!(hash(without_prodid), hash(with_prodid));
+    }
+}
