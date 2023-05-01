@@ -12,6 +12,7 @@ pub mod webcal;
 
 type Result<T> = std::result::Result<T, crate::Error>;
 
+/// Variants used to categorise [`Error`] instances.
 #[derive(Debug)]
 pub enum ErrorKind {
     DoesNotExist,
@@ -23,6 +24,7 @@ pub enum ErrorKind {
     InvalidInput,
     ReadOnly,
     CollectionNotEmpty,
+    /// This storage implementation does not support a required feature.
     Unsupported,
     // #[deprecated]
     Uncategorised,
@@ -48,6 +50,9 @@ impl ErrorKind {
     // TODO: generate rustdoc for each variant using this method?
 }
 
+/// A common error type used by all Storage implementations.
+///
+/// See also [`ErrorKind`].
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
