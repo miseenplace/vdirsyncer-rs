@@ -137,24 +137,23 @@ async fn main() -> anyhow::Result<()> {
     let test_data = TestData::from_profile(profile).await?;
 
     let mut results = Vec::with_capacity(tests.len());
-    for test in tests {
-        results.push((test, test.exec(&test_data).await));
-    }
-
     let mut failed = 0;
-    for (test, result) in &results {
-        if let Some(reason) = test_data.profile.xfail.get(test) {
+    for test in tests {
+        let result = test.exec(&test_data).await;
+
+        if let Some(reason) = test_data.profile.xfail.get(&test) {
             if result.is_ok() {
                 println!("- {}: ⛔ expected failure but passed", test);
             } else {
                 println!("- {}: ⚠️ expected failure: {}", test, reason);
             }
-        } else if let Err(err) = result {
+        } else if let Err(err) = &result {
             println!("- {}: ⛔ failed: {}", test, err);
             failed += 1;
         } else {
             println!("- {}: ✅ passed", test);
         };
+        results.push((test, result));
     }
 
     println!("✅ {} tests completed.\n", results.len());
