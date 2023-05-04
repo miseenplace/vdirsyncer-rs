@@ -21,9 +21,14 @@ pub(crate) enum CalDavCommand {
     /// Find calendars under the calendar home set.
     FindCalendars,
     /// List calendar components under a given calendar collection.
-    ListCalendarComponents { collection_href: String },
+    ListCalendarComponents {
+        collection_href: String,
+    },
+    Tree,
     /// Fetches a single calendar component.
-    Get { resource_href: String },
+    Get {
+        resource_href: String,
+    },
 }
 
 impl Server {
@@ -51,8 +56,9 @@ impl CalDavArgs {
             CalDavCommand::Discover => discover(client),
             CalDavCommand::FindCalendars => list_collections(client).await?,
             CalDavCommand::ListCalendarComponents { collection_href } => {
-                list_resources(client, collection_href).await?
+                list_resources(&client, collection_href).await?
             }
+            CalDavCommand::Tree => tree(client).await?,
             CalDavCommand::Get { resource_href } => get(client, resource_href).await?,
         };
 
@@ -94,6 +100,16 @@ async fn get(client: CalDavClient, href: String) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn tree(client: CalDavClient) -> anyhow::Result<()> {
+    let response = client.find_calendars(None).await?;
+    for collection in response {
+        println!("{}", collection.href);
+        list_resources(&client, collection.href).await?;
+    }
+
+    Ok(())
+}
+
 async fn list_collections(client: CalDavClient) -> anyhow::Result<()> {
     let response = client.find_calendars(None).await?;
     for collection in response {
@@ -103,7 +119,7 @@ async fn list_collections(client: CalDavClient) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn list_resources(client: CalDavClient, href: String) -> anyhow::Result<()> {
+async fn list_resources(client: &CalDavClient, href: String) -> anyhow::Result<()> {
     let resources = client.list_resources(&href).await?;
     if resources.is_empty() {
         info!("No items in collection");
