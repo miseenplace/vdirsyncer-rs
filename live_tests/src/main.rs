@@ -1,4 +1,4 @@
-use anyhow::{bail, Context};
+use anyhow::{bail, ensure, Context};
 use http::{StatusCode, Uri};
 use libdav::{
     auth::Auth,
@@ -185,7 +185,7 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
 
     let new_calendar_count = test_data.calendar_count().await?;
 
-    assert_eq!(orig_calendar_count + 1, new_calendar_count);
+    ensure!(orig_calendar_count + 1 == new_calendar_count);
 
     // Get the etag of the newly created calendar:
     // ASSERTION: this validates that a collection with a matching href was created.
@@ -211,7 +211,7 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
     test_data.client.delete(new_collection, etag).await?;
 
     let third_calendar_count = test_data.calendar_count().await?;
-    assert_eq!(orig_calendar_count, third_calendar_count);
+    ensure!(orig_calendar_count == third_calendar_count);
 
     Ok(())
 }
@@ -226,13 +226,13 @@ async fn test_create_and_force_delete_collection(test_data: &TestData) -> anyhow
         .await?;
 
     let after_creationg_calendar_count = test_data.calendar_count().await?;
-    assert_eq!(orig_calendar_count + 1, after_creationg_calendar_count);
+    ensure!(orig_calendar_count + 1 == after_creationg_calendar_count);
 
     // Force-delete the collection
     test_data.client.force_delete(&new_collection).await?;
 
     let after_deletion_calendar_count = test_data.calendar_count().await?;
-    assert_eq!(orig_calendar_count, after_deletion_calendar_count);
+    ensure!(orig_calendar_count == after_deletion_calendar_count);
 
     Ok(())
 }
@@ -257,7 +257,7 @@ async fn test_setting_and_getting_displayname(test_data: &TestData) -> anyhow::R
         .await
         .context("getting collection displayname")?;
 
-    assert_eq!(value, Some(String::from(first_name)));
+    ensure!(value == Some(String::from(first_name)));
 
     let new_name = "🔥🔥🔥<lol>";
     test_data
@@ -272,7 +272,7 @@ async fn test_setting_and_getting_displayname(test_data: &TestData) -> anyhow::R
         .await
         .context("getting collection displayname")?;
 
-    assert_eq!(value, Some(String::from(new_name)));
+    ensure!(value == Some(String::from(new_name)));
 
     test_data.client.force_delete(&new_collection).await?;
 
@@ -299,9 +299,11 @@ async fn test_setting_and_getting_colour(test_data: &TestData) -> anyhow::Result
         .await
         .context("getting collection colour")?;
 
-    if value != Some(String::from(first_name)) {
-        bail!("did not get back the same colour we set");
-    };
+    ensure!(
+        value == Some(String::from(first_name)),
+        "did not get back the same colour we set (got {:?})",
+        value
+    );
 
     test_data.client.force_delete(&new_collection).await?;
 
@@ -342,7 +344,7 @@ async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result
         .await?;
 
     let items = test_data.client.list_resources(&collection).await?;
-    assert_eq!(items.len(), 1);
+    ensure!(items.len() == 1);
 
     let updated_entry = String::from_utf8(content)?
         .replace("hello", "goodbye")
@@ -402,7 +404,7 @@ async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result
     test_data.client.delete(&resource, &etag).await.unwrap_err();
 
     let items = test_data.client.list_resources(&collection).await?;
-    assert_eq!(items.len(), 1);
+    ensure!(items.len() == 1);
 
     let etag = items
         .into_iter()
@@ -420,7 +422,7 @@ async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result
     test_data.client.delete(&resource, &etag).await?;
 
     let items = test_data.client.list_resources(&collection).await?;
-    assert_eq!(items.len(), 0);
+    ensure!(items.len() == 0);
     Ok(())
 }
 
@@ -438,20 +440,17 @@ async fn test_create_and_fetch_resource(test_data: &TestData) -> anyhow::Result<
         .await?;
 
     let items = test_data.client.list_resources(&collection).await?;
-    assert_eq!(items.len(), 1);
+    ensure!(items.len() == 1);
 
     let fetched = test_data
         .client
         .get_resources(&collection, &[&items[0].href])
         .await?;
-    assert_eq!(fetched.len(), 1);
+    ensure!(fetched.len() == 1);
 
     // FIXME: some servers will fail here due to tampering PRODID
     // FIXME: order of lines may vary but items are still equivalent.
-    // assert_eq!(
-    //     fetched[0].data,
-    //     String::from_utf8(minimal_icalendar()?)?
-    // );
+    // ensure!(fetched[0].data, String::from_utf8(minimal_icalendar()?)?);
     Ok(())
 }
 
