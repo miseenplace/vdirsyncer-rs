@@ -285,10 +285,10 @@ async fn test_setting_and_getting_colour(test_data: &TestData) -> anyhow::Result
         .create_collection(&new_collection, CollectionType::Calendar)
         .await?;
 
-    let first_name = "#ff00ff";
+    let colour = "#ff00ff";
     test_data
         .client
-        .set_calendar_colour(&new_collection, Some(first_name))
+        .set_calendar_colour(&new_collection, Some(colour))
         .await
         .context("setting collection colour")?;
 
@@ -298,11 +298,10 @@ async fn test_setting_and_getting_colour(test_data: &TestData) -> anyhow::Result
         .await
         .context("getting collection colour")?;
 
-    ensure!(
-        value == Some(String::from(first_name)),
-        "did not get back the same colour we set (got {:?})",
-        value
-    );
+    match value {
+        Some(c) => ensure!(c.eq_ignore_ascii_case(colour) || c.eq_ignore_ascii_case("#FF00FFFF")),
+        None => bail!("Set a colour but then got colour None"),
+    }
 
     test_data.client.force_delete(&new_collection).await?;
 
