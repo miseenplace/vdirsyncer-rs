@@ -148,7 +148,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("- {}: ⚠️ expected failure: {}", test, reason);
             }
         } else if let Err(err) = &result {
-            println!("- {}: ⛔ failed: {}", test, err);
+            println!("- {}: ⛔ failed: {:?}", test, err);
             failed += 1;
         } else {
             println!("- {}: ✅ passed", test);
@@ -188,10 +188,8 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
 
     // Get the etag of the newly created calendar:
     // ASSERTION: this validates that a collection with a matching href was created.
-    let etag = test_data
-        .client
-        .find_calendars(None)
-        .await?
+    let calendars = test_data.client.find_calendars(None).await?;
+    let etag = calendars
         .into_iter()
         .find(|collection| collection.href == new_collection)
         .context("created calendar was not returned when finding calendars")?

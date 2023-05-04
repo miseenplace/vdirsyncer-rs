@@ -763,6 +763,7 @@ pub struct ListedResource {
 ///
 /// This type is returned when listing collections. It contains metadata on
 /// collection itself, but not the entires themselves.
+#[derive(Debug)]
 pub struct FoundCollection {
     pub href: String,
     pub etag: Option<String>,
