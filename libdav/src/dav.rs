@@ -289,6 +289,8 @@ impl WebDavClient {
         &self,
         request: Request<Body>,
     ) -> Result<(Parts, Bytes), hyper::Error> {
+        // QUIRK: When trying to fetch a resource on a URL that is a collection, iCloud
+        // will terminate the connection at this point (unexpected end of file).
         let response = self.http_client.request(request).await?;
         let (head, body) = response.into_parts();
         let body = hyper::body::to_bytes(body).await?;
