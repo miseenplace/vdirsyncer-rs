@@ -769,5 +769,6 @@ pub struct ListedResource {
 pub struct FoundCollection {
     pub href: String,
     pub etag: Option<String>,
+    pub supports_sync: bool,
     // TODO: query displayname by default too.
 }

@@ -142,17 +142,33 @@ impl CalDavClient {
     ) -> Result<Vec<FoundCollection>, DavError> {
         let url = url.unwrap_or(self.calendar_home_set.as_ref().unwrap_or(&self.base_url));
         let items = self
-            .propfind::<ItemDetails>(url, "<resourcetype/><getetag/>", 1, &())
+            .propfind::<ItemDetails>(
+                url,
+                "<resourcetype/><getetag/><supported-report-set/>",
+                1,
+                &(),
+            )
             .await
             .map_err(DavError::from)?
             .into_iter()
             .filter_map(|c| match c.variant {
                 ResponseVariant::WithProps { propstats } => {
                     if propstats.iter().any(|p| p.prop.is_calendar) {
-                        Some(FoundCollection {
+                        let mut calendar = FoundCollection {
                             href: c.href,
-                            etag: propstats.into_iter().find_map(|p| p.prop.etag),
-                        })
+                            etag: None,
+                            supports_sync: false,
+                        };
+                        for ps in propstats {
+                            if ps.prop.supports_sync {
+                                calendar.supports_sync = true;
+                            }
+                            if ps.prop.etag.is_some() {
+                                calendar.etag = ps.prop.etag;
+                            }
+                        }
+
+                        Some(calendar)
                     } else {
                         None
                     }

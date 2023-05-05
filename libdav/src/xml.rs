@@ -4,7 +4,7 @@
 //! **for advanced usage**.
 
 use http::{status::InvalidStatusCode, StatusCode};
-use log::{debug, warn};
+use log::{debug, trace, warn};
 use quick_xml::{events::Event, name::ResolveResult, NsReader};
 use std::str::FromStr;
 use std::{borrow::Cow, io::BufRead};
@@ -69,6 +69,8 @@ pub struct ItemDetails {
     pub is_collection: bool,
     pub is_calendar: bool,
     pub is_address_book: bool,
+    /// From: <https://www.rfc-editor.org/rfc/rfc6578>
+    pub supports_sync: bool,
 }
 
 /// Shortcut to keep log statements short.
@@ -87,15 +89,20 @@ impl FromXml for ItemDetails {
             ResourceType,
             GetContentType,
             GetEtag,
+            SupportedReportSet,
+            Report,
         }
 
         let mut buf = Vec::new();
         let mut state = State::Prop;
-        let mut content_type = Option::<String>::None;
-        let mut etag = Option::<String>::None;
-        let mut is_collection = false;
-        let mut is_calendar = false;
-        let mut is_address_book = false;
+        let mut item = ItemDetails {
+            content_type: None,
+            etag: None,
+            is_collection: false,
+            is_calendar: false,
+            is_address_book: false,
+            supports_sync: false,
+        };
 
         loop {
             match (&state, reader.read_resolved_event_into(&mut buf)?) {
@@ -104,6 +111,10 @@ impl FromXml for ItemDetails {
                         (State::Prop, DAV, b"resourcetype") => state = State::ResourceType,
                         (State::Prop, DAV, b"getcontenttype") => state = State::GetContentType,
                         (State::Prop, DAV, b"getetag") => state = State::GetEtag,
+                        (State::Prop, DAV, b"supported-report-set") => {
+                            state = State::SupportedReportSet
+                        }
+                        (State::SupportedReportSet, DAV, b"report") => state = State::Report,
                         (state, ns, name) => {
                             debug!("unexpected start: {:?}, {}, {}", state, s(ns), s(name));
                         }
@@ -114,7 +125,11 @@ impl FromXml for ItemDetails {
                         (State::Prop, DAV, b"prop") => break,
                         (State::ResourceType, DAV, b"resourcetype")
                         | (State::GetContentType, DAV, b"getcontenttype")
-                        | (State::GetEtag, DAV, b"getetag") => state = State::Prop,
+                        | (State::GetEtag, DAV, b"getetag")
+                        | (State::SupportedReportSet, DAV, b"supported-report-set") => {
+                            state = State::Prop
+                        }
+                        (State::Report, DAV, b"report") => state = State::SupportedReportSet,
                         (state, ns, name) => {
                             debug!("unexpected end: {:?}, {}, {}", state, s(ns), s(name));
                         }
@@ -123,11 +138,16 @@ impl FromXml for ItemDetails {
                 (_, (ResolveResult::Bound(namespace), Event::Empty(element))) => {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
                         (State::Prop, DAV, b"resourcetype") => {}
-                        (State::ResourceType, DAV, b"collection") => is_collection = true,
-                        (State::ResourceType, CALDAV, b"calendar") => is_calendar = true,
-                        (State::ResourceType, CARDDAV, b"addressbook") => is_address_book = true,
-                        (State::Prop, DAV, b"getetag") => {
-                            warn!("missing etag in response");
+                        (State::ResourceType, DAV, b"collection") => item.is_collection = true,
+                        (State::ResourceType, CALDAV, b"calendar") => item.is_calendar = true,
+                        (State::ResourceType, CARDDAV, b"addressbook") => {
+                            item.is_address_book = true
+                        }
+                        (State::Prop, DAV, b"getetag") => warn!("missing etag in response"),
+                        (State::Report, DAV, b"sync-collection") => item.supports_sync = true,
+                        // TODO: don't the `s()` calls run even if
+                        (State::Report, ns, name) => {
+                            trace!("collection supports report {:?}, {:?}", s(ns), s(name))
                         }
                         (state, ns, name) => {
                             debug!("unexpected empty: {:?}, {}, {}", state, s(ns), s(name));
@@ -135,10 +155,10 @@ impl FromXml for ItemDetails {
                     }
                 }
                 (State::GetContentType, (ResolveResult::Unbound, Event::Text(text))) => {
-                    content_type = Some(text.unescape()?.to_string());
+                    item.content_type = Some(text.unescape()?.to_string());
                 }
                 (State::GetEtag, (ResolveResult::Unbound, Event::Text(text))) => {
-                    etag = Some(text.unescape()?.to_string());
+                    item.etag = Some(text.unescape()?.to_string());
                 }
                 (_, (_, Event::Eof)) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
@@ -149,13 +169,7 @@ impl FromXml for ItemDetails {
             };
         }
 
-        Ok(ItemDetails {
-            content_type,
-            etag,
-            is_collection,
-            is_calendar,
-            is_address_book,
-        })
+        Ok(item)
     }
 }
 
@@ -860,6 +874,7 @@ mod more_tests {
                             is_collection: true,
                             is_calendar: true,
                             is_address_book: false,
+                            supports_sync: false,
                         },
                         status: StatusCode::OK,
                     },
@@ -877,6 +892,7 @@ mod more_tests {
                             is_collection: false,
                             is_calendar: false,
                             is_address_book: false,
+                            supports_sync: false,
                         },
                         status: StatusCode::OK,
                     },

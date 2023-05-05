@@ -149,10 +149,21 @@ impl CardDavClient {
             .filter_map(|c| match c.variant {
                 ResponseVariant::WithProps { propstats } => {
                     if propstats.iter().any(|p| p.prop.is_address_book) {
-                        Some(FoundCollection {
+                        let mut address_book = FoundCollection {
                             href: c.href,
-                            etag: propstats.into_iter().find_map(|p| p.prop.etag),
-                        })
+                            etag: None,
+                            supports_sync: false,
+                        };
+                        for ps in propstats {
+                            if ps.prop.supports_sync {
+                                address_book.supports_sync = true;
+                            }
+                            if ps.prop.etag.is_some() {
+                                address_book.etag = ps.prop.etag;
+                            }
+                        }
+
+                        Some(address_book)
                     } else {
                         None
                     }
