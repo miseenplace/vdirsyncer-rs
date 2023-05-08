@@ -74,6 +74,7 @@ pub struct ItemDetails {
 }
 
 /// Shortcut to keep log statements short.
+// TODO: calls to this should really be wrapped in `log::log_enabled`.
 #[inline]
 fn s(data: &[u8]) -> Cow<'_, str> {
     String::from_utf8_lossy(data)
