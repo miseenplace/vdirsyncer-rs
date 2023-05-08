@@ -40,7 +40,7 @@ pub(crate) enum ComponentError {
     UnbalancedInput,
     /// Lines not delimited by `BEGIN:` and `END:` were found.
     #[error("found data after last END: line")]
-    DataOutsideBeingEnd,
+    DataOutsideBeginEnd,
 }
 
 impl<'a> Component<'a> {
@@ -97,7 +97,7 @@ impl<'a> Component<'a> {
                 // Hint: Lines starting with `UID:` also get pushed here.
                 stack
                     .last_mut()
-                    .ok_or(ComponentError::DataOutsideBeingEnd)?
+                    .ok_or(ComponentError::DataOutsideBeginEnd)?
                     .lines
                     .push(line);
             }
