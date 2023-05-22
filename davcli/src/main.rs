@@ -1,3 +1,5 @@
+#![deny(clippy::pedantic)]
+
 use clap::Parser;
 
 mod caldav;
