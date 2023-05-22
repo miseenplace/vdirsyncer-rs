@@ -142,6 +142,7 @@ impl Collection {
     ///
     /// The exact meaning of this value is storage-specific, but should be remain consistent with a
     /// storage.
+    #[must_use]
     pub fn href(&self) -> &str {
         &self.href
     }
