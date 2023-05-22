@@ -56,7 +56,7 @@ impl CalDavArgs {
             CalDavCommand::Discover => discover(client),
             CalDavCommand::FindCalendars => list_collections(client).await?,
             CalDavCommand::ListCalendarComponents { collection_href } => {
-                list_resources(&client, collection_href).await?
+                list_resources(&client, collection_href).await?;
             }
             CalDavCommand::Tree => tree(client).await?,
             CalDavCommand::Get { resource_href } => get(client, resource_href).await?,

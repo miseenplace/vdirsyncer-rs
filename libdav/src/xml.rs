@@ -113,7 +113,7 @@ impl FromXml for ItemDetails {
                         (State::Prop, DAV, b"getcontenttype") => state = State::GetContentType,
                         (State::Prop, DAV, b"getetag") => state = State::GetEtag,
                         (State::Prop, DAV, b"supported-report-set") => {
-                            state = State::SupportedReportSet
+                            state = State::SupportedReportSet;
                         }
                         (State::SupportedReportSet, DAV, b"report") => state = State::Report,
                         (state, ns, name) => {
@@ -128,7 +128,7 @@ impl FromXml for ItemDetails {
                         | (State::GetContentType, DAV, b"getcontenttype")
                         | (State::GetEtag, DAV, b"getetag")
                         | (State::SupportedReportSet, DAV, b"supported-report-set") => {
-                            state = State::Prop
+                            state = State::Prop;
                         }
                         (State::Report, DAV, b"report") => state = State::SupportedReportSet,
                         (state, ns, name) => {
@@ -142,13 +142,13 @@ impl FromXml for ItemDetails {
                         (State::ResourceType, DAV, b"collection") => item.is_collection = true,
                         (State::ResourceType, CALDAV, b"calendar") => item.is_calendar = true,
                         (State::ResourceType, CARDDAV, b"addressbook") => {
-                            item.is_address_book = true
+                            item.is_address_book = true;
                         }
                         (State::Prop, DAV, b"getetag") => warn!("missing etag in response"),
                         (State::Report, DAV, b"sync-collection") => item.supports_sync = true,
                         // TODO: don't the `s()` calls run even if
                         (State::Report, ns, name) => {
-                            trace!("collection supports report {:?}, {:?}", s(ns), s(name))
+                            trace!("collection supports report {:?}, {:?}", s(ns), s(name));
                         }
                         (state, ns, name) => {
                             debug!("unexpected empty: {:?}, {}, {}", state, s(ns), s(name));
