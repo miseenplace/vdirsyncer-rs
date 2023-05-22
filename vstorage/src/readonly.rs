@@ -122,6 +122,10 @@ impl Storage for ReadOnlyStorage {
     async fn delete_item(&mut self, _: &Collection, _: &str, _: &str) -> Result<()> {
         Err(ErrorKind::ReadOnly.into())
     }
+
+    fn collection_id(&self, collection: &Collection) -> Result<String> {
+        self.inner.collection_id(collection)
+    }
 }
 
 impl From<Box<dyn Storage>> for ReadOnlyStorage {

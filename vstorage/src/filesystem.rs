@@ -244,6 +244,16 @@ impl Storage for FilesystemStorage {
 
         Ok(())
     }
+
+    /// The id of a filesystem collection is the name of the directory.
+    fn collection_id(&self, collection: &Collection) -> Result<String> {
+        Ok(collection
+            .href()
+            .rsplit('/')
+            .next()
+            .expect("rsplit always returns at least one item")
+            .to_string())
+    }
 }
 
 impl FilesystemStorage {

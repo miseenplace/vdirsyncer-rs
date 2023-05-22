@@ -101,8 +101,16 @@ pub trait Storage: Sync + Send {
 
     async fn delete_item(&mut self, collection: &Collection, href: &str, etag: &str) -> Result<()>;
 
-    // collections should have non-pub cache of UID->hrefs
-    // can this be implemented for Collection?
+    /// A name that does not change for this collection.
+    ///
+    /// Usually this is based off the last component of the href, but may be different for storages
+    /// where this does not make sense.
+    ///
+    /// When synchronising, collections with the same name will be mapped to each other.
+    fn collection_id(&self, collection: &Collection) -> Result<String>;
+
+    // XXX: collections should have non-pub cache of UID->hrefs
+    // XXX: can this be implemented for Collection?
 }
 
 /// A collection may, for example, be an address book or a calendar.

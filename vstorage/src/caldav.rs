@@ -304,6 +304,17 @@ impl Storage for CalDavStorage {
 
         Ok(())
     }
+
+    /// The id of a caldav collection is the last component of the path.
+    fn collection_id(&self, collection: &Collection) -> Result<String> {
+        // TODO: this will need to be different for Google's WebDav.
+        Ok(collection
+            .href()
+            .rsplit('/')
+            .next()
+            .expect("rsplit always returns at least one item")
+            .to_string())
+    }
 }
 
 fn join_hrefs(collection_href: &str, item_href: &str) -> String {

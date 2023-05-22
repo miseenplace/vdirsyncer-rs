@@ -34,7 +34,7 @@ pub struct WebCalStorage {
 pub struct WebCalDefinition {
     /// The URL of the remote icalendar resource. Must be HTTP or HTTPS.
     pub url: Uri,
-    /// The name to be given to the single collection available.
+    /// The href and id to be given to the single collection available.
     pub collection_name: String,
 }
 
@@ -287,6 +287,14 @@ impl Storage for WebCalStorage {
             ErrorKind::Unsupported,
             "deleting items via webcal is not supported",
         ))
+    }
+
+    fn collection_id(&self, collection: &Collection) -> Result<String> {
+        if collection.href() == self.definition.collection_name {
+            Ok(self.definition.collection_name.to_string())
+        } else {
+            Err(ErrorKind::DoesNotExist.into())
+        }
     }
 }
 
