@@ -23,6 +23,9 @@ pub type Etag = String;
 ///
 /// For example, for carddav collections this is the path of the entry inside the collection. For
 /// Filesystem, this the file's relative path, etc. `Href`s MUST be valid UTF-8 sequences.
+///
+/// Whether an `href` is relative to a collection or absolute is storage dependant. As such, this
+/// should be treated as an opaque string by consumers of this library.
 pub type Href = String;
 
 /// Implementation-specific storage definition.
