@@ -157,6 +157,7 @@ pub struct ItemRef {
 /// See also [`Storage::get_collection_meta`] and [`Storage::set_collection_meta`].
 #[non_exhaustive]
 #[derive(Copy, Clone)]
+// TODO: meta-kind should be generic over the ContentType(Cal, Card, IMAP, etc).
 pub enum MetadataKind {
     /// A user-friendly name for a collection.
     /// It is recommended to show this name in user interfaces.
@@ -177,6 +178,9 @@ pub struct Item {
     raw: String,
 }
 
+// TODO: this assumes that the Item is an ICS file.
+//       Item should be generic over its content type, e.g.: Item<Ics>
+//       That's what this item is.
 impl Item {
     /// Returns a unique identifier for this item.
     ///
