@@ -115,6 +115,8 @@ pub trait Storage: Sync + Send {
         item: &Item,
     ) -> Result<Etag>;
 
+    async fn delete_item(&mut self, collection: &Collection, href: &str, etag: &str) -> Result<()>;
+
     // collections should have non-pub cache of UID->hrefs
     // can this be implemented for Collection?
 }

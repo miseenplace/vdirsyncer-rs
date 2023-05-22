@@ -10,7 +10,8 @@ use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use std::{fs::Metadata, os::unix::prelude::MetadataExt};
 use tokio::fs::{
-    create_dir, metadata, read_dir, read_to_string, remove_dir, DirEntry, File, OpenOptions,
+    create_dir, metadata, read_dir, read_to_string, remove_dir, remove_file, DirEntry, File,
+    OpenOptions,
 };
 use tokio::io::AsyncWriteExt;
 use tokio_stream::wrappers::ReadDirStream;
@@ -216,6 +217,8 @@ impl Storage for FilesystemStorage {
             return Err(Error::new(ErrorKind::InvalidData, "wrong etag"));
         }
 
+        // FIXME: this is racey and the etag can change after checking.
+        // TODO: atomic writes.
         let mut file = OpenOptions::new()
             .write(true)
             .truncate(true)
@@ -226,6 +229,20 @@ impl Storage for FilesystemStorage {
 
         let etag = etag_for_path(&filename).await?;
         Ok(etag)
+    }
+
+    async fn delete_item(&mut self, collection: &Collection, href: &str, etag: &str) -> Result<()> {
+        let filename = self.collection_path(collection).join(href);
+
+        let actual_etag = etag_for_path(&filename).await?;
+        if etag != actual_etag {
+            return Err(Error::new(ErrorKind::InvalidData, "wrong etag"));
+        }
+
+        // FIXME: this is racey and the etag can change after checking.
+        remove_file(filename).await?;
+
+        Ok(())
     }
 }
 

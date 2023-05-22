@@ -281,6 +281,13 @@ impl Storage for WebCalStorage {
             "getting metadata via webcal is not supported",
         ))
     }
+
+    async fn delete_item(&mut self, _: &Collection, _: &str, _: &str) -> Result<()> {
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            "deleting items via webcal is not supported",
+        ))
+    }
 }
 
 /// Helper method to fetch a URL and return its body as a String.

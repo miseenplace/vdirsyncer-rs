@@ -119,6 +119,10 @@ impl Storage for ReadOnlyStorage {
     ) -> Result<Option<String>> {
         self.inner.get_collection_meta(collection, meta).await
     }
+
+    async fn delete_item(&mut self, _: &Collection, _: &str, _: &str) -> Result<()> {
+        Err(ErrorKind::ReadOnly.into())
+    }
 }
 
 impl From<Box<dyn Storage>> for ReadOnlyStorage {

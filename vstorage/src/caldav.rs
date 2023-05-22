@@ -293,6 +293,18 @@ impl Storage for CalDavStorage {
 
         result.map_err(Error::from)
     }
+
+    async fn delete_item(
+        &mut self,
+        _collection: &Collection,
+        href: &str,
+        etag: &str,
+    ) -> Result<()> {
+        // TODO: check that href is a sub-path of collection.href?
+        self.client.delete(href, etag).await?;
+
+        Ok(())
+    }
 }
 
 fn join_hrefs(collection_href: &str, item_href: &str) -> String {
