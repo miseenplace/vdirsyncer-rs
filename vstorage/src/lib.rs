@@ -33,6 +33,7 @@ pub mod caldav;
 pub mod filesystem;
 pub mod readonly;
 mod simple_component;
+pub mod sync;
 mod util;
 pub mod webcal;
 
