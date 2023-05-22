@@ -18,7 +18,7 @@ use crate::{
     Auth, AuthError, FetchedResource, FetchedResourceContent,
 };
 
-/// A generic error for `WebDav` operations.
+/// A generic error for WebDav operations.
 #[derive(thiserror::Error, Debug)]
 pub enum DavError {
     #[error("http error executing request")]
