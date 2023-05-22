@@ -17,8 +17,8 @@ use tokio::io::AsyncWriteExt;
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_stream::StreamExt;
 
-use crate::base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage};
-use crate::{Error, ErrorKind, Result};
+use crate::base::{Collection, Definition, Item, ItemRef, MetadataKind, Storage};
+use crate::{Error, ErrorKind, Etag, Href, Result};
 
 // TODO: atomic writes
 

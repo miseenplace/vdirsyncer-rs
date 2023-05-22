@@ -6,9 +6,8 @@ use libdav::dav::mime_types;
 use libdav::CalDavClient;
 use libdav::{auth::Auth, dav::CollectionType};
 
-use crate::base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage};
-use crate::Result;
-use crate::{Error, ErrorKind};
+use crate::base::{Collection, Definition, Item, ItemRef, MetadataKind, Storage};
+use crate::{Error, ErrorKind, Etag, Href, Result};
 
 pub struct CalDavDefinition {
     pub url: Uri,

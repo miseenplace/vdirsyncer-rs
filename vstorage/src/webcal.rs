@@ -11,9 +11,9 @@ use hyper::{client::HttpConnector, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::{
-    base::{Collection, Definition, Etag, Href, Item, ItemRef, MetadataKind, Storage},
+    base::{Collection, Definition, Item, ItemRef, MetadataKind, Storage},
     simple_component::Component,
-    Error, ErrorKind, Result,
+    Error, ErrorKind, Etag, Href, Result,
 };
 
 /// A storage which exposes items in remote icalendar resource.

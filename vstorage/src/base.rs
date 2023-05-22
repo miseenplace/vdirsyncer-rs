@@ -5,28 +5,9 @@
 //!
 //! See [`Storage`] as an entry point to this module.
 
-use crate::Result;
-
 use async_trait::async_trait;
 
-/// An identifier for a specific version of a resource.
-///
-/// Etags are bound to a specific storage. A storage SHOULD return the same `Etag` for an item as
-/// long has not been modified. The `Etag` MUST change if the item has been modified.
-///
-/// This is inspired on the [HTTP header of the same name][MDN].
-///
-/// [MDN]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
-pub type Etag = String;
-
-/// The path to the item inside the collection.
-///
-/// For example, for carddav collections this is the path of the entry inside the collection. For
-/// Filesystem, this the file's relative path, etc. `Href`s MUST be valid UTF-8 sequences.
-///
-/// Whether an `href` is relative to a collection or absolute is storage dependant. As such, this
-/// should be treated as an opaque string by consumers of this library.
-pub type Href = String;
+use crate::{Etag, Href, Result};
 
 /// Implementation-specific storage definition.
 ///
@@ -220,7 +201,7 @@ impl Item {
     /// an item is missing its `UID`.
     ///
     /// [`util::hash`]: crate::util::hash
-    /// [`Etag`]: crate::base::Etag
+    /// [`Etag`]: crate::Etag
     #[must_use]
     pub fn hash(&self) -> String {
         // TODO: Need to keep in mind that:

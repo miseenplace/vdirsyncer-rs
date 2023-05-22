@@ -9,8 +9,7 @@ use async_trait::async_trait;
 
 use crate::base::Collection;
 use crate::base::Storage;
-use crate::ErrorKind;
-use crate::Result;
+use crate::{ErrorKind, Etag, Href, Result};
 
 /// A wrapper around a [`Storage`] that disallows any write operations.
 ///
@@ -66,7 +65,7 @@ impl Storage for ReadOnlyStorage {
         &self,
         collection: &Collection,
         href: &str,
-    ) -> Result<(crate::base::Item, crate::base::Etag)> {
+    ) -> Result<(crate::base::Item, Etag)> {
         self.inner.get_item(collection, href).await
     }
 
@@ -74,14 +73,14 @@ impl Storage for ReadOnlyStorage {
         &self,
         collection: &Collection,
         hrefs: &[&str],
-    ) -> Result<Vec<(crate::base::Href, crate::base::Item, crate::base::Etag)>> {
+    ) -> Result<Vec<(crate::Href, crate::base::Item, crate::Etag)>> {
         self.inner.get_many_items(collection, hrefs).await
     }
 
     async fn get_all_items(
         &self,
         collection: &Collection,
-    ) -> Result<Vec<(crate::base::Href, crate::base::Item, crate::base::Etag)>> {
+    ) -> Result<Vec<(Href, crate::base::Item, Etag)>> {
         self.inner.get_all_items(collection).await
     }
 
@@ -99,7 +98,7 @@ impl Storage for ReadOnlyStorage {
         _: &str,
         _: &str,
         _: &crate::base::Item,
-    ) -> Result<crate::base::Etag> {
+    ) -> Result<Etag> {
         Err(ErrorKind::ReadOnly.into())
     }
 
