@@ -2,7 +2,6 @@
 name = "vdirsyncer"
 version = "0.0.1"
 edition = "2021"
-license = " MPL-2.0"
 description = "Synchronize calendars and contacts"
 homepage = "https://github.com/pimutils/vdirsyncer/issues/946"
 
