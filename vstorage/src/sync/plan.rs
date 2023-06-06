@@ -242,8 +242,10 @@ impl Plan {
         let storage_b = &mut pair.storage_b;
 
         for cp in &self.collection_plans {
+            let mut delete_collection_in_a = false;
+            let mut delete_collection_in_b = false;
             match cp.collection_action {
-                Action::NoOp | Action::DeleteInA | Action::DeleteInB => {} // Deletions are handled after item actions.
+                Action::NoOp => {}
                 Action::CopyToB => {
                     match storage_b.create_collection(&cp.name).await {
                         Ok(c) => {
@@ -280,7 +282,21 @@ impl Plan {
                         }
                     };
                 }
-                Action::Conflict => todo!(), // Should be unreachable for now.
+                Action::Conflict => {
+                    final_state.errors.push(SynchronizationError {
+                        action: cp.collection_action.clone(),
+                        resource: SyncResource::Collection {
+                            name: cp.name.to_string(),
+                        },
+                        error: "Invalid input: conflict between storages is senseless".into(),
+                    });
+                }
+                Action::DeleteInA => {
+                    delete_collection_in_a = true;
+                }
+                Action::DeleteInB => {
+                    delete_collection_in_b = true;
+                }
             }
 
             for (uid, action) in &cp.item_actions {
@@ -301,17 +317,37 @@ impl Plan {
                     });
                 };
             }
-            match cp.collection_action {
-                Action::NoOp | Action::CopyToB | Action::CopyToA => {} // Copying is handled before item actions
-                Action::DeleteInA => {
-                    // TODO
-                    todo!("delete collection in A");
-                }
-                Action::DeleteInB => {
-                    // TODO
-                    todo!("delete collection in B");
-                }
-                Action::Conflict => todo!(), // Should be unreachable for now.
+            if delete_collection_in_a {
+                match storage_a.destroy_collection(&cp.name).await {
+                    Ok(()) => {
+                        final_state.state_a.remove_collection(&cp.name);
+                    }
+                    Err(e) => {
+                        final_state.errors.push(SynchronizationError {
+                            action: cp.collection_action.clone(),
+                            resource: SyncResource::Collection {
+                                name: cp.name.to_string(),
+                            },
+                            error: Box::new(e),
+                        });
+                    }
+                };
+            }
+            if delete_collection_in_b {
+                match storage_b.destroy_collection(&cp.name).await {
+                    Ok(()) => {
+                        final_state.state_b.remove_collection(&cp.name);
+                    }
+                    Err(e) => {
+                        final_state.errors.push(SynchronizationError {
+                            action: cp.collection_action.clone(),
+                            resource: SyncResource::Collection {
+                                name: cp.name.to_string(),
+                            },
+                            error: Box::new(e),
+                        });
+                    }
+                };
             }
         }
 

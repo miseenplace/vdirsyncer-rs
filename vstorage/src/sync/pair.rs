@@ -140,6 +140,10 @@ impl StorageState {
             }
         });
     }
+
+    pub(crate) fn remove_collection(&mut self, name: &str) {
+        self.collections.retain(|c| c.collection_name != name);
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
