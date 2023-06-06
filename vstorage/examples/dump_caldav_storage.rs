@@ -64,9 +64,6 @@ async fn main() {
 }
 
 /// Copies from `source` to `target` and returns the amount of items copied.
-///
-/// NOTE: This function serves an extra purpose: the validates that the `Collection` trait is
-/// object safe and works well when used in such way.
 async fn copy_collection(
     source_storage: &Box<dyn Storage>,
     source_collection: Collection,
