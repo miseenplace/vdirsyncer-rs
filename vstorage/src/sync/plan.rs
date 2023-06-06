@@ -67,19 +67,12 @@ impl Action {
             (Change::Changed, Change::Changed) => Action::Conflict,
             (Change::NoChange, Change::Deleted) => Action::DeleteInA,
             (Change::Deleted, Change::NoChange) => Action::DeleteInB,
-            (Change::Deleted, Change::Changed)
-            | (Change::NoChange, Change::Changed)
-            | (Change::Absent, Change::Changed)
+            (Change::Deleted | Change::NoChange | Change::Absent, Change::Changed)
             | (Change::Absent, Change::NoChange) => Action::CopyToA,
-            (Change::Changed, Change::Deleted)
-            | (Change::Changed, Change::NoChange)
-            | (Change::Changed, Change::Absent)
+            (Change::Changed, Change::Deleted | Change::NoChange | Change::Absent)
             | (Change::NoChange, Change::Absent) => Action::CopyToB,
-            (Change::Deleted, Change::Deleted)
-            | (Change::Deleted, Change::Absent)
-            | (Change::NoChange, Change::NoChange)
-            | (Change::Absent, Change::Deleted)
-            | (Change::Absent, Change::Absent) => Action::NoOp,
+            (Change::Deleted | Change::Absent, Change::Deleted | Change::Absent)
+            | (Change::NoChange, Change::NoChange) => Action::NoOp,
         }
     }
 
