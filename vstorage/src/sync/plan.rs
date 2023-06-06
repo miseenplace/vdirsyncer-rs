@@ -365,17 +365,17 @@ impl CollectionPlan<'_> {
         //       working system which we can properly benchmark.
 
         let mut all_items = Vec::new();
-        if let Some(cur_a) = previous_state_a {
-            all_items.extend(&cur_a.items);
+        if let Some(s) = current_state_a {
+            all_items.extend(&s.items);
         }
-        if let Some(cur_b) = previous_state_b {
-            all_items.extend(&cur_b.items);
+        if let Some(s) = current_state_b {
+            all_items.extend(&s.items);
         }
-        if let Some(prev_a) = previous_state_a {
-            all_items.extend(&prev_a.items);
+        if let Some(s) = previous_state_a {
+            all_items.extend(&s.items);
         }
-        if let Some(prev_b) = previous_state_b {
-            all_items.extend(&prev_b.items);
+        if let Some(s) = previous_state_b {
+            all_items.extend(&s.items);
         }
 
         let item_actions = all_items
