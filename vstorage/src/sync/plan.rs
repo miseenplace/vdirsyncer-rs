@@ -9,11 +9,17 @@ use std::fmt::Display;
 
 use super::pair::ItemState;
 
+#[derive(Debug)]
+pub enum SyncResource {
+    Item { uid: String },
+    Collection { name: String },
+}
+
 /// An error synchronising two items between storages.
 #[derive(Debug)]
 pub struct SynchronizationError {
     action: Action,
-    uid: String,
+    resource: SyncResource,
     error: Box<dyn std::error::Error + 'static>,
 }
 
@@ -24,10 +30,10 @@ impl SynchronizationError {
         &self.action
     }
 
-    /// The uid of the item that failed to execute.
+    /// The resource that failed to execute.
     #[must_use]
-    pub fn uid(&self) -> &String {
-        &self.uid
+    pub fn resource(&self) -> &SyncResource {
+        &self.resource
     }
 }
 
@@ -35,8 +41,9 @@ impl Display for SynchronizationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Error performing {:?} on {}: {}",
-            self.action, self.uid, self.error
+            // TODO: check formatting of resource.
+            "Error performing {:?} on {:?}: {}",
+            self.action, self.resource, self.error
         )
     }
 }
@@ -246,7 +253,9 @@ impl Plan<'_> {
                         Err(e) => {
                             final_state.errors.push(SynchronizationError {
                                 action: cp.collection_action.clone(),
-                                uid: String::from("TODO"), // TODO
+                                resource: SyncResource::Collection {
+                                    name: cp.name.to_string(),
+                                },
                                 error: Box::new(e),
                             });
                         }
@@ -262,7 +271,9 @@ impl Plan<'_> {
                         Err(e) => {
                             final_state.errors.push(SynchronizationError {
                                 action: cp.collection_action.clone(),
-                                uid: String::from("TODO"), // TODO
+                                resource: SyncResource::Collection {
+                                    name: cp.name.to_string(),
+                                },
                                 error: Box::new(e),
                             });
                         }
@@ -282,7 +293,9 @@ impl Plan<'_> {
                 {
                     final_state.errors.push(SynchronizationError {
                         action: action.clone(),
-                        uid: (*uid).clone(),
+                        resource: SyncResource::Item {
+                            uid: (*uid).clone(),
+                        },
                         error: err,
                     });
                 };
