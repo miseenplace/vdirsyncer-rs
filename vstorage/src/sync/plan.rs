@@ -247,40 +247,24 @@ impl Plan {
             match cp.collection_action {
                 Action::NoOp => {}
                 Action::CopyToB => {
-                    match storage_b.create_collection(&cp.name).await {
-                        Ok(c) => {
-                            final_state
-                                .state_b
-                                .add_collection(cp.name.to_string(), c.href().to_string());
-                        }
-                        Err(e) => {
-                            final_state.errors.push(SynchronizationError {
-                                action: cp.collection_action.clone(),
-                                resource: SyncResource::Collection {
-                                    name: cp.name.to_string(),
-                                },
-                                error: Box::new(e),
-                            });
-                        }
-                    };
+                    create_collection(
+                        *storage_b,
+                        &cp.name,
+                        &mut final_state.state_b,
+                        &mut final_state.errors,
+                        &cp.collection_action,
+                    )
+                    .await;
                 }
                 Action::CopyToA => {
-                    match storage_a.create_collection(&cp.name).await {
-                        Ok(c) => {
-                            final_state
-                                .state_a
-                                .add_collection(cp.name.to_string(), c.href().to_string());
-                        }
-                        Err(e) => {
-                            final_state.errors.push(SynchronizationError {
-                                action: cp.collection_action.clone(),
-                                resource: SyncResource::Collection {
-                                    name: cp.name.to_string(),
-                                },
-                                error: Box::new(e),
-                            });
-                        }
-                    };
+                    create_collection(
+                        *storage_a,
+                        &cp.name,
+                        &mut final_state.state_a,
+                        &mut final_state.errors,
+                        &cp.collection_action,
+                    )
+                    .await;
                 }
                 Action::Conflict => {
                     final_state.errors.push(SynchronizationError {
@@ -318,41 +302,75 @@ impl Plan {
                 };
             }
             if delete_collection_in_a {
-                match storage_a.destroy_collection(&cp.name).await {
-                    Ok(()) => {
-                        final_state.state_a.remove_collection(&cp.name);
-                    }
-                    Err(e) => {
-                        final_state.errors.push(SynchronizationError {
-                            action: cp.collection_action.clone(),
-                            resource: SyncResource::Collection {
-                                name: cp.name.to_string(),
-                            },
-                            error: Box::new(e),
-                        });
-                    }
-                };
+                delete_collection(
+                    *storage_a,
+                    &cp.name,
+                    &mut final_state.state_a,
+                    &mut final_state.errors,
+                    &cp.collection_action,
+                )
+                .await;
             }
             if delete_collection_in_b {
-                match storage_b.destroy_collection(&cp.name).await {
-                    Ok(()) => {
-                        final_state.state_b.remove_collection(&cp.name);
-                    }
-                    Err(e) => {
-                        final_state.errors.push(SynchronizationError {
-                            action: cp.collection_action.clone(),
-                            resource: SyncResource::Collection {
-                                name: cp.name.to_string(),
-                            },
-                            error: Box::new(e),
-                        });
-                    }
-                };
+                delete_collection(
+                    *storage_b,
+                    &cp.name,
+                    &mut final_state.state_b,
+                    &mut final_state.errors,
+                    &cp.collection_action,
+                )
+                .await;
             }
         }
 
         final_state
     }
+}
+
+async fn create_collection<I: Item>(
+    storage: &mut dyn Storage<I>,
+    name: &str,
+    state: &mut StorageState,
+    errors: &mut Vec<SynchronizationError>,
+    action: &Action,
+) {
+    match storage.create_collection(name).await {
+        Ok(c) => {
+            state.add_collection(name.to_string(), c.href().to_string());
+        }
+        Err(e) => {
+            errors.push(SynchronizationError {
+                action: action.clone(),
+                resource: SyncResource::Collection {
+                    name: name.to_string(),
+                },
+                error: Box::new(e),
+            });
+        }
+    };
+}
+
+async fn delete_collection<I: Item>(
+    storage: &mut dyn Storage<I>,
+    name: &str,
+    state: &mut StorageState,
+    errors: &mut Vec<SynchronizationError>,
+    action: &Action,
+) {
+    match storage.destroy_collection(name).await {
+        Ok(()) => {
+            state.remove_collection(name);
+        }
+        Err(e) => {
+            errors.push(SynchronizationError {
+                action: action.clone(),
+                resource: SyncResource::Collection {
+                    name: name.to_string(),
+                },
+                error: Box::new(e),
+            });
+        }
+    };
 }
 
 /// The state of a storage pair after synchronisation.
