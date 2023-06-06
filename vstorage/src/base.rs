@@ -28,6 +28,12 @@ pub trait Definition: Sync + Send {
 /// account, a local filesystem, etc.
 ///
 /// Each storage may contain one or more [`Collection`]s (e.g.: calendars or address books).
+///
+/// # Note for implementors
+///
+/// The auto-generated documentation for this trait is rather hard to read due to the usage of
+/// `#[async_trait]`. You might want to consider clicking on the `source` link on the right and
+/// reading the documentation from the raw code for this trait.
 #[async_trait]
 pub trait Storage: Sync + Send {
     // TODO: Will eventually need to support non-icalendar things here.
