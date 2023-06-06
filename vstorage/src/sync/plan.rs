@@ -213,10 +213,10 @@ impl Plan {
 
         let mut collection_plans = Vec::new();
         for name in pair.collection_names.iter() {
-            let cur_a = pair.current_state_a.get_collection(name);
-            let cur_b = pair.current_state_b.get_collection(name);
-            let prev_a = pair.previous_state_a.get_collection(name);
-            let prev_b = pair.previous_state_b.get_collection(name);
+            let cur_a = pair.current_state_a.find_collection_state(name);
+            let cur_b = pair.current_state_b.find_collection_state(name);
+            let prev_a = pair.previous_state_a.find_collection_state(name);
+            let prev_b = pair.previous_state_b.find_collection_state(name);
 
             let plan = CollectionPlan::new(name.to_string(), prev_a, cur_a, prev_b, cur_b);
             collection_plans.push(plan);
@@ -285,8 +285,8 @@ impl Plan {
 
             for (uid, action) in &cp.item_actions {
                 // FIXME: I need to somehow move these two calls outside of the "for" loop.
-                let state_a = final_state.state_a.get_collection_mut(&cp.name);
-                let state_b = final_state.state_b.get_collection_mut(&cp.name);
+                let state_a = final_state.state_a.find_collection_state_mut(&cp.name);
+                let state_b = final_state.state_b.find_collection_state_mut(&cp.name);
 
                 if let Err(err) = action
                     .execute_on_item(uid, *storage_a, *storage_b, state_a, state_b)

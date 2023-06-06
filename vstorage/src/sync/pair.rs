@@ -84,13 +84,13 @@ impl StorageState {
     /// distinct from the collection existing and being empty).
     #[must_use]
     #[inline]
-    pub(crate) fn get_collection(&self, name: &str) -> Option<&CollectionState> {
+    pub(crate) fn find_collection_state(&self, name: &str) -> Option<&CollectionState> {
         self.collections.iter().find(|c| c.collection_name == name)
     }
 
     #[must_use]
     #[inline]
-    pub(crate) fn get_collection_mut(&mut self, name: &str) -> Option<&mut CollectionState> {
+    pub(crate) fn find_collection_state_mut(&mut self, name: &str) -> Option<&mut CollectionState> {
         self.collections
             .iter_mut()
             .find(|c| c.collection_name == name)
@@ -119,7 +119,7 @@ impl StorageState {
                 continue
             };
 
-            let previous = previous_state.get_collection(name);
+            let previous = previous_state.find_collection_state(name);
             let state =
                 CollectionState::current_for_storage(previous, storage, collection, name.clone())
                     .await;
