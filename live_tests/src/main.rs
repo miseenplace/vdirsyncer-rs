@@ -143,15 +143,15 @@ async fn main() -> anyhow::Result<()> {
 
         if let Some(reason) = test_data.profile.xfail.get(&test) {
             if result.is_ok() {
-                println!("- {}: ⛔ expected failure but passed", test);
+                println!("- {test}: ⛔ expected failure but passed");
             } else {
-                println!("- {}: ⚠️ expected failure: {}", test, reason);
+                println!("- {test}: ⚠️ expected failure: {reason}");
             }
         } else if let Err(err) = &result {
-            println!("- {}: ⛔ failed: {:?}", test, err);
+            println!("- {test}: ⛔ failed: {err:?}");
             failed += 1;
         } else {
-            println!("- {}: ✅ passed", test);
+            println!("- {test}: ✅ passed");
         };
         results.push((test, result));
     }
