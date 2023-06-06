@@ -55,7 +55,7 @@ impl<I: Item> StoragePair<'_, I> {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 pub(crate) struct ItemState {
     pub(crate) href: String,
     pub(crate) uid: String,

@@ -195,6 +195,7 @@ async fn delete_item<I: Item>(
 }
 
 /// A series of actions that would synchronise a pair of storages.
+#[derive(Debug)]
 pub struct Plan<'a> {
     collection_plans: Vec<CollectionPlan<'a>>,
 }
@@ -341,6 +342,7 @@ impl FinalState {
 }
 
 /// A set of actions required to sync a collection between two storages.
+#[derive(Debug)]
 pub(crate) struct CollectionPlan<'a> {
     name: &'a str,
     collection_action: Action,
