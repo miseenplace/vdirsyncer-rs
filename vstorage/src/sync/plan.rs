@@ -196,17 +196,17 @@ async fn delete_item<I: Item>(
 
 /// A series of actions that would synchronise a pair of storages.
 #[derive(Debug)]
-pub struct Plan<'a> {
-    collection_plans: Vec<CollectionPlan<'a>>,
+pub struct Plan {
+    collection_plans: Vec<CollectionPlan>,
 }
 
-impl Plan<'_> {
+impl Plan {
     /// Create a plan to synchronise both storages.
     ///
     /// Compares the previous and current state of both storages and calculate all actions required
     /// to bring them into a synchronised state.
     #[must_use]
-    pub fn for_storage_pair<'a, I>(pair: &'a StoragePair<'a, I>) -> Plan<'a> {
+    pub fn for_storage_pair<I>(pair: &'_ StoragePair<'_, I>) -> Plan {
         // TODO: this method's implementation is not performant; it mostly "just works"
         //       Performance will be tweaked at a later date. In particular, we need a
         //       fully functioning system to properly benchmark different approaches.
@@ -218,7 +218,7 @@ impl Plan<'_> {
             let prev_a = pair.previous_state_a.get_collection(name);
             let prev_b = pair.previous_state_b.get_collection(name);
 
-            let plan = CollectionPlan::new(name, prev_a, cur_a, prev_b, cur_b);
+            let plan = CollectionPlan::new(name.to_string(), prev_a, cur_a, prev_b, cur_b);
             collection_plans.push(plan);
         }
 
@@ -245,7 +245,7 @@ impl Plan<'_> {
             match cp.collection_action {
                 Action::NoOp | Action::DeleteInA | Action::DeleteInB => {} // Deletions are handled after item actions.
                 Action::CopyToB => {
-                    match storage_b.create_collection(cp.name).await {
+                    match storage_b.create_collection(&cp.name).await {
                         Ok(c) => {
                             final_state
                                 .state_b
@@ -263,7 +263,7 @@ impl Plan<'_> {
                     };
                 }
                 Action::CopyToA => {
-                    match storage_a.create_collection(cp.name).await {
+                    match storage_a.create_collection(&cp.name).await {
                         Ok(c) => {
                             final_state
                                 .state_a
@@ -285,8 +285,8 @@ impl Plan<'_> {
 
             for (uid, action) in &cp.item_actions {
                 // FIXME: I need to somehow move these two calls outside of the "for" loop.
-                let state_a = final_state.state_a.get_collection_mut(cp.name);
-                let state_b = final_state.state_b.get_collection_mut(cp.name);
+                let state_a = final_state.state_a.get_collection_mut(&cp.name);
+                let state_b = final_state.state_b.get_collection_mut(&cp.name);
 
                 if let Err(err) = action
                     .execute_on_item(uid, *storage_a, *storage_b, state_a, state_b)
@@ -343,25 +343,25 @@ impl FinalState {
 
 /// A set of actions required to sync a collection between two storages.
 #[derive(Debug)]
-pub(crate) struct CollectionPlan<'a> {
-    name: &'a str,
+pub(crate) struct CollectionPlan {
+    name: String,
     collection_action: Action,
-    item_actions: HashMap<&'a str, Action>,
+    item_actions: HashMap<String, Action>,
 }
 
-impl CollectionPlan<'_> {
+impl CollectionPlan {
     /// Calculate actions to sync a collection between two storages.
     ///
     /// If a previous state is `None` it means that the collection did not previously exist.
     /// If a current state is None it means that the collection does not exist.
     #[must_use]
     fn new<'a>(
-        name: &'a str,
+        name: String,
         previous_state_a: Option<&'a CollectionState>,
         current_state_a: Option<&'a CollectionState>,
         previous_state_b: Option<&'a CollectionState>,
         current_state_b: Option<&'a CollectionState>,
-    ) -> CollectionPlan<'a> {
+    ) -> CollectionPlan {
         // TODO: this method is very inefficient and needs to be improved.
         //       this is deliberately left for a later date when we already have a
         //       working system which we can properly benchmark.
@@ -390,7 +390,7 @@ impl CollectionPlan<'_> {
 
                 let action = Action::from_changes(a_changed, b_changed);
                 trace!("For item {uid}, changes: {a_changed:?}, {b_changed:?}, action: {action:?}");
-                (uid.as_str(), action)
+                (uid.clone(), action)
             })
             .collect();
 
