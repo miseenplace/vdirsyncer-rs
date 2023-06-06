@@ -325,7 +325,7 @@ async fn fetch_raw(client: &Client<HttpsConnector<HttpConnector>>, url: &Uri) ->
         }
     }
 
-    // TODO: handle non-UTF-8 data.
+    // TODO: handle non-UTF-8 data (e.g.: Content-Type/charset).
     hyper::body::to_bytes(response)
         .await
         .map_err(|e| Error::new(ErrorKind::Io, e))
