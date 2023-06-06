@@ -203,18 +203,18 @@ impl CollectionState {
     }
 
     #[inline]
-    pub(crate) fn get_item_by_uid(&self, uid: &String) -> Option<&ItemState> {
-        self.items.iter().find(|i| i.uid == **uid)
+    pub(crate) fn get_item_by_uid(&self, uid: &str) -> Option<&ItemState> {
+        self.items.iter().find(|i| i.uid == *uid)
     }
 
     #[inline]
-    pub(crate) fn get_item_by_uid_mut(&mut self, uid: &String) -> Option<&mut ItemState> {
-        self.items.iter_mut().find(|i| i.uid == **uid)
+    pub(crate) fn get_item_by_uid_mut(&mut self, uid: &str) -> Option<&mut ItemState> {
+        self.items.iter_mut().find(|i| i.uid == *uid)
     }
 
     #[inline]
-    pub(crate) fn get_item_by_href(&self, href: &String) -> Option<&ItemState> {
-        self.items.iter().find(|i| i.href == **href)
+    pub(crate) fn get_item_by_href(&self, href: &str) -> Option<&ItemState> {
+        self.items.iter().find(|i| i.href == *href)
     }
 }
 
@@ -236,7 +236,7 @@ impl Change {
     pub(crate) fn for_item(
         current: Option<&CollectionState>,
         previous: Option<&CollectionState>,
-        uid: &String,
+        uid: &str,
     ) -> Change {
         match (current, previous) {
             (Some(c), Some(p)) => {

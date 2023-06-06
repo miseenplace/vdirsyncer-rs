@@ -86,7 +86,7 @@ impl Action {
     #[inline]
     async fn execute_on_item<I: Item>(
         &self,
-        uid: &String,
+        uid: &str,
         storage_a: &mut dyn Storage<I>,
         storage_b: &mut dyn Storage<I>,
         state_a: Option<&mut CollectionState>,
@@ -142,7 +142,7 @@ async fn copy_item<I: Item>(
     dst_state: &mut CollectionState,
     src_storage: &dyn Storage<I>,
     dst_storage: &mut dyn Storage<I>,
-    uid: &String,
+    uid: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let col_a = src_storage.open_collection(&src_state.collection_href)?;
 
@@ -163,7 +163,7 @@ async fn copy_item<I: Item>(
         let new_ref = dst_storage.add_item(&col, &item).await?;
         dst_state.items.push(ItemState {
             href: new_ref.href,
-            uid: (*uid).clone(),
+            uid: uid.to_string(),
             etag: new_ref.etag,
             hash: item.hash(),
         });
@@ -175,7 +175,7 @@ async fn copy_item<I: Item>(
 async fn delete_item<I: Item>(
     state: &mut CollectionState,
     storage: &mut dyn Storage<I>,
-    uid: &String,
+    uid: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let col = storage.open_collection(&state.collection_href)?;
     let pos = state
@@ -294,7 +294,7 @@ impl Plan<'_> {
                     final_state.errors.push(SynchronizationError {
                         action: action.clone(),
                         resource: SyncResource::Item {
-                            uid: (*uid).clone(),
+                            uid: uid.to_string(),
                         },
                         error: err,
                     });
@@ -342,9 +342,9 @@ impl FinalState {
 
 /// A set of actions required to sync a collection between two storages.
 pub(crate) struct CollectionPlan<'a> {
-    name: &'a String,
+    name: &'a str,
     collection_action: Action,
-    item_actions: HashMap<&'a String, Action>,
+    item_actions: HashMap<&'a str, Action>,
 }
 
 impl CollectionPlan<'_> {
@@ -354,7 +354,7 @@ impl CollectionPlan<'_> {
     /// If a current state is None it means that the collection does not exist.
     #[must_use]
     fn new<'a>(
-        name: &'a String,
+        name: &'a str,
         previous_state_a: Option<&'a CollectionState>,
         current_state_a: Option<&'a CollectionState>,
         previous_state_b: Option<&'a CollectionState>,
@@ -388,7 +388,7 @@ impl CollectionPlan<'_> {
 
                 let action = Action::from_changes(a_changed, b_changed);
                 trace!("For item {uid}, changes: {a_changed:?}, {b_changed:?}, action: {action:?}");
-                (uid, action)
+                (uid.as_str(), action)
             })
             .collect();
 
