@@ -237,11 +237,11 @@ impl Plan<'_> {
             match cp.collection_action {
                 Action::NoOp | Action::DeleteInA | Action::DeleteInB => {} // Deletions are handled after item actions.
                 Action::CopyToB => {
-                    match storage_b.create_collection(cp.id).await {
+                    match storage_b.create_collection(cp.name).await {
                         Ok(c) => {
                             final_state
                                 .state_b
-                                .add_collection(cp.id.to_string(), c.href().to_string());
+                                .add_collection(cp.name.to_string(), c.href().to_string());
                         }
                         Err(e) => {
                             final_state.errors.push(SynchronizationError {
@@ -253,11 +253,11 @@ impl Plan<'_> {
                     };
                 }
                 Action::CopyToA => {
-                    match storage_a.create_collection(cp.id).await {
+                    match storage_a.create_collection(cp.name).await {
                         Ok(c) => {
                             final_state
                                 .state_a
-                                .add_collection(cp.id.to_string(), c.href().to_string());
+                                .add_collection(cp.name.to_string(), c.href().to_string());
                         }
                         Err(e) => {
                             final_state.errors.push(SynchronizationError {
@@ -273,8 +273,8 @@ impl Plan<'_> {
 
             for (uid, action) in &cp.item_actions {
                 // FIXME: I need to somehow move these two calls outside of the "for" loop.
-                let state_a = final_state.state_a.get_collection_mut(cp.id);
-                let state_b = final_state.state_b.get_collection_mut(cp.id);
+                let state_a = final_state.state_a.get_collection_mut(cp.name);
+                let state_b = final_state.state_b.get_collection_mut(cp.name);
 
                 if let Err(err) = action
                     .execute_on_item(uid, *storage_a, *storage_b, state_a, state_b)
@@ -329,7 +329,7 @@ impl FinalState {
 
 /// A set of actions required to sync a collection between two storages.
 pub(crate) struct CollectionPlan<'a> {
-    id: &'a String,
+    name: &'a String,
     collection_action: Action,
     item_actions: HashMap<&'a String, Action>,
 }
@@ -385,7 +385,7 @@ impl CollectionPlan<'_> {
         );
 
         CollectionPlan {
-            id: name,
+            name,
             collection_action,
             item_actions,
         }
