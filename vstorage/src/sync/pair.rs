@@ -74,6 +74,7 @@ pub struct StorageState {
 }
 
 impl StorageState {
+    #[must_use]
     pub fn empty() -> Self {
         StorageState::default()
     }
