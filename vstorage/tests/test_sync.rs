@@ -113,7 +113,10 @@ async fn test_sync_simple_case() {
         .unwrap()
         .map(|r| r.unwrap())
         .collect::<Vec<_>>();
+
+    // Note that "third-calendar" is not present in the "empty" one.
     assert_eq!(first.len(), 2);
+
     for item in first {
         let data = std::fs::read_to_string(item.path()).unwrap();
         let found = data.find("First calendar event");
