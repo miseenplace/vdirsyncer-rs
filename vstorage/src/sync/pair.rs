@@ -20,7 +20,8 @@ impl<I: Item> StoragePair<'_, I> {
     /// Create a new instance for two given storages.
     ///
     /// Only actions required to synchronise the specified colletions will be planned. If there is
-    /// no known previous state for a storage, an empty one should be provided.
+    /// no known previous state for a storage, an empty one should be provided (e.g.: via
+    /// [`StorageState::empty`]).
     ///
     /// Executes all read operations required to determine the current state of both storages.
     ///
@@ -67,12 +68,15 @@ pub(crate) struct ItemState {
 /// Generally, this should be treated as opaque data and not modified by consumers of this library.
 /// It should, however, be serialised and saved into persistent storages between synchronisation
 /// operations.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub struct StorageState {
     collections: Vec<CollectionState>,
 }
 
 impl StorageState {
+    pub fn empty() -> Self {
+        StorageState::default()
+    }
     /// Returns the state of the collection with the given name.
     ///
     /// Returns `None` if the collection does not exist in this state (which is
