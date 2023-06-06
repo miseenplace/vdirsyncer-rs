@@ -13,6 +13,7 @@ use http::Uri;
 use std::path::PathBuf;
 use vstorage::base::Collection;
 use vstorage::base::Definition;
+use vstorage::base::Item;
 use vstorage::base::Storage;
 use vstorage::filesystem::FilesystemDefinition;
 use vstorage::webcal::WebCalDefinition;
@@ -36,13 +37,10 @@ async fn main() {
     .storage()
     .await
     .expect("can create webcal storage");
-    let mut fs = FilesystemDefinition {
-        path,
-        extension: String::from("ics"),
-    }
-    .storage()
-    .await
-    .expect("can create fs storage");
+    let mut fs = FilesystemDefinition::new(path, String::from("ics"))
+        .storage()
+        .await
+        .expect("can create fs storage");
 
     let webcal_collection = webcal
         .open_collection("holidays_nl")
@@ -58,10 +56,10 @@ async fn main() {
 }
 
 /// Copies from `source` to `target` and returns the amount of items copied.
-async fn copy_collection(
-    source_storage: &Box<dyn Storage>,
+async fn copy_collection<I: Item>(
+    source_storage: &Box<dyn Storage<I>>,
     source_collection: Collection,
-    target_storage: &mut Box<dyn Storage>,
+    target_storage: &mut Box<dyn Storage<I>>,
     target_collection: Collection,
 ) -> usize {
     let mut count = 0;

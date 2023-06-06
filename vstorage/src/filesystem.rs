@@ -7,6 +7,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::{fs::Metadata, os::unix::prelude::MetadataExt};
 use tokio::fs::{
@@ -25,12 +26,12 @@ use crate::{Error, ErrorKind, Etag, Href, Result};
 /// A filesystem directory containing zero or more directories.
 ///
 /// Each child directory is treated as [`Collection`]. Nested subdirectories are not supported.
-pub struct FilesystemStorage {
-    definition: FilesystemDefinition,
+pub struct FilesystemStorage<I: Item> {
+    definition: FilesystemDefinition<I>,
 }
 
 #[async_trait]
-impl Storage for FilesystemStorage {
+impl<I: Item> Storage<I> for FilesystemStorage<I> {
     async fn check(&self) -> Result<()> {
         let meta = metadata(&self.definition.path)
             .await
@@ -105,11 +106,11 @@ impl Storage for FilesystemStorage {
         Ok(items)
     }
 
-    async fn get_item(&self, collection: &Collection, href: &str) -> Result<(Item, Etag)> {
+    async fn get_item(&self, collection: &Collection, href: &str) -> Result<(I, Etag)> {
         let path = self.collection_path(collection).join(href);
         let meta = metadata(&path).await?;
 
-        let item = Item::from(read_to_string(&path).await?);
+        let item = I::from(read_to_string(&path).await?);
         let etag = etag_for_metadata(&meta);
 
         Ok((item, etag))
@@ -119,7 +120,7 @@ impl Storage for FilesystemStorage {
         &self,
         collection: &Collection,
         hrefs: &[&str],
-    ) -> Result<Vec<(Href, Item, Etag)>> {
+    ) -> Result<Vec<(Href, I, Etag)>> {
         // No specialisation for this type; it's fast enough for now.
         let mut items = Vec::with_capacity(hrefs.len());
         for href in hrefs {
@@ -129,7 +130,7 @@ impl Storage for FilesystemStorage {
         Ok(items)
     }
 
-    async fn get_all_items(&self, collection: &Collection) -> Result<Vec<(Href, Item, Etag)>> {
+    async fn get_all_items(&self, collection: &Collection) -> Result<Vec<(Href, I, Etag)>> {
         let mut read_dir = read_dir(self.collection_path(collection)).await?;
 
         let mut items = Vec::new();
@@ -140,7 +141,7 @@ impl Storage for FilesystemStorage {
                 .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Filename is not valid UTF-8"))?
                 .into();
             let etag = etag_for_direntry(&entry).await?;
-            let item = Item::from(read_to_string(&href).await?);
+            let item = I::from(read_to_string(&href).await?);
             items.push((href, item, etag));
         }
 
@@ -179,7 +180,7 @@ impl Storage for FilesystemStorage {
         Ok(Some(value))
     }
 
-    async fn add_item(&mut self, collection: &Collection, item: &Item) -> Result<ItemRef> {
+    async fn add_item(&mut self, collection: &Collection, item: &I) -> Result<ItemRef> {
         // TODO: We only need to remove a few "illegal" characters, so this is a bit too strict.
         let basename = item
             .ident()
@@ -208,7 +209,7 @@ impl Storage for FilesystemStorage {
         collection: &Collection,
         href: &str,
         etag: &str,
-        item: &Item,
+        item: &I,
     ) -> Result<Etag> {
         let filename = self.collection_path(collection).join(href);
 
@@ -256,7 +257,7 @@ impl Storage for FilesystemStorage {
     }
 }
 
-impl FilesystemStorage {
+impl<I: Item> FilesystemStorage<I> {
     fn collection_path(&self, collection: &Collection) -> PathBuf {
         self.definition.path.join(collection.href())
     }
@@ -280,16 +281,28 @@ impl FilesystemStorage {
 }
 
 /// Definition for a storage instance.
-pub struct FilesystemDefinition {
+#[derive(serde::Deserialize)]
+pub struct FilesystemDefinition<I: Item> {
     pub path: PathBuf,
     /// Filename extension for items in a storage. Files with matching extension are treated a
     /// items for a collection, and all other files are ignored.
     pub extension: String,
+    i: PhantomData<I>,
+}
+
+impl<I: Item> FilesystemDefinition<I> {
+    pub fn new(path: PathBuf, extension: String) -> Self {
+        Self {
+            path,
+            extension,
+            i: PhantomData::default(),
+        }
+    }
 }
 
 #[async_trait]
-impl Definition for FilesystemDefinition {
-    async fn storage(self) -> Result<Box<dyn Storage>> {
+impl<I: Item + 'static> Definition<I> for FilesystemDefinition<I> {
+    async fn storage(self) -> Result<Box<dyn Storage<I>>> {
         Ok(Box::from(FilesystemStorage { definition: self }))
     }
 }
@@ -318,16 +331,14 @@ fn filename_for_collection_meta(kind: MetadataKind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::FilesystemDefinition;
-    use crate::base::Definition;
+    use crate::base::{Definition, IcsItem};
     use tempfile::tempdir;
 
     #[tokio::test]
     async fn test_missing_displayname() {
         let dir = tempdir().unwrap();
-        let definition = FilesystemDefinition {
-            path: dir.path().to_path_buf(),
-            extension: "ics".to_string(),
-        };
+        let definition =
+            FilesystemDefinition::<IcsItem>::new(dir.path().to_path_buf(), "ics".to_string());
 
         let mut storage = definition.storage().await.unwrap();
         let collection = storage.create_collection("test").await.unwrap();

@@ -11,7 +11,7 @@ use hyper::{client::HttpConnector, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::{
-    base::{Collection, Definition, Item, ItemRef, MetadataKind, Storage},
+    base::{Collection, Definition, IcsItem, Item, ItemRef, MetadataKind, Storage},
     simple_component::Component,
     Error, ErrorKind, Etag, Href, Result,
 };
@@ -39,11 +39,11 @@ pub struct WebCalDefinition {
 }
 
 #[async_trait]
-impl Definition for WebCalDefinition {
+impl Definition<IcsItem> for WebCalDefinition {
     /// Create a new storage instance.
     ///
     /// Unlike other [`Storage`] implementations, this one allows only a single collection.
-    async fn storage(self) -> Result<Box<dyn Storage>> {
+    async fn storage(self) -> Result<Box<dyn Storage<IcsItem>>> {
         let proto = match &self.url.scheme().map(Scheme::as_str) {
             Some("http") => HttpsConnectorBuilder::new()
                 .with_native_roots()
@@ -72,7 +72,7 @@ impl Definition for WebCalDefinition {
 }
 
 #[async_trait]
-impl Storage for WebCalStorage {
+impl Storage<IcsItem> for WebCalStorage {
     /// Checks that the remove resource exists and whether it looks like an icalendar resource.
     async fn check(&self) -> Result<()> {
         // TODO: Should map status codes to io::Error. if 404 -> NotFound, etc.
@@ -138,7 +138,7 @@ impl Storage for WebCalStorage {
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .iter()
             .map(|c| {
-                let item = Item::from(c.to_string());
+                let item = IcsItem::from(c.to_string());
                 let hash = item.hash();
 
                 ItemRef {
@@ -155,7 +155,7 @@ impl Storage for WebCalStorage {
     ///
     /// Note that, due to the nature of webcal, the whole collection needs to be retrieved. It is
     /// strongly recommended to use [`WebCalStorage::get_all_items`] instead.
-    async fn get_item(&self, _collection: &Collection, href: &str) -> Result<(Item, Etag)> {
+    async fn get_item(&self, _collection: &Collection, href: &str) -> Result<(IcsItem, Etag)> {
         let raw = fetch_raw(&self.http_client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
@@ -166,7 +166,7 @@ impl Storage for WebCalStorage {
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .iter()
             .find_map(|c| {
-                let item = Item::from(c.to_string());
+                let item = IcsItem::from(c.to_string());
                 if item.ident() == href {
                     Some(item)
                 } else {
@@ -187,7 +187,7 @@ impl Storage for WebCalStorage {
         &self,
         _collection: &Collection,
         hrefs: &[&str],
-    ) -> Result<Vec<(Href, Item, Etag)>> {
+    ) -> Result<Vec<(Href, IcsItem, Etag)>> {
         let raw = fetch_raw(&self.http_client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
@@ -199,7 +199,7 @@ impl Storage for WebCalStorage {
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
             .iter()
             .filter_map(|c| {
-                let item = Item::from(c.to_string());
+                let item = IcsItem::from(c.to_string());
                 if hrefs.contains(&(item.ident().as_ref())) {
                     let hash = item.hash();
                     Some(Ok((item.ident(), item, hash)))
@@ -213,7 +213,7 @@ impl Storage for WebCalStorage {
     /// Fetch all items in the collection.
     ///
     /// Performs a single HTTP(s) request to fetch all items.
-    async fn get_all_items(&self, _collection: &Collection) -> Result<Vec<(Href, Item, Etag)>> {
+    async fn get_all_items(&self, _collection: &Collection) -> Result<Vec<(Href, IcsItem, Etag)>> {
         let raw = fetch_raw(&self.http_client, &self.definition.url).await?;
 
         // TODO: it would be best if the parser could operate on a stream, although that might
@@ -226,7 +226,7 @@ impl Storage for WebCalStorage {
         components
             .iter()
             .map(|c| {
-                let item = Item::from(c.to_string());
+                let item = IcsItem::from(c.to_string());
                 let hash = item.hash();
 
                 Ok((item.ident(), item, hash))
@@ -235,7 +235,7 @@ impl Storage for WebCalStorage {
     }
 
     /// Unsupported for this storage type.
-    async fn add_item(&mut self, _collection: &Collection, _: &Item) -> Result<ItemRef> {
+    async fn add_item(&mut self, _collection: &Collection, _: &IcsItem) -> Result<ItemRef> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "creating collections via webcal is not supported",
@@ -248,7 +248,7 @@ impl Storage for WebCalStorage {
         _collection: &Collection,
         _: &str,
         _: &str,
-        _: &Item,
+        _: &IcsItem,
     ) -> Result<Etag> {
         Err(Error::new(
             ErrorKind::Unsupported,

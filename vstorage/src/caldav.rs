@@ -6,7 +6,7 @@ use libdav::dav::mime_types;
 use libdav::CalDavClient;
 use libdav::{auth::Auth, dav::CollectionType};
 
-use crate::base::{Collection, Definition, Item, ItemRef, MetadataKind, Storage};
+use crate::base::{Collection, Definition, IcsItem, Item, ItemRef, MetadataKind, Storage};
 use crate::{Error, ErrorKind, Etag, Href, Result};
 
 pub struct CalDavDefinition {
@@ -29,8 +29,8 @@ impl From<libdav::dav::DavError> for Error {
 }
 
 #[async_trait]
-impl Definition for CalDavDefinition {
-    async fn storage(self) -> Result<Box<dyn Storage>> {
+impl Definition<IcsItem> for CalDavDefinition {
+    async fn storage(self) -> Result<Box<dyn Storage<IcsItem>>> {
         let client = CalDavClient::builder()
             .with_uri(self.url)
             .with_auth(self.auth)
@@ -50,7 +50,7 @@ pub struct CalDavStorage {
 }
 
 #[async_trait]
-impl Storage for CalDavStorage {
+impl Storage<IcsItem> for CalDavStorage {
     async fn check(&self) -> Result<()> {
         let uri = &self
             .client
@@ -157,7 +157,7 @@ impl Storage for CalDavStorage {
         Ok(items)
     }
 
-    async fn get_item(&self, collection: &Collection, href: &str) -> Result<(Item, Etag)> {
+    async fn get_item(&self, collection: &Collection, href: &str) -> Result<(IcsItem, Etag)> {
         let mut results = self
             .client
             .get_resources(&collection.href(), &[href])
@@ -180,14 +180,14 @@ impl Storage for CalDavStorage {
             .content
             .map_err(|e| Error::new(ErrorKind::Uncategorised, format!("Got status code: {e}")))?;
 
-        Ok((Item::from(content.data), content.etag))
+        Ok((IcsItem::from(content.data), content.etag))
     }
 
     async fn get_many_items(
         &self,
         collection: &Collection,
         hrefs: &[&str],
-    ) -> Result<Vec<(Href, Item, Etag)>> {
+    ) -> Result<Vec<(Href, IcsItem, Etag)>> {
         Ok(self
             .client
             .get_resources(&collection.href(), hrefs)
@@ -196,18 +196,18 @@ impl Storage for CalDavStorage {
             .into_iter()
             .map(|r| {
                 let content = r.content.unwrap();
-                (r.href, Item::from(content.data), content.etag)
+                (r.href, IcsItem::from(content.data), content.etag)
             })
             .collect())
     }
 
-    async fn get_all_items(&self, collection: &Collection) -> Result<Vec<(Href, Item, Etag)>> {
+    async fn get_all_items(&self, collection: &Collection) -> Result<Vec<(Href, IcsItem, Etag)>> {
         let list = self.list_items(collection).await?;
         let hrefs = list.iter().map(|i| i.href.as_str()).collect::<Vec<_>>();
         self.get_many_items(collection, &hrefs).await
     }
 
-    async fn add_item(&mut self, collection: &Collection, item: &Item) -> Result<ItemRef> {
+    async fn add_item(&mut self, collection: &Collection, item: &IcsItem) -> Result<ItemRef> {
         let href = join_hrefs(collection.href(), &item.ident());
         // TODO: ident: .chars().filter(char::is_ascii_alphanumeric)
 
@@ -229,7 +229,7 @@ impl Storage for CalDavStorage {
         _collection: &Collection,
         href: &str,
         etag: &str,
-        item: &Item,
+        item: &IcsItem,
     ) -> Result<Etag> {
         // TODO: check that href is a sub-path of collection.href?
         self.client

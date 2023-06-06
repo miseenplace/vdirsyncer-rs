@@ -1,14 +1,14 @@
 use serde::{Deserialize, Serialize};
 
-use crate::base::{Collection, Storage};
+use crate::base::{Collection, Item, Storage};
 
 /// A pair of storages which are to be kept synchronised.
 ///
 /// Use [`Plan::for_storage_pair`](crate::sync::plan::Plan::for_storage_pair) to plan (and later
 /// execute) the synchronisation itself..
-pub struct StoragePair<'a> {
-    pub(crate) storage_a: &'a mut dyn Storage,
-    pub(crate) storage_b: &'a mut dyn Storage,
+pub struct StoragePair<'a, I> {
+    pub(crate) storage_a: &'a mut dyn Storage<I>,
+    pub(crate) storage_b: &'a mut dyn Storage<I>,
     pub(crate) previous_state_a: &'a StorageState,
     pub(crate) previous_state_b: &'a StorageState,
     pub(crate) collection_names: &'a Vec<String>,
@@ -16,7 +16,7 @@ pub struct StoragePair<'a> {
     pub(crate) current_state_b: StorageState,
 }
 
-impl StoragePair<'_> {
+impl<I: Item> StoragePair<'_, I> {
     /// Create a new instance for two given storages.
     ///
     /// Only actions required to synchronise the specified colletions will be planned. If there is
@@ -29,12 +29,12 @@ impl StoragePair<'_> {
     /// If there are any errors determining the current state of either storage.
     // TODO: use a builder pattern to allow building these but querying later?
     pub async fn new<'a>(
-        storage_a: &'a mut dyn Storage,
-        storage_b: &'a mut dyn Storage,
+        storage_a: &'a mut dyn Storage<I>,
+        storage_b: &'a mut dyn Storage<I>,
         previous_state_a: &'a StorageState,
         previous_state_b: &'a StorageState,
         collection_names: &'a Vec<String>,
-    ) -> crate::Result<StoragePair<'a>> {
+    ) -> crate::Result<StoragePair<'a, I>> {
         let current_state_a =
             StorageState::current_for_storage(previous_state_a, storage_a, collection_names)
                 .await?;
@@ -91,9 +91,9 @@ impl StorageState {
             .find(|c| c.collection_name == name)
     }
 
-    async fn current_for_storage(
+    async fn current_for_storage<I: Item>(
         previous_state: &StorageState,
-        storage: &dyn Storage,
+        storage: &dyn Storage<I>,
         collection_names: &Vec<String>,
     ) -> crate::Result<StorageState> {
         let mut collection_states = Vec::new();
@@ -147,9 +147,9 @@ pub(crate) struct CollectionState {
 }
 
 impl CollectionState {
-    async fn current_for_storage(
+    async fn current_for_storage<I: Item>(
         previous_state: Option<&CollectionState>,
-        storage: &dyn Storage,
+        storage: &dyn Storage<I>,
         collection: &Collection,
         collection_name: String,
     ) -> crate::Result<Self> {

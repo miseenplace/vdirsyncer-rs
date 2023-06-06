@@ -1,6 +1,6 @@
 //! Components to plan a synchronisation.
 
-use crate::base::Storage;
+use crate::base::{Item, Storage};
 use crate::sync::pair::{Change, CollectionState, StoragePair, StorageState};
 use itertools::Itertools;
 use log::trace;
@@ -84,11 +84,11 @@ impl Action {
     }
 
     #[inline]
-    async fn execute_on_item(
+    async fn execute_on_item<I: Item>(
         &self,
         uid: &String,
-        storage_a: &mut dyn Storage,
-        storage_b: &mut dyn Storage,
+        storage_a: &mut dyn Storage<I>,
+        storage_b: &mut dyn Storage<I>,
         state_a: Option<&mut CollectionState>,
         state_b: Option<&mut CollectionState>,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -137,11 +137,11 @@ impl Action {
     }
 }
 
-async fn copy_item(
+async fn copy_item<I: Item>(
     src_state: &CollectionState,
     dst_state: &mut CollectionState,
-    src_storage: &dyn Storage,
-    dst_storage: &mut dyn Storage,
+    src_storage: &dyn Storage<I>,
+    dst_storage: &mut dyn Storage<I>,
     uid: &String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let col_a = src_storage.open_collection(&src_state.collection_href)?;
@@ -172,9 +172,9 @@ async fn copy_item(
     Ok(())
 }
 
-async fn delete_item(
+async fn delete_item<I: Item>(
     state: &mut CollectionState,
-    storage: &mut dyn Storage,
+    storage: &mut dyn Storage<I>,
     uid: &String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let col = storage.open_collection(&state.collection_href)?;
@@ -205,7 +205,7 @@ impl Plan<'_> {
     /// Compares the previous and current state of both storages and calculate all actions required
     /// to bring them into a synchronised state.
     #[must_use]
-    pub fn for_storage_pair<'a>(pair: &'a StoragePair<'a>) -> Plan<'a> {
+    pub fn for_storage_pair<'a, I>(pair: &'a StoragePair<'a, I>) -> Plan<'a> {
         // TODO: this method's implementation is not performant; it mostly "just works"
         //       Performance will be tweaked at a later date. In particular, we need a
         //       fully functioning system to properly benchmark different approaches.
@@ -231,7 +231,7 @@ impl Plan<'_> {
     /// Always returns a final state, regardless of what changes were applied.
     /// The `FinalState` will include the error that forced aborting, if any. If
     /// the error is not None, then both storages may still be out of sync.
-    pub async fn execute(&self, pair: &mut StoragePair<'_>) -> FinalState {
+    pub async fn execute<I: Item>(&self, pair: &mut StoragePair<'_, I>) -> FinalState {
         let mut final_state = FinalState {
             state_a: pair.current_state_a.clone(),
             state_b: pair.current_state_b.clone(),

@@ -15,13 +15,13 @@ use crate::{Etag, Href, Result};
 /// this like URL or TLS for network-based storages, or path and file extensions for filesystem
 /// based storages.
 #[async_trait]
-pub trait Definition: Sync + Send {
+pub trait Definition<I: Item>: Sync + Send {
     /// Creates a new storage instance for this definition.
     ///
     /// # Errors
     ///
     /// Errors are implementation-dependant; see implementations for details.
-    async fn storage(self) -> Result<Box<dyn Storage>>;
+    async fn storage(self) -> Result<Box<dyn Storage<I>>>;
 }
 
 /// A storage is the highest level abstraction where items can be stored. It can be a remote CalDav
@@ -29,14 +29,18 @@ pub trait Definition: Sync + Send {
 ///
 /// Each storage may contain one or more [`Collection`]s (e.g.: calendars or address books).
 ///
+/// The specific type of item that a storage can hold is defined by the `I` generic parameter.
+/// E.g.: a CalDav storage can hold icalendar items. Only items with the same kind of item can be
+/// synchronised (e.g.: it it nos possible to synchronise `Storage<VCardItem>` with
+/// `Storage<IcsItem>`
+///
 /// # Note for implementors
 ///
 /// The auto-generated documentation for this trait is rather hard to read due to the usage of
 /// `#[async_trait]`. You might want to consider clicking on the `source` link on the right and
 /// reading the documentation from the raw code for this trait.
 #[async_trait]
-pub trait Storage: Sync + Send {
-    // TODO: Will eventually need to support non-icalendar things here.
+pub trait Storage<I: Item>: Sync + Send {
     // TODO: Some calendar instances only allow a single item type (e.g.: events but not todos).
 
     /// Checks that the storage works. This includes validating credentials, and reachability.
@@ -77,7 +81,7 @@ pub trait Storage: Sync + Send {
     async fn list_items(&self, collection: &Collection) -> Result<Vec<ItemRef>>;
 
     /// Fetch a single item from given collection.
-    async fn get_item(&self, collection: &Collection, href: &str) -> Result<(Item, Etag)>;
+    async fn get_item(&self, collection: &Collection, href: &str) -> Result<(I, Etag)>;
 
     /// Fetch multiple items.
     ///
@@ -87,14 +91,14 @@ pub trait Storage: Sync + Send {
         &self,
         collection: &Collection,
         hrefs: &[&str],
-    ) -> Result<Vec<(Href, Item, Etag)>>;
+    ) -> Result<Vec<(Href, I, Etag)>>;
 
     /// Fetch all items from a given collection.
     // TODO: provide a generic implementation.
-    async fn get_all_items(&self, collection: &Collection) -> Result<Vec<(Href, Item, Etag)>>;
+    async fn get_all_items(&self, collection: &Collection) -> Result<Vec<(Href, I, Etag)>>;
 
     /// Saves a new item into a given collection
-    async fn add_item(&mut self, collection: &Collection, item: &Item) -> Result<ItemRef>;
+    async fn add_item(&mut self, collection: &Collection, item: &I) -> Result<ItemRef>;
 
     /// Updates an existing item in a given collection.
     async fn update_item(
@@ -102,7 +106,7 @@ pub trait Storage: Sync + Send {
         collection: &Collection,
         href: &str,
         etag: &str,
-        item: &Item,
+        item: &I,
     ) -> Result<Etag>;
 
     async fn delete_item(&mut self, collection: &Collection, href: &str, etag: &str) -> Result<()>;
@@ -174,26 +178,61 @@ pub enum MetadataKind {
     Colour,
 }
 
+/// Types of items that can be held in collections.
+///
+/// Storages can contain items of a concrete type implementing this trait. This trait defines how
+/// to extract the basic information that is requires to synchronise storages. Additional parsing
+/// is out of scope here and should be done by inspecting the raw data inside an item via
+/// [`Item::as_str`].
+pub trait Item: Sync + Send
+where
+    Self: From<String>,
+{
+    /// Parse the item and return a unique identifier for it.
+    ///
+    /// The UID does not change when the item is modified. The UID must remain the same when the
+    /// item is copied across storages and storage types.
+    #[must_use]
+    fn uid(&self) -> Option<String>;
+
+    /// Return the hash of this item.
+    ///
+    /// Implementations may normalise content before hashing to ensure that two equivalent items
+    /// return the same hash.
+    #[must_use]
+    fn hash(&self) -> String;
+
+    /// A unique identifier for this item. Is either the UID (if any), or the hash of its contents.
+    #[must_use]
+    fn ident(&self) -> String;
+
+    /// Returns a new copy of this Item with the supplied UID.
+    #[must_use]
+    fn with_uid(&self, new_uid: &str) -> Self;
+
+    #[must_use]
+    /// Returns the raw contents of this item.
+    fn as_str(&self) -> &str;
+}
+
 /// Immutable wrapper around a `VCALENDAR` or `VCARD`.
 ///
 /// Note that this is not a proper validating parser for icalendar or vcard; it's a very simple
 /// one with the sole purpose of extracing a UID. Proper parsing of components is out of scope,
 /// since we want to enable operating on potentially invalid items too.
 #[derive(Debug)]
-pub struct Item {
+pub struct IcsItem {
+    // TODO: make this Vec<u8> instead?
     raw: String,
 }
 
-// TODO: this assumes that the Item is an ICS file.
-//       Item should be generic over its content type, e.g.: Item<Ics>
-//       That's what this item is.
-impl Item {
+impl Item for IcsItem {
     /// Returns a unique identifier for this item.
     ///
     /// The UID does not change when the item is modified. The UID must remain the same when the
     /// item is copied across storages and storage types.
     #[must_use]
-    pub fn uid(&self) -> Option<String> {
+    fn uid(&self) -> Option<String> {
         let mut lines = self.raw.split_terminator("\r\n");
         let mut uid = lines
             .find_map(|line| line.strip_prefix("UID:"))
@@ -221,7 +260,7 @@ impl Item {
     /// [`util::hash`]: crate::util::hash
     /// [`Etag`]: crate::Etag
     #[must_use]
-    pub fn hash(&self) -> String {
+    fn hash(&self) -> String {
         // TODO: Need to keep in mind that:
         //  - Timezones may be renamed and that has no meaning.
         //  - Some props may be re-sorted, but the Item is still the same.
@@ -232,7 +271,7 @@ impl Item {
 
     /// A unique identifier for this item. Is either the UID (if any), or the hash of its contents.
     #[must_use]
-    pub fn ident(&self) -> String {
+    fn ident(&self) -> String {
         self.uid().unwrap_or_else(|| self.hash())
     }
 
@@ -242,7 +281,7 @@ impl Item {
     ///
     /// This function is not yet implemented.
     #[must_use]
-    pub fn with_uid(&self, _new_uid: &str) -> Self {
+    fn with_uid(&self, _new_uid: &str) -> Self {
         // The logic in vdirsyncer/vobject.py::Item.with_uid seems pretty solid.
         // TODO: this really needs to be done, although its absence only blocks syncing broken items.
         todo!()
@@ -251,14 +290,14 @@ impl Item {
     #[inline]
     #[must_use]
     /// Returns the raw contents of this item.
-    pub fn as_str(&self) -> &str {
+    fn as_str(&self) -> &str {
         &self.raw
     }
 }
 
-impl<S: AsRef<str>> From<S> for Item {
-    fn from(value: S) -> Item {
-        Item {
+impl<S: AsRef<str>> From<S> for IcsItem {
+    fn from(value: S) -> IcsItem {
+        IcsItem {
             raw: value.as_ref().to_string(),
         }
     }
@@ -270,11 +309,10 @@ mod tests {
     // vdirsyncer is expected to handle invalid input gracefully and sync it as-is,
     // so this is not really a problem.
 
-    use super::Item;
-    use crate::base::Storage;
+    use crate::base::{IcsItem, Item, Storage};
 
-    fn item_from_raw(raw: String) -> Item {
-        Item { raw }
+    fn item_from_raw(raw: String) -> IcsItem {
+        IcsItem { raw }
     }
 
     #[test]
@@ -342,6 +380,6 @@ mod tests {
     #[test]
     fn test_storage_is_object_safe() {
         #[allow(dead_code)]
-        fn dummy(_: Box<dyn Storage>) {}
+        fn dummy(_: Box<dyn Storage<IcsItem>>) {}
     }
 }

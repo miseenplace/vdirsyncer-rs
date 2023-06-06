@@ -1,11 +1,11 @@
 use libdav::auth::Auth;
 use vstorage::{
-    base::{Collection, Definition, Storage},
+    base::{Collection, Definition, IcsItem, Storage},
     caldav::CalDavDefinition,
     filesystem::FilesystemDefinition,
 };
 
-async fn create_caldav_from_env() -> Box<dyn Storage> {
+async fn create_caldav_from_env() -> Box<dyn Storage<IcsItem>> {
     let server = std::env::var("CALDAV_SERVER").unwrap();
     let username = std::env::var("CALDAV_USERNAME").unwrap();
     let password = std::env::var("CALDAV_PASSWORD").unwrap();
@@ -22,15 +22,12 @@ async fn create_caldav_from_env() -> Box<dyn Storage> {
     .unwrap()
 }
 
-async fn create_vdir_from_env() -> Box<dyn Storage> {
+async fn create_vdir_from_env() -> Box<dyn Storage<IcsItem>> {
     let path = std::env::var("VDIR_PATH").unwrap();
-    FilesystemDefinition {
-        path: path.try_into().unwrap(),
-        extension: "ics".to_string(),
-    }
-    .storage()
-    .await
-    .unwrap()
+    FilesystemDefinition::new(path.try_into().unwrap(), "ics".to_string())
+        .storage()
+        .await
+        .unwrap()
 }
 #[tokio::main]
 async fn main() {
@@ -65,9 +62,9 @@ async fn main() {
 
 /// Copies from `source` to `target` and returns the amount of items copied.
 async fn copy_collection(
-    source_storage: &Box<dyn Storage>,
+    source_storage: &Box<dyn Storage<IcsItem>>,
     source_collection: Collection,
-    target_storage: &mut Box<dyn Storage>,
+    target_storage: &mut Box<dyn Storage<IcsItem>>,
     target_collection: Collection,
 ) -> usize {
     let mut count = 0;
