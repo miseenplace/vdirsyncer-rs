@@ -307,19 +307,28 @@ async fn fetch_raw(client: &Client<HttpsConnector<HttpConnector>>, url: &Uri) ->
         // TODO: upstream should impl IntoURL for &Uri
         .get(url.clone())
         .await
-        .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
+        .map_err(|e| Error::new(ErrorKind::Io, e))?;
 
-    if response.status() != StatusCode::OK {
-        return Err(Error::new(
-            ErrorKind::Uncategorised,
-            "request did not return 200",
-        ));
+    match response.status() {
+        StatusCode::NOT_FOUND | StatusCode::GONE => {
+            return Err(Error::new(
+                ErrorKind::DoesNotExist,
+                "The remote resource does not exist.",
+            ))
+        }
+        StatusCode::OK => {}
+        code => {
+            return Err(Error::new(
+                ErrorKind::Io,
+                format!("request returned {code}"),
+            ))
+        }
     }
 
     // TODO: handle non-UTF-8 data.
     hyper::body::to_bytes(response)
         .await
-        .map_err(|e| Error::new(ErrorKind::Uncategorised, e))
+        .map_err(|e| Error::new(ErrorKind::Io, e))
         .map(|bytes| String::from_utf8(bytes.into()))?
         .map_err(|e| Error::new(ErrorKind::InvalidData, e))
 }
