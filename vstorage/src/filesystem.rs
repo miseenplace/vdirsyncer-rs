@@ -283,6 +283,10 @@ impl<I: Item> FilesystemStorage<I> {
 /// Definition for a storage instance.
 #[derive(serde::Deserialize)]
 pub struct FilesystemDefinition<I: Item> {
+    /// The path to a directory containing a storage.
+    ///
+    /// Each top-level subdirectory will be treated as a separate collection, and individual files
+    /// inside these are each treated as an `Item`.
     pub path: PathBuf,
     /// Filename extension for items in a storage. Files with matching extension are treated a
     /// items for a collection, and all other files are ignored.
