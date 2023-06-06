@@ -291,6 +291,7 @@ pub struct FilesystemDefinition<I: Item> {
 }
 
 impl<I: Item> FilesystemDefinition<I> {
+    #[must_use]
     pub fn new(path: PathBuf, extension: String) -> Self {
         Self {
             path,
