@@ -295,11 +295,9 @@ impl Item for IcsItem {
     }
 }
 
-impl<S: AsRef<str>> From<S> for IcsItem {
-    fn from(value: S) -> IcsItem {
-        IcsItem {
-            raw: value.as_ref().to_string(),
-        }
+impl From<String> for IcsItem {
+    fn from(value: String) -> Self {
+        IcsItem { raw: value }
     }
 }
 
