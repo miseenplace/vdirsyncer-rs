@@ -1,3 +1,5 @@
+#![warn(clippy::pedantic)]
+
 //! This library contains caldav and carddav clients.
 //!
 //! See [`CalDavClient`] and [`CardDavClient`] as a useful entry points.
