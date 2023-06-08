@@ -11,8 +11,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::{fs::Metadata, os::unix::prelude::MetadataExt};
 use tokio::fs::{
-    create_dir, metadata, read_dir, read_to_string, remove_dir, remove_file, DirEntry, File,
-    OpenOptions,
+    create_dir, metadata, read_dir, read_to_string, remove_dir, remove_file, File, OpenOptions,
 };
 use tokio::io::AsyncWriteExt;
 use tokio_stream::wrappers::ReadDirStream;
@@ -98,7 +97,7 @@ impl<I: Item> Storage<I> for FilesystemStorage<I> {
                 .to_str()
                 .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Filename is not valid UTF-8"))?
                 .into();
-            let etag = etag_for_direntry(&entry).await?;
+            let etag = etag_for_path(&entry.path()).await?;
             let item = ItemRef { href, etag };
             items.push(item);
         }
@@ -140,7 +139,7 @@ impl<I: Item> Storage<I> for FilesystemStorage<I> {
                 .to_str()
                 .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Filename is not valid UTF-8"))?
                 .into();
-            let etag = etag_for_direntry(&entry).await?;
+            let etag = etag_for_path(&entry.path()).await?;
             let item = I::from(read_to_string(&href).await?);
             items.push((href, item, etag));
         }
@@ -314,11 +313,6 @@ impl<I: Item + 'static> Definition<I> for FilesystemDefinition<I> {
 
 async fn etag_for_path<P: AsRef<Path>>(path: P) -> Result<Etag> {
     let metadata = metadata(path).await?;
-    Ok(etag_for_metadata(&metadata))
-}
-
-async fn etag_for_direntry(dir_entry: &DirEntry) -> Result<Etag> {
-    let metadata = metadata(dir_entry.path()).await?;
     Ok(etag_for_metadata(&metadata))
 }
 
