@@ -5,7 +5,7 @@ use std::io;
 use std::string::FromUtf8Error;
 
 use domain::base::name::LongChainError;
-use domain::base::octets::ParseError;
+use domain::base::wire::ParseError;
 use domain::base::ToRelativeDname;
 use domain::{
     base::{Dname, Question, RelativeDname, Rtype},
@@ -13,6 +13,8 @@ use domain::{
     resolv::StubResolver,
 };
 use http::uri::Scheme;
+
+use crate::BootstrapError;
 
 /// Services for which automatic discovery is possible.
 #[derive(Debug, Clone, Copy)]
@@ -59,35 +61,6 @@ impl DiscoverableService {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum SrvError {
-    #[error("domain name is too long")]
-    LongName,
-
-    #[error("the resolver returned a malformed answer")]
-    MalformedAnswer,
-
-    #[error("error executing DNS query")]
-    Query(io::Error),
-
-    /// The service is decidedly not available.
-    ///
-    /// See <https://www.rfc-editor.org/rfc/rfc2782>, page 4
-    #[error("the service is decidedly not available")]
-    NotAvailable,
-}
-
-// See: https://github.com/NLnetLabs/domain/pull/183
-impl From<domain::resolv::lookup::srv::SrvError> for SrvError {
-    fn from(value: domain::resolv::lookup::srv::SrvError) -> Self {
-        match value {
-            domain::resolv::lookup::srv::SrvError::LongName => SrvError::LongName,
-            domain::resolv::lookup::srv::SrvError::MalformedAnswer => SrvError::MalformedAnswer,
-            domain::resolv::lookup::srv::SrvError::Query(e) => SrvError::Query(e),
-        }
-    }
-}
-
 /// Resolves SRV to locate the caldav server.
 ///
 /// Returns a `Vec` of host/ports, in the order in which they should be tried.
@@ -105,7 +78,7 @@ pub async fn resolve_srv_record<T: std::convert::AsRef<[u8]>>(
     service: DiscoverableService,
     domain: &Dname<T>,
     port: u16,
-) -> Result<Vec<(String, u16)>, SrvError> {
+) -> Result<Vec<(String, u16)>, BootstrapError> {
     let response = StubResolver::new()
         .lookup_srv(service.relative_domain(), domain, port)
         .await?;
@@ -116,8 +89,8 @@ pub async fn resolve_srv_record<T: std::convert::AsRef<[u8]>>(
     };
 
     if let Some(srv) = srvs.first() {
-        if srv.target().as_ref() == b"." {
-            return Err(SrvError::NotAvailable);
+        if srv.target().as_slice() == b"." {
+            return Err(BootstrapError::NotAvailable);
         }
     }
 
@@ -194,10 +167,7 @@ pub async fn find_context_path_via_txt_records<T: std::convert::AsRef<[u8]>>(
     let Some(record) = response.answer()?.next() else { return Ok(None)};
     let Some(parsed_record) = record?.into_record::<Txt<_>>()? else { return Ok(None) };
 
-    let bytes = parsed_record
-        .data()
-        .text::<Vec<u8>>()
-        .expect("record fits in newly created buffer");
+    let bytes = parsed_record.data().text::<Vec<u8>>();
 
     let path_result = String::from_utf8(bytes)?
         .strip_prefix("path=")

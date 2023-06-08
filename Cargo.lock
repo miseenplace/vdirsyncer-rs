@@ -282,15 +282,16 @@ dependencies = [
 
 [[package]]
 name = "domain"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "415f70b855528e589c4d787338d22ad4e9e6d012167ba3c5279f4e9805e50ceb"
+version = "0.8.1-dev"
+source = "git+https://github.com/WhyNotHugo/domain.git?branch=into_srvs-again#e95de36d4efe573e51261d4237794b7d16e1e4b3"
 dependencies = [
  "bytes",
  "futures",
  "libc",
+ "octseq",
  "rand",
  "smallvec",
+ "time",
  "tokio",
 ]
 
@@ -749,6 +750,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "octseq"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5190e3482f38446ee3f3ab50b049a16b072b6111cba008381b816598478ba65d"
+dependencies = [
+ "bytes",
+ "smallvec",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1184,6 +1195,22 @@ dependencies = [
  "quote",
  "syn 2.0.15",
 ]
+
+[[package]]
+name = "time"
+version = "0.3.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea9e1b3cf1243ae005d9e74085d4d542f3125458f3a81af210d901dcd7411efd"
+dependencies = [
+ "serde",
+ "time-core",
+]
+
+[[package]]
+name = "time-core"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7300fbefb4dadc1af235a9cef3737cea692a9d97e1b9cbcd4ebdae6f8868e6fb"
 
 [[package]]
 name = "tokio"

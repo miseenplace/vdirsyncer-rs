@@ -10,10 +10,8 @@
 use crate::auth::{Auth, AuthError};
 use dav::DavError;
 use dav::{FindCurrentUserPrincipalError, WebDavClient};
-use dns::{
-    find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, SrvError, TxtError,
-};
-use domain::base::Dname;
+use dns::{find_context_path_via_txt_records, resolve_srv_record, DiscoverableService, TxtError};
+use domain::{base::Dname, resolv::lookup::srv::SrvError};
 use http::StatusCode;
 use hyper::Uri;
 
@@ -35,7 +33,7 @@ pub enum BootstrapError {
     InvalidUrl(&'static str),
 
     #[error("error resolving DNS SRV records")]
-    DnsError(SrvError),
+    DnsError(#[from] SrvError),
 
     #[error("SRV records returned domain/port pair that failed to parse")]
     UnusableSrv(http::Error),
@@ -48,6 +46,12 @@ pub enum BootstrapError {
 
     #[error("error querying current user principal")]
     CurrentPrincipal(#[from] FindCurrentUserPrincipalError),
+
+    /// The service is decidedly not available.
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc2782>, page 4
+    #[error("the service is decidedly not available")]
+    NotAvailable,
 
     #[error(transparent)]
     DavError(#[from] DavError),
@@ -83,9 +87,7 @@ async fn common_bootstrap(
     let dname = Dname::bytes_from_str(domain)
         .map_err(|_| BootstrapError::InvalidUrl("invalid domain name"))?;
     let host_candidates = {
-        let candidates = resolve_srv_record(service, &dname, port)
-            .await
-            .map_err(BootstrapError::DnsError)?;
+        let candidates = resolve_srv_record(service, &dname, port).await?;
 
         // If there are no SRV records, try the domain/port in the provided URI.
         if candidates.is_empty() {

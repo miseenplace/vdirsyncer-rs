@@ -12,7 +12,7 @@ keywords = ["caldav", "carddav", "webcal", "calendar", "contacts"]
 [dependencies]
 async-trait = "0.1.66"
 base64 = "0.21.0"
-domain = { version = "0.7.2", features = ["resolv"] }
+domain = { branch = "into_srvs-again", version = "0.8.1-dev", features = ["resolv"], git = "https://github.com/WhyNotHugo/domain.git" }
 email_address = { version = "0.2.4", default-features = false }
 http = "0.2.9"
 hyper = { version = "0.14.24", features = ["http1", "client"] }
