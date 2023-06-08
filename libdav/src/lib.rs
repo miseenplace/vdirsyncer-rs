@@ -6,7 +6,6 @@
 //!
 //! Both clients implement `Deref<Target = DavClient>`, so all the associated
 //! functions for [`dav::WebDavClient`] are usable directly.
-use std::io;
 
 use crate::auth::{Auth, AuthError};
 use dav::DavError;
@@ -52,20 +51,6 @@ pub enum BootstrapError {
 
     #[error(transparent)]
     DavError(#[from] DavError),
-}
-
-impl From<BootstrapError> for io::Error {
-    fn from(value: BootstrapError) -> Self {
-        match value {
-            BootstrapError::InvalidUrl(msg) => io::Error::new(io::ErrorKind::InvalidInput, msg),
-            BootstrapError::DnsError(_)
-            | BootstrapError::TxtError(_)
-            | BootstrapError::HomeSet(_)
-            | BootstrapError::CurrentPrincipal(_) => io::Error::new(io::ErrorKind::Other, value),
-            BootstrapError::UnusableSrv(_) => io::Error::new(io::ErrorKind::InvalidData, value),
-            BootstrapError::DavError(dav) => io::Error::from(dav),
-        }
-    }
 }
 
 /// Error finding home set.

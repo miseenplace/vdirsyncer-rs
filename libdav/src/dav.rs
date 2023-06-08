@@ -2,7 +2,7 @@
 //!
 //! This mostly implements the necessary bits for the caldav and carddav implementations. It should
 //! not be considered a general purpose webdav implementation.
-use std::{io, iter::once, string::FromUtf8Error};
+use std::{iter::once, string::FromUtf8Error};
 
 use http::{response::Parts, Method, Request, StatusCode, Uri};
 use hyper::{body::Bytes, client::HttpConnector, Body, Client};
@@ -46,22 +46,6 @@ pub enum DavError {
 impl From<StatusCode> for DavError {
     fn from(status: StatusCode) -> Self {
         DavError::BadStatusCode(status)
-    }
-}
-
-impl From<DavError> for io::Error {
-    fn from(value: DavError) -> Self {
-        match value {
-            DavError::Network(e) => io::Error::new(io::ErrorKind::Other, e),
-            DavError::Xml(e) => io::Error::new(io::ErrorKind::InvalidData, e),
-            DavError::BadStatusCode(_) | DavError::Auth(_) => {
-                io::Error::new(io::ErrorKind::Other, value)
-            }
-            DavError::InvalidInput(e) => io::Error::new(io::ErrorKind::InvalidInput, e),
-            DavError::InvalidResponse(_) | DavError::InvalidEtag(_) => {
-                io::Error::new(io::ErrorKind::InvalidData, value)
-            }
-        }
     }
 }
 
