@@ -10,6 +10,8 @@ triggers:
   - action: email
     condition: failure
     to: Hugo Osvaldo Barrera <hugo@whynothugo.nl>
+secrets:
+  - 2d3090e6-72a6-4d00-8221-92184d276c90 # rsync@anchor
 tasks:
   - prepare: |
       cd vdirsyncer-rs
@@ -23,7 +25,11 @@ tasks:
       cargo clippy
   - test: |
       cd vdirsyncer-rs
-      cargo test  # this includes examples and doctests
+      cargo test  # includes examples and doctests
   - doc: |
       cd vdirsyncer-rs
       cargo doc  # fails on broken links
+  - publish-doc: |
+      [ $(git rev-parse --abbrev-ref HEAD) = main ]
+      echo "anchor.whynothugo.nl ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE2WacYpYEP5vvevx4NXQn3Ktd53pBkZR/bpPoS3Wkyg" > $HOME/.ssh/known_hosts
+      rsync -r vdirsyncer-rs/target/doc/ rsync@anchor.whynothugo.nl:./
