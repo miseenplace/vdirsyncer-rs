@@ -31,6 +31,6 @@ tasks:
       cargo doc  # fails on broken links
   - publish-doc: |
       cd vdirsyncer-rs
-      [ $(git rev-parse --abbrev-ref HEAD) = main ]
+      [ $(git rev-parse --abbrev-ref HEAD) = main ] || complete-build
       echo "anchor.whynothugo.nl ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE2WacYpYEP5vvevx4NXQn3Ktd53pBkZR/bpPoS3Wkyg" > $HOME/.ssh/known_hosts
       rsync -r target/doc/ rsync@anchor.whynothugo.nl:./
