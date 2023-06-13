@@ -4,6 +4,7 @@ packages:
   - rust
   - rustfmt
   - rust-clippy
+  - rsync
 environment:
   CARGO_TERM_COLOR: always
 triggers:
