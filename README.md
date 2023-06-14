@@ -51,7 +51,7 @@ docker run --rm --publish 8002:80 whynothugo/vdirsyncer-devkit-baikal
 Just once, configure the patches list for this repo:
 
 ```
-git config sendemail.to '~whynothugo/vdirsyncer@lists.sr.ht'
+git config sendemail.to '~whynothugo/vdirsyncer-devel@lists.sr.ht'
 ```
 
 Make changes. Run tests. Commit. Then send patches:
