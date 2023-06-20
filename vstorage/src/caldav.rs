@@ -151,7 +151,11 @@ impl Storage<IcsItem> for CalDavStorage {
         for r in response {
             items.push(ItemRef {
                 href: r.href,
-                etag: r.details.etag.ok_or(Error::from(ErrorKind::InvalidData))?,
+                etag: r
+                    .details
+                    .etag
+                    .ok_or(Error::from(ErrorKind::InvalidData))?
+                    .into(),
             });
         }
         Ok(items)
@@ -180,7 +184,7 @@ impl Storage<IcsItem> for CalDavStorage {
             .content
             .map_err(|e| Error::new(ErrorKind::Uncategorised, format!("Got status code: {e}")))?;
 
-        Ok((IcsItem::from(content.data), content.etag))
+        Ok((IcsItem::from(content.data), content.etag.into()))
     }
 
     async fn get_many_items(
@@ -196,7 +200,7 @@ impl Storage<IcsItem> for CalDavStorage {
             .into_iter()
             .map(|r| {
                 let content = r.content.unwrap();
-                (r.href, IcsItem::from(content.data), content.etag)
+                (r.href, IcsItem::from(content.data), content.etag.into())
             })
             .collect())
     }
@@ -221,14 +225,17 @@ impl Storage<IcsItem> for CalDavStorage {
             .await
             // FIXME: etag may be missing. In such case, we should fetch it.
             .map(|opt| opt.ok_or(Error::new(ErrorKind::InvalidData, "No Etag in response")))?
-            .map(|etag| ItemRef { href, etag })
+            .map(|etag| ItemRef {
+                href,
+                etag: etag.into(),
+            })
     }
 
     async fn update_item(
         &mut self,
         _collection: &Collection,
         href: &str,
-        etag: &str,
+        etag: &Etag,
         item: &IcsItem,
     ) -> Result<Etag> {
         // TODO: check that href is a sub-path of collection.href?
@@ -242,6 +249,7 @@ impl Storage<IcsItem> for CalDavStorage {
             .await
             // FIXME: etag may be missing. In such case, we should fetch it.
             .map(|opt| opt.ok_or(Error::new(ErrorKind::InvalidData, "No Etag in response")))?
+            .map(|e| e.into())
     }
 
     /// # Panics
@@ -297,7 +305,7 @@ impl Storage<IcsItem> for CalDavStorage {
         &mut self,
         _collection: &Collection,
         href: &str,
-        etag: &str,
+        etag: &Etag,
     ) -> Result<()> {
         // TODO: check that href is a sub-path of collection.href?
         self.client.delete(href, etag).await?;

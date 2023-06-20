@@ -28,6 +28,8 @@
 //! An `Etag` is a value that changes whenever an item has changed in a collection. It is inspired
 //! on the HTTP header with the same name (used extensively in WebDav). See [`Etag`].
 
+use serde::{Deserialize, Serialize};
+
 pub mod base;
 pub mod caldav;
 pub mod filesystem;
@@ -145,7 +147,29 @@ impl std::error::Error for Error {}
 /// This is inspired on the [HTTP header of the same name][MDN].
 ///
 /// [MDN]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
-pub type Etag = String;
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct Etag(String);
+
+impl<T> From<T> for Etag
+where
+    String: From<T>,
+{
+    fn from(value: T) -> Self {
+        Etag(value.into())
+    }
+}
+
+impl AsRef<str> for Etag {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for Etag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// The path to the item inside the collection.
 ///

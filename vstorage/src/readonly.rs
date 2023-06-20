@@ -83,7 +83,7 @@ impl<I: Item> Storage<I> for ReadOnlyStorage<I> {
         Err(ErrorKind::ReadOnly.into())
     }
 
-    async fn update_item(&mut self, _: &Collection, _: &str, _: &str, _: &I) -> Result<Etag> {
+    async fn update_item(&mut self, _: &Collection, _: &str, _: &Etag, _: &I) -> Result<Etag> {
         Err(ErrorKind::ReadOnly.into())
     }
 
@@ -104,7 +104,7 @@ impl<I: Item> Storage<I> for ReadOnlyStorage<I> {
         self.inner.get_collection_meta(collection, meta).await
     }
 
-    async fn delete_item(&mut self, _: &Collection, _: &str, _: &str) -> Result<()> {
+    async fn delete_item(&mut self, _: &Collection, _: &str, _: &Etag) -> Result<()> {
         Err(ErrorKind::ReadOnly.into())
     }
 

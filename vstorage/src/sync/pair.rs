@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::base::{Collection, Item, Storage};
+use crate::{
+    base::{Collection, Item, Storage},
+    Etag,
+};
 
 /// A pair of storages which are to be kept synchronised.
 ///
@@ -59,7 +62,7 @@ impl<I: Item> StoragePair<'_, I> {
 pub(crate) struct ItemState {
     pub(crate) href: String,
     pub(crate) uid: String,
-    pub(crate) etag: String,
+    pub(crate) etag: Etag,
     pub(crate) hash: String,
 }
 

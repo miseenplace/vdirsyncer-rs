@@ -143,7 +143,7 @@ impl Storage<IcsItem> for WebCalStorage {
 
                 ItemRef {
                     href: item.ident(),
-                    etag: hash,
+                    etag: hash.into(),
                 }
             })
             .collect();
@@ -176,7 +176,7 @@ impl Storage<IcsItem> for WebCalStorage {
             .ok_or_else(|| Error::from(ErrorKind::DoesNotExist))?;
 
         let hash = item.hash();
-        Ok((item, hash))
+        Ok((item, hash.into()))
     }
 
     /// Returns multiple items from the collection.
@@ -202,7 +202,7 @@ impl Storage<IcsItem> for WebCalStorage {
                 let item = IcsItem::from(c.to_string());
                 if hrefs.contains(&(item.ident().as_ref())) {
                     let hash = item.hash();
-                    Some(Ok((item.ident(), item, hash)))
+                    Some(Ok((item.ident(), item, hash.into())))
                 } else {
                     None
                 }
@@ -229,7 +229,7 @@ impl Storage<IcsItem> for WebCalStorage {
                 let item = IcsItem::from(c.to_string());
                 let hash = item.hash();
 
-                Ok((item.ident(), item, hash))
+                Ok((item.ident(), item, hash.into()))
             })
             .collect()
     }
@@ -247,7 +247,7 @@ impl Storage<IcsItem> for WebCalStorage {
         &mut self,
         _collection: &Collection,
         _: &str,
-        _: &str,
+        _: &Etag,
         _: &IcsItem,
     ) -> Result<Etag> {
         Err(Error::new(
@@ -282,7 +282,7 @@ impl Storage<IcsItem> for WebCalStorage {
         ))
     }
 
-    async fn delete_item(&mut self, _: &Collection, _: &str, _: &str) -> Result<()> {
+    async fn delete_item(&mut self, _: &Collection, _: &str, _: &Etag) -> Result<()> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "deleting items via webcal is not supported",

@@ -105,11 +105,12 @@ pub trait Storage<I: Item>: Sync + Send {
         &mut self,
         collection: &Collection,
         href: &str,
-        etag: &str,
+        etag: &Etag,
         item: &I,
     ) -> Result<Etag>;
 
-    async fn delete_item(&mut self, collection: &Collection, href: &str, etag: &str) -> Result<()>;
+    async fn delete_item(&mut self, collection: &Collection, href: &str, etag: &Etag)
+        -> Result<()>;
 
     /// A name that does not change for this collection.
     ///

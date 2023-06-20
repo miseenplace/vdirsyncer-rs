@@ -207,13 +207,13 @@ impl<I: Item> Storage<I> for FilesystemStorage<I> {
         &mut self,
         collection: &Collection,
         href: &str,
-        etag: &str,
+        etag: &Etag,
         item: &I,
     ) -> Result<Etag> {
         let filename = self.collection_path(collection).join(href);
 
         let actual_etag = etag_for_path(&filename).await?;
-        if etag != actual_etag {
+        if *etag != actual_etag {
             return Err(Error::new(ErrorKind::InvalidData, "wrong etag"));
         }
 
@@ -231,11 +231,16 @@ impl<I: Item> Storage<I> for FilesystemStorage<I> {
         Ok(etag)
     }
 
-    async fn delete_item(&mut self, collection: &Collection, href: &str, etag: &str) -> Result<()> {
+    async fn delete_item(
+        &mut self,
+        collection: &Collection,
+        href: &str,
+        etag: &Etag,
+    ) -> Result<()> {
         let filename = self.collection_path(collection).join(href);
 
         let actual_etag = etag_for_path(&filename).await?;
-        if etag != actual_etag {
+        if *etag != actual_etag {
             return Err(Error::new(ErrorKind::InvalidData, "wrong etag"));
         }
 
@@ -317,7 +322,7 @@ async fn etag_for_path<P: AsRef<Path>>(path: P) -> Result<Etag> {
 }
 
 fn etag_for_metadata(metadata: &Metadata) -> Etag {
-    format!("{};{}", metadata.mtime(), metadata.ino())
+    format!("{};{}", metadata.mtime(), metadata.ino()).into()
 }
 
 fn filename_for_collection_meta(kind: MetadataKind) -> &'static str {
