@@ -5,6 +5,41 @@ use crate::{
     Etag,
 };
 
+/// Mapping of a collection between two storages.
+#[derive(Debug, Clone)]
+pub enum CollectionMapping {
+    /// Sync collections with the same name on both sides.
+    Direct(String),
+    /// Sync collections with different names on both sides.
+    Mapped {
+        /// The name used to refer to this (e.g.: when logging or displaying).
+        name: String,
+        /// The name for the collection in `storage_a`.
+        a: String,
+        /// The name for the collection in `storage_b`.
+        b: String,
+    },
+}
+
+impl CollectionMapping {
+    pub(crate) fn name(&self) -> &str {
+        match self {
+            CollectionMapping::Direct(name) | CollectionMapping::Mapped { name, .. } => name,
+        }
+    }
+    pub(crate) fn name_a(&self) -> &str {
+        match self {
+            CollectionMapping::Direct(a) | CollectionMapping::Mapped { a, .. } => a,
+        }
+    }
+
+    pub(crate) fn name_b(&self) -> &str {
+        match self {
+            CollectionMapping::Direct(b) | CollectionMapping::Mapped { b, .. } => b,
+        }
+    }
+}
+
 /// A pair of storages which are to be kept synchronised.
 ///
 /// Use [`Plan::for_storage_pair`](crate::sync::plan::Plan::for_storage_pair) to plan (and later
@@ -14,7 +49,7 @@ pub struct StoragePair<'a, I> {
     pub(crate) storage_b: &'a mut dyn Storage<I>,
     pub(crate) previous_state_a: &'a StorageState,
     pub(crate) previous_state_b: &'a StorageState,
-    pub(crate) collection_names: &'a Vec<String>,
+    pub(crate) collections: Vec<CollectionMapping>,
     pub(crate) current_state_a: StorageState,
     pub(crate) current_state_b: StorageState,
 }
@@ -37,21 +72,21 @@ impl<I: Item> StoragePair<'_, I> {
         storage_b: &'a mut dyn Storage<I>,
         previous_state_a: &'a StorageState,
         previous_state_b: &'a StorageState,
-        collection_names: &'a Vec<String>,
+        collections: Vec<CollectionMapping>,
     ) -> crate::Result<StoragePair<'a, I>> {
+        let names_a = collections.iter().map(CollectionMapping::name_a).collect();
+        let names_b = collections.iter().map(CollectionMapping::name_b).collect();
         let current_state_a =
-            StorageState::current_for_storage(previous_state_a, storage_a, collection_names)
-                .await?;
+            StorageState::current_for_storage(previous_state_a, storage_a, &names_a).await?;
         let current_state_b =
-            StorageState::current_for_storage(previous_state_b, storage_b, collection_names)
-                .await?;
+            StorageState::current_for_storage(previous_state_b, storage_b, &names_b).await?;
 
         Ok(StoragePair {
             storage_a,
             storage_b,
             previous_state_a,
             previous_state_b,
-            collection_names,
+            collections,
             current_state_a,
             current_state_b,
         })
@@ -102,7 +137,7 @@ impl StorageState {
     async fn current_for_storage<I: Item>(
         previous_state: &StorageState,
         storage: &dyn Storage<I>,
-        collection_names: &Vec<String>,
+        collection_names: &Vec<&str>,
     ) -> crate::Result<StorageState> {
         let mut collection_states = Vec::new();
 
@@ -123,9 +158,13 @@ impl StorageState {
             };
 
             let previous = previous_state.find_collection_state(name);
-            let state =
-                CollectionState::current_for_storage(previous, storage, collection, name.clone())
-                    .await;
+            let state = CollectionState::current_for_storage(
+                previous,
+                storage,
+                collection,
+                (*name).to_string(),
+            )
+            .await;
             collection_states.push(state?);
         }
 

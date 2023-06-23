@@ -1,4 +1,5 @@
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use vstorage::sync::CollectionMapping;
 use std::boxed::Box;
 use std::{fmt::Write, path::PathBuf};
 use vstorage::sync::plan::Plan;
@@ -94,14 +95,17 @@ async fn test_sync_simple_case() {
     let mut populated = create_populated_storage(populated_path.clone()).await;
     let mut empty = create_empty_storage(empty_path.clone()).await;
 
-    let names = vec!["first-calendar".to_string(), "second-calendar".to_string()];
+    let mappings = vec![
+        CollectionMapping::Direct("first-calendar".to_string()),
+        CollectionMapping::Direct("second-calendar".to_string()),
+    ];
     let empty_state = StorageState::empty();
     let mut pair = StoragePair::<IcsItem>::new(
         &mut *populated,
         &mut *empty,
         &empty_state,
         &empty_state,
-        &names,
+        mappings,
     )
     .await
     .unwrap();

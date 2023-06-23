@@ -7,7 +7,7 @@ use log::trace;
 use std::collections::HashMap;
 use std::fmt::Display;
 
-use super::pair::ItemState;
+use super::pair::{ItemState, CollectionMapping};
 
 #[derive(Debug)]
 pub enum SyncResource {
@@ -212,13 +212,13 @@ impl Plan {
         //       fully functioning system to properly benchmark different approaches.
 
         let mut collection_plans = Vec::new();
-        for name in pair.collection_names.iter() {
-            let cur_a = pair.current_state_a.find_collection_state(name);
-            let cur_b = pair.current_state_b.find_collection_state(name);
-            let prev_a = pair.previous_state_a.find_collection_state(name);
-            let prev_b = pair.previous_state_b.find_collection_state(name);
+        for collection in &pair.collections {
+            let cur_a = pair.current_state_a.find_collection_state(collection.name_a());
+            let cur_b = pair.current_state_b.find_collection_state(collection.name_b());
+            let prev_a = pair.previous_state_a.find_collection_state(collection.name_a());
+            let prev_b = pair.previous_state_b.find_collection_state(collection.name_b());
 
-            let plan = CollectionPlan::new(name.to_string(), prev_a, cur_a, prev_b, cur_b);
+            let plan = CollectionPlan::new(collection.clone(), prev_a, cur_a, prev_b, cur_b);
             collection_plans.push(plan);
         }
 
@@ -249,7 +249,7 @@ impl Plan {
                 Action::CopyToB => {
                     create_collection(
                         *storage_b,
-                        &cp.name,
+                        cp.mapping.name_b(),
                         &mut final_state.state_b,
                         &mut final_state.errors,
                         &cp.collection_action,
@@ -259,7 +259,7 @@ impl Plan {
                 Action::CopyToA => {
                     create_collection(
                         *storage_a,
-                        &cp.name,
+                        cp.mapping.name_a(),
                         &mut final_state.state_a,
                         &mut final_state.errors,
                         &cp.collection_action,
@@ -270,7 +270,7 @@ impl Plan {
                     final_state.errors.push(SynchronizationError {
                         action: cp.collection_action.clone(),
                         resource: SyncResource::Collection {
-                            name: cp.name.to_string(),
+                            name: cp.mapping.name().to_string(),
                         },
                         error: "Invalid input: conflict between storages is senseless".into(),
                     });
@@ -285,8 +285,8 @@ impl Plan {
 
             for (uid, action) in &cp.item_actions {
                 // FIXME: I need to somehow move these two calls outside of the "for" loop.
-                let state_a = final_state.state_a.find_collection_state_mut(&cp.name);
-                let state_b = final_state.state_b.find_collection_state_mut(&cp.name);
+                let state_a = final_state.state_a.find_collection_state_mut(cp.mapping.name_a());
+                let state_b = final_state.state_b.find_collection_state_mut(cp.mapping.name_b());
 
                 if let Err(err) = action
                     .execute_on_item(uid, *storage_a, *storage_b, state_a, state_b)
@@ -304,7 +304,7 @@ impl Plan {
             if delete_collection_in_a {
                 delete_collection(
                     *storage_a,
-                    &cp.name,
+                    cp.mapping.name_a(),
                     &mut final_state.state_a,
                     &mut final_state.errors,
                     &cp.collection_action,
@@ -314,7 +314,7 @@ impl Plan {
             if delete_collection_in_b {
                 delete_collection(
                     *storage_b,
-                    &cp.name,
+                    cp.mapping.name_b(),
                     &mut final_state.state_b,
                     &mut final_state.errors,
                     &cp.collection_action,
@@ -398,7 +398,7 @@ impl FinalState {
 /// A set of actions required to sync a collection between two storages.
 #[derive(Debug)]
 pub(crate) struct CollectionPlan {
-    name: String,
+    mapping: CollectionMapping,
     collection_action: Action,
     item_actions: HashMap<String, Action>,
 }
@@ -410,7 +410,7 @@ impl CollectionPlan {
     /// If a current state is None it means that the collection does not exist.
     #[must_use]
     fn new<'a>(
-        name: String,
+        mapping: CollectionMapping,
         previous_state_a: Option<&'a CollectionState>,
         current_state_a: Option<&'a CollectionState>,
         previous_state_b: Option<&'a CollectionState>,
@@ -454,7 +454,7 @@ impl CollectionPlan {
         );
 
         CollectionPlan {
-            name,
+            mapping,
             collection_action,
             item_actions,
         }

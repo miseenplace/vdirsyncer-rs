@@ -20,3 +20,4 @@ pub mod plan;
 
 pub use pair::StoragePair;
 pub use pair::StorageState;
+pub use pair::CollectionMapping;
