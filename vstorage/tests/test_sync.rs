@@ -1,8 +1,8 @@
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use vstorage::sync::CollectionMapping;
 use std::boxed::Box;
 use std::{fmt::Write, path::PathBuf};
 use vstorage::sync::plan::Plan;
+use vstorage::sync::CollectionMapping;
 use vstorage::{
     base::{Definition, IcsItem, Storage},
     filesystem::FilesystemDefinition,

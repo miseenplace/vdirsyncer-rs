@@ -7,7 +7,7 @@ use log::trace;
 use std::collections::HashMap;
 use std::fmt::Display;
 
-use super::pair::{ItemState, CollectionMapping};
+use super::pair::{CollectionMapping, ItemState};
 
 #[derive(Debug)]
 pub enum SyncResource {
@@ -213,10 +213,18 @@ impl Plan {
 
         let mut collection_plans = Vec::new();
         for collection in &pair.collections {
-            let cur_a = pair.current_state_a.find_collection_state(collection.name_a());
-            let cur_b = pair.current_state_b.find_collection_state(collection.name_b());
-            let prev_a = pair.previous_state_a.find_collection_state(collection.name_a());
-            let prev_b = pair.previous_state_b.find_collection_state(collection.name_b());
+            let cur_a = pair
+                .current_state_a
+                .find_collection_state(collection.name_a());
+            let cur_b = pair
+                .current_state_b
+                .find_collection_state(collection.name_b());
+            let prev_a = pair
+                .previous_state_a
+                .find_collection_state(collection.name_a());
+            let prev_b = pair
+                .previous_state_b
+                .find_collection_state(collection.name_b());
 
             let plan = CollectionPlan::new(collection.clone(), prev_a, cur_a, prev_b, cur_b);
             collection_plans.push(plan);
@@ -285,8 +293,12 @@ impl Plan {
 
             for (uid, action) in &cp.item_actions {
                 // FIXME: I need to somehow move these two calls outside of the "for" loop.
-                let state_a = final_state.state_a.find_collection_state_mut(cp.mapping.name_a());
-                let state_b = final_state.state_b.find_collection_state_mut(cp.mapping.name_b());
+                let state_a = final_state
+                    .state_a
+                    .find_collection_state_mut(cp.mapping.name_a());
+                let state_b = final_state
+                    .state_b
+                    .find_collection_state_mut(cp.mapping.name_b());
 
                 if let Err(err) = action
                     .execute_on_item(uid, *storage_a, *storage_b, state_a, state_b)
