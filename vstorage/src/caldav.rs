@@ -6,7 +6,7 @@ use libdav::dav::mime_types;
 use libdav::CalDavClient;
 use libdav::{auth::Auth, dav::CollectionType};
 
-use crate::base::{Collection, Definition, IcsItem, Item, ItemRef, MetadataKind, Storage};
+use crate::base::{CalendarProperty, Collection, Definition, IcsItem, Item, ItemRef, Storage};
 use crate::{Error, ErrorKind, Etag, Href, Result};
 
 #[derive(Debug)]
@@ -255,24 +255,25 @@ impl Storage<IcsItem> for CalDavStorage {
 
     /// # Panics
     ///
-    /// Setting colour is not implemented.
-    async fn set_collection_meta(
+    /// Only `DisplayName` and `Colour` are implemented.
+    async fn set_collection_property(
         &mut self,
         collection: &Collection,
-        meta: MetadataKind,
+        meta: CalendarProperty,
         value: &str,
     ) -> Result<()> {
         match meta {
-            MetadataKind::DisplayName => {
+            CalendarProperty::DisplayName => {
                 self.client
                     .set_collection_displayname(collection.href(), Some(value))
                     .await
             }
-            MetadataKind::Colour => {
+            CalendarProperty::Colour => {
                 self.client
                     .set_calendar_colour(collection.href(), Some(value))
                     .await
             }
+            _ => todo!(), // TODO FIXME
         }
         .map_err(Error::from)
     }
@@ -285,18 +286,23 @@ impl Storage<IcsItem> for CalDavStorage {
     /// # Errors
     ///
     /// If the underlying HTTP connection fails or if the server returns invalid data.
-    async fn get_collection_meta(
+    ///
+    /// # Panics
+    ///
+    /// Only `DisplayName` and `Colour` are implemented.
+    async fn get_collection_property(
         &self,
         collection: &Collection,
-        meta: MetadataKind,
+        meta: CalendarProperty,
     ) -> Result<Option<String>> {
         let result = match meta {
-            MetadataKind::DisplayName => {
+            CalendarProperty::DisplayName => {
                 self.client
                     .get_collection_displayname(collection.href())
                     .await
             }
-            MetadataKind::Colour => self.client.get_calendar_colour(collection.href()).await,
+            CalendarProperty::Colour => self.client.get_calendar_colour(collection.href()).await,
+            _ => todo!(), // TODO FIXME
         };
 
         result.map_err(Error::from)

@@ -63,17 +63,17 @@ pub trait Storage<I: Item>: Sync + Send {
     fn open_collection(&self, href: &str) -> Result<Collection>;
 
     /// Returns the value of a property for a given collection.
-    async fn get_collection_meta(
+    async fn get_collection_property(
         &self,
         collection: &Collection,
-        meta: MetadataKind,
+        property: I::CollectionProperty,
     ) -> Result<Option<String>>;
 
     /// Sets the value of a property for a given collection.
-    async fn set_collection_meta(
+    async fn set_collection_property(
         &mut self,
         collection: &Collection,
-        meta: MetadataKind,
+        property: I::CollectionProperty,
         value: &str,
     ) -> Result<()>;
 
@@ -163,22 +163,6 @@ pub struct ItemRef {
     pub etag: Etag,
 }
 
-/// Metadata types supported by storages.
-///
-/// See also [`Storage::get_collection_meta`] and [`Storage::set_collection_meta`].
-#[non_exhaustive]
-#[derive(Copy, Clone)]
-// TODO: meta-kind should be generic over the ContentType(Cal, Card, IMAP, etc).
-pub enum MetadataKind {
-    /// A user-friendly name for a collection.
-    /// It is recommended to show this name in user interfaces.
-    DisplayName,
-    /// Collections may have colours, and various clients will respect this when display the
-    /// collection itself or items from the collection (e.g.: calendars may show calendar entries
-    /// from a collection using this colour as highlight).
-    Colour,
-}
-
 /// Types of items that can be held in collections.
 ///
 /// Storages can contain items of a concrete type implementing this trait. This trait defines how
@@ -189,6 +173,13 @@ pub trait Item: Sync + Send + std::fmt::Debug
 where
     Self: From<String>,
 {
+    /// Property types supported by storages.
+    ///
+    /// These were known as "metadata" in the previous vdirsyncer implementation.
+    ///
+    /// See also [`Storage::get_collection_property`] and [`Storage::get_collection_property`].
+    type CollectionProperty: Sync + Send;
+
     /// Parse the item and return a unique identifier for it.
     ///
     /// The UID does not change when the item is modified. The UID must remain the same when the
@@ -227,7 +218,26 @@ pub struct IcsItem {
     raw: String,
 }
 
+/// Properties supported for calendars.
+///
+/// This is strongly based on the properties supported by `CalDav`.
+#[non_exhaustive]
+pub enum CalendarProperty {
+    /// A colour to be used when displaying this collection.
+    ///
+    /// Graphical interfaces may use this for the collection itself or its items.
+    Colour,
+    /// A user-friendly name for a collection.
+    ///
+    /// It is recommended to show this name in user interfaces.
+    DisplayName,
+    Description,
+    Order,
+}
+
 impl Item for IcsItem {
+    type CollectionProperty = CalendarProperty;
+
     /// Returns a unique identifier for this item.
     ///
     /// The UID does not change when the item is modified. The UID must remain the same when the

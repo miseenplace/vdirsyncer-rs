@@ -17,7 +17,9 @@ use tokio::io::AsyncWriteExt;
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_stream::StreamExt;
 
-use crate::base::{Collection, Definition, Item, ItemRef, MetadataKind, Storage};
+use crate::base::{
+    CalendarProperty, Collection, Definition, Item, ItemRef, Storage,
+};
 use crate::{Error, ErrorKind, Etag, Href, Result};
 
 // TODO: atomic writes
@@ -30,7 +32,10 @@ pub struct FilesystemStorage<I: Item> {
 }
 
 #[async_trait]
-impl<I: Item> Storage<I> for FilesystemStorage<I> {
+impl<I: Item> Storage<I> for FilesystemStorage<I>
+where
+    I::CollectionProperty: PropertyWithFilename,
+{
     async fn check(&self) -> Result<()> {
         let meta = metadata(&self.definition.path)
             .await
@@ -147,13 +152,13 @@ impl<I: Item> Storage<I> for FilesystemStorage<I> {
         Ok(items)
     }
 
-    async fn set_collection_meta(
+    async fn set_collection_property(
         &mut self,
         collection: &Collection,
-        meta: MetadataKind,
+        meta: I::CollectionProperty,
         value: &str,
     ) -> Result<()> {
-        let filename = filename_for_collection_meta(meta);
+        let filename = meta.filename();
 
         let path = self.collection_path(collection).join(filename);
         let mut file = File::create(path).await?;
@@ -162,12 +167,12 @@ impl<I: Item> Storage<I> for FilesystemStorage<I> {
         Ok(())
     }
 
-    async fn get_collection_meta(
+    async fn get_collection_property(
         &self,
         collection: &Collection,
-        meta: MetadataKind,
+        meta: I::CollectionProperty,
     ) -> Result<Option<String>> {
-        let filename = filename_for_collection_meta(meta);
+        let filename = meta.filename();
 
         let path = self.collection_path(collection).join(filename);
         let value = match read_to_string(path).await {
@@ -310,7 +315,10 @@ impl<I: Item> FilesystemDefinition<I> {
 }
 
 #[async_trait]
-impl<I: Item + 'static> Definition<I> for FilesystemDefinition<I> {
+impl<I: Item + 'static> Definition<I> for FilesystemDefinition<I>
+where
+    I::CollectionProperty: PropertyWithFilename,
+{
     async fn storage(self) -> Result<Box<dyn Storage<I>>> {
         Ok(Box::from(FilesystemStorage { definition: self }))
     }
@@ -325,10 +333,25 @@ fn etag_for_metadata(metadata: &Metadata) -> Etag {
     format!("{};{}", metadata.mtime(), metadata.ino()).into()
 }
 
-fn filename_for_collection_meta(kind: MetadataKind) -> &'static str {
-    match kind {
-        MetadataKind::DisplayName => "displayname",
-        MetadataKind::Colour => "color",
+/// Helper to synchronise collection properties into filesystem.
+///
+/// This trait should only be required when implementing a new [`Item`] type that should work with
+/// the existing [`FilesystemStorage`] implementation.
+///
+/// In order for the `Item`'s properties to synchronise to the filesystem, it should implement this
+/// trait.
+pub trait PropertyWithFilename {
+    fn filename(&self) -> &'static str;
+}
+
+impl PropertyWithFilename for CalendarProperty {
+    fn filename(&self) -> &'static str {
+        match self {
+            CalendarProperty::DisplayName => "displayname",
+            CalendarProperty::Colour => "color",
+            CalendarProperty::Description => "description",
+            CalendarProperty::Order => "order",
+        }
     }
 }
 
@@ -347,7 +370,7 @@ mod tests {
         let mut storage = definition.storage().await.unwrap();
         let collection = storage.create_collection("test").await.unwrap();
         let displayname = storage
-            .get_collection_meta(&collection, crate::base::MetadataKind::DisplayName)
+            .get_collection_property(&collection, crate::base::CalendarProperty::DisplayName)
             .await
             .unwrap();
 

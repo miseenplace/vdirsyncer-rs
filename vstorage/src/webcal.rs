@@ -11,7 +11,7 @@ use hyper::{client::HttpConnector, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::{
-    base::{Collection, Definition, IcsItem, Item, ItemRef, MetadataKind, Storage},
+    base::{CalendarProperty, Collection, Definition, IcsItem, Item, ItemRef, Storage},
     simple_component::Component,
     Error, ErrorKind, Etag, Href, Result,
 };
@@ -257,10 +257,10 @@ impl Storage<IcsItem> for WebCalStorage {
     }
 
     /// Unsupported for this storage type.
-    async fn set_collection_meta(
+    async fn set_collection_property(
         &mut self,
         _collection: &Collection,
-        _: MetadataKind,
+        _: CalendarProperty,
         _: &str,
     ) -> Result<()> {
         Err(Error::new(
@@ -270,10 +270,10 @@ impl Storage<IcsItem> for WebCalStorage {
     }
 
     /// Unsupported for this storage type.
-    async fn get_collection_meta(
+    async fn get_collection_property(
         &self,
         _collection: &Collection,
-        _: MetadataKind,
+        _: CalendarProperty,
     ) -> Result<Option<String>> {
         // TODO: return None?
         Err(Error::new(

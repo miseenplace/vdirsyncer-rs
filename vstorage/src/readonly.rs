@@ -87,21 +87,21 @@ impl<I: Item> Storage<I> for ReadOnlyStorage<I> {
         Err(ErrorKind::ReadOnly.into())
     }
 
-    async fn set_collection_meta(
+    async fn set_collection_property(
         &mut self,
         _: &Collection,
-        _: crate::base::MetadataKind,
+        _: I::CollectionProperty,
         _: &str,
     ) -> Result<()> {
         Err(ErrorKind::ReadOnly.into())
     }
 
-    async fn get_collection_meta(
+    async fn get_collection_property(
         &self,
         collection: &Collection,
-        meta: crate::base::MetadataKind,
+        meta: I::CollectionProperty,
     ) -> Result<Option<String>> {
-        self.inner.get_collection_meta(collection, meta).await
+        self.inner.get_collection_property(collection, meta).await
     }
 
     async fn delete_item(&mut self, _: &Collection, _: &str, _: &Etag) -> Result<()> {
