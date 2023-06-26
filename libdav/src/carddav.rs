@@ -1,12 +1,14 @@
 use std::ops::{Deref, DerefMut};
 
-use hyper::Uri;
+use http::Method;
+use hyper::{Body, Uri};
+use log::debug;
 
 use crate::builder::{ClientBuilder, NeedsUri};
-use crate::common_bootstrap;
-use crate::dav::{DavError, FoundCollection};
+use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
-use crate::xml::{ItemDetails, ResponseVariant, SimplePropertyMeta};
+use crate::xml::{ItemDetails, ReportField, ResponseVariant, SimplePropertyMeta};
+use crate::{common_bootstrap, CheckSupportError, FetchedResource};
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 
 /// A client to communicate with a carddav server.
@@ -58,6 +60,7 @@ impl Deref for CardDavClient {
         &self.dav_client
     }
 }
+
 impl DerefMut for CardDavClient {
     fn deref_mut(&mut self) -> &mut crate::dav::WebDavClient {
         &mut self.dav_client
@@ -178,6 +181,72 @@ impl CardDavClient {
     // TODO: get_addressbook_description ("addressbook-description", "urn:ietf:params:xml:ns:carddav")
     // TODO: DRY: the above methods are super repetitive.
     //       Maybe all these props impl a single trait, so the API could be `get_prop<T>(url)`?
+
+    /// Fetches existing vcard resources.
+    ///
+    /// # Errors
+    ///
+    /// See [`request_multistatus`](WebDavClient::request_multistatus).
+    pub async fn get_resources<S1, S2>(
+        &self,
+        addressbook_href: S1,
+        hrefs: &[S2],
+    ) -> Result<Vec<FetchedResource>, DavError>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        let mut body = String::from(
+            r#"
+            <C:addressbook-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
+                <D:prop>
+                    <D:getetag/>
+                    <C:address-data/>
+                </D:prop>"#,
+        );
+        for href in hrefs {
+            body.push_str(&format!("<href>{}</href>", href.as_ref()));
+        }
+        body.push_str("</C:addressbook-multiget>");
+
+        self.multi_get(addressbook_href.as_ref(), body, &ReportField::ADDRESS_DATA)
+            .await
+    }
+
+    /// Checks that the given URI advertises carddav support.
+    ///
+    /// See: <https://www.rfc-editor.org/rfc/rfc6352#section-6.1>
+    ///
+    /// # Errors
+    ///
+    /// If there are any network issues or if the server does not explicitly advertise carddav
+    /// support.
+    pub async fn check_support(&self, url: &Uri) -> Result<(), CheckSupportError> {
+        let request = self
+            .request_builder()?
+            .method(Method::OPTIONS)
+            .uri(url)
+            .body(Body::empty())?;
+
+        let (head, _body) = self.request(request).await?;
+        check_status(head.status)?;
+
+        let header = head
+            .headers
+            .get("DAV")
+            .ok_or(CheckSupportError::MissingHeader)?
+            .to_str()?;
+
+        debug!("DAV header: '{}'", header);
+        if header
+            .split(|c| c == ',')
+            .any(|part| part.trim() == "addressbook")
+        {
+            Ok(())
+        } else {
+            Err(CheckSupportError::NotAdvertised)
+        }
+    }
 
     /// Returns the default port to try and use.
     ///
