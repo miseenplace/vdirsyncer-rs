@@ -39,6 +39,7 @@ where
     }
 }
 
+#[allow(clippy::from_over_into)] // `From<Password> for String` is not feasible.
 impl Into<String> for Password {
     /// Returns the underlying string.
     fn into(self) -> String {
@@ -48,11 +49,13 @@ impl Into<String> for Password {
 
 impl Password {
     /// Returns the underlying string.
+    #[must_use]
     pub fn into_string(self) -> String {
         self.0
     }
 
     /// Returns a reference to the underlying string.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
