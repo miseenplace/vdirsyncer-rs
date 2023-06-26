@@ -50,7 +50,7 @@ impl TestData {
             .with_uri(profile.host.parse()?)
             .with_auth(Auth::Basic {
                 username: profile.username.clone(),
-                password: Some(profile.password.clone()),
+                password: Some(profile.password.clone().into()),
             })
             .build()
             .auto_bootstrap()

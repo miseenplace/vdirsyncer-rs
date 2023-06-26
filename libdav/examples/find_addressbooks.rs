@@ -31,7 +31,7 @@ async fn main() {
         .parse()
         .expect("$1 is a valid URL");
     let username = arguments.next().expect("$2 is a valid username");
-    let password = arguments.next().expect("$3 is a valid password");
+    let password = arguments.next().expect("$3 is a valid password").into();
 
     let carddav_client = CardDavClient::builder()
         .with_uri(base_url)

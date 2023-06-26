@@ -21,7 +21,9 @@ pub(crate) enum CardDavCommand {
 
 impl Server {
     async fn carddav_client(&self) -> anyhow::Result<CardDavClient> {
-        let password = std::env::var("DAVCLI_PASSWORD").context("failed to determine password")?;
+        let password = std::env::var("DAVCLI_PASSWORD")
+            .context("failed to determine password")?
+            .into();
         CardDavClient::builder()
             .with_uri(self.server_url.clone())
             .with_auth(Auth::Basic {

@@ -18,13 +18,13 @@ use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 /// ```rust,no_run
 /// # use libdav::CalDavClient;
 /// use http::Uri;
-/// use libdav::auth::Auth;
+/// use libdav::auth::{Auth, Password};
 ///
 /// # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
 /// let uri = Uri::try_from("https://example.com").unwrap();
 /// let auth = Auth::Basic {
 ///     username: String::from("user"),
-///     password: Some(String::from("secret")),
+///     password: Some(Password::from("secret")),
 /// };
 ///
 /// let client = CalDavClient::builder()

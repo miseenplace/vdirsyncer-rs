@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 use email_address::EmailAddress;
 use http::Uri;
 
-use crate::auth::Auth;
+use crate::auth::{Auth, Password};
 
 pub struct NeedsUri(pub(crate) ());
 pub struct NeedsAuth {
@@ -88,13 +88,13 @@ impl<ClientType> ClientBuilder<ClientType, NeedsAuth> {
 
 impl<ClientType> ClientBuilder<ClientType, NeedsPassword> {
     /// Sets the password.
-    pub fn with_password(self, password: String) -> ClientBuilder<ClientType, Ready> {
+    pub fn with_password<P: Into<Password>>(self, password: P) -> ClientBuilder<ClientType, Ready> {
         ClientBuilder {
             state: Ready {
                 uri: self.state.uri,
                 auth: Auth::Basic {
                     username: self.state.username,
-                    password: Some(password),
+                    password: Some(password.into()),
                 },
             },
             phantom: self.phantom,

@@ -33,7 +33,9 @@ pub(crate) enum CalDavCommand {
 
 impl Server {
     async fn caldav_client(&self) -> anyhow::Result<CalDavClient> {
-        let password = std::env::var("DAVCLI_PASSWORD").context("failed to determine password")?;
+        let password = std::env::var("DAVCLI_PASSWORD")
+            .context("failed to determine password")?
+            .into();
         CalDavClient::builder()
             .with_uri(self.server_url.clone())
             .with_auth(Auth::Basic {

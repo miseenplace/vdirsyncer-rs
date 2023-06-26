@@ -8,7 +8,7 @@ use vstorage::{
 async fn create_caldav_from_env() -> Box<dyn Storage<IcsItem>> {
     let server = std::env::var("CALDAV_SERVER").unwrap();
     let username = std::env::var("CALDAV_USERNAME").unwrap();
-    let password = std::env::var("CALDAV_PASSWORD").unwrap();
+    let password = std::env::var("CALDAV_PASSWORD").unwrap().into();
 
     CalDavDefinition {
         url: server.parse().unwrap(),

@@ -1,8 +1,62 @@
 //! Authentication-related types.
 
 use base64::{prelude::BASE64_STANDARD, write::EncoderWriter};
+use core::fmt;
 use http::{request::Builder, HeaderValue};
 use std::io::Write;
+
+/// Wrapper around a [`String`] that is not printed when debugging.
+///
+/// # Examples
+///
+/// ```
+/// # use libdav::auth::Password;
+/// let p1 = Password::from("secret");
+/// let p2 = String::from("secret").into();
+///
+/// assert_eq!(p1, p2);
+/// ```
+///
+/// # Display
+///
+/// The [`core::fmt::Display`] trait is intentionally not implemented. Use either
+/// [`Password::into_string`] or [`Password::as_str()`].
+#[derive(Clone, PartialEq, Eq)]
+pub struct Password(String);
+
+impl fmt::Debug for Password {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("<REDACTED>")
+    }
+}
+
+impl<S> From<S> for Password
+where
+    String: From<S>,
+{
+    fn from(value: S) -> Self {
+        Password(String::from(value))
+    }
+}
+
+impl Into<String> for Password {
+    /// Returns the underlying string.
+    fn into(self) -> String {
+        self.0
+    }
+}
+
+impl Password {
+    /// Returns the underlying string.
+    pub fn into_string(self) -> String {
+        self.0
+    }
+
+    /// Returns a reference to the underlying string.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
 
 /// Authentication schemes supported by [`WebDavClient`](crate::dav::WebDavClient).
 #[non_exhaustive]
@@ -11,7 +65,7 @@ pub enum Auth {
     None,
     Basic {
         username: String,
-        password: Option<String>,
+        password: Option<Password>,
     },
 }
 
@@ -43,7 +97,7 @@ impl AuthExt for Builder {
                 let mut sequence = b"Basic ".to_vec();
                 let mut encoder = EncoderWriter::new(sequence, &BASE64_STANDARD);
                 if let Some(pwd) = password {
-                    write!(encoder, "{username}:{pwd}").map_err(AuthError::from)?;
+                    write!(encoder, "{username}:{}", pwd.0).map_err(AuthError::from)?;
                 } else {
                     write!(encoder, "{username}:").map_err(AuthError::from)?;
                 }
