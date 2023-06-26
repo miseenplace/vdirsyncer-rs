@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod base;
 pub mod caldav;
+pub mod carddav;
 pub mod filesystem;
 pub mod readonly;
 mod simple_component;
