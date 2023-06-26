@@ -15,7 +15,7 @@ use crate::{Etag, Href, Result};
 /// this like URL or TLS for network-based storages, or path and file extensions for filesystem
 /// based storages.
 #[async_trait]
-pub trait Definition<I: Item>: Sync + Send {
+pub trait Definition<I: Item>: Sync + Send + std::fmt::Debug {
     /// Creates a new storage instance for this definition.
     ///
     /// # Errors
@@ -185,7 +185,7 @@ pub enum MetadataKind {
 /// to extract the basic information that is requires to synchronise storages. Additional parsing
 /// is out of scope here and should be done by inspecting the raw data inside an item via
 /// [`Item::as_str`].
-pub trait Item: Sync + Send
+pub trait Item: Sync + Send + std::fmt::Debug
 where
     Self: From<String>,
 {

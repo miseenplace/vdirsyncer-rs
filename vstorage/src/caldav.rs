@@ -9,6 +9,7 @@ use libdav::{auth::Auth, dav::CollectionType};
 use crate::base::{Collection, Definition, IcsItem, Item, ItemRef, MetadataKind, Storage};
 use crate::{Error, ErrorKind, Etag, Href, Result};
 
+#[derive(Debug)]
 pub struct CalDavDefinition {
     pub url: Uri,
     pub auth: Auth,

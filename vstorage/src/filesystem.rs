@@ -285,7 +285,7 @@ impl<I: Item> FilesystemStorage<I> {
 }
 
 /// Definition for a storage instance.
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 pub struct FilesystemDefinition<I: Item> {
     /// The path to a directory containing a storage.
     ///
