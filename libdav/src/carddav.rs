@@ -274,8 +274,8 @@ impl CardDavClient {
             .scheme()
             .ok_or(BootstrapError::InvalidUrl("missing scheme"))?;
         match scheme.as_ref() {
-            "https" | "caldavs" => Ok(DiscoverableService::CalDavs),
-            "http" | "caldav" => Ok(DiscoverableService::CalDav),
+            "https" | "carddavs" => Ok(DiscoverableService::CardDavs),
+            "http" | "carddav" => Ok(DiscoverableService::CardDav),
             _ => Err(BootstrapError::InvalidUrl("scheme is invalid")),
         }
     }
