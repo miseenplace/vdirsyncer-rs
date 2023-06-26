@@ -18,7 +18,7 @@ use tokio_stream::wrappers::ReadDirStream;
 use tokio_stream::StreamExt;
 
 use crate::base::{
-    CalendarProperty, Collection, Definition, Item, ItemRef, Storage,
+    AddressBookProperty, CalendarProperty, Collection, Definition, Item, ItemRef, Storage,
 };
 use crate::{Error, ErrorKind, Etag, Href, Result};
 
@@ -351,6 +351,15 @@ impl PropertyWithFilename for CalendarProperty {
             CalendarProperty::Colour => "color",
             CalendarProperty::Description => "description",
             CalendarProperty::Order => "order",
+        }
+    }
+}
+
+impl PropertyWithFilename for AddressBookProperty {
+    fn filename(&self) -> &'static str {
+        match self {
+            AddressBookProperty::DisplayName => "displayname",
+            AddressBookProperty::Description => "description",
         }
     }
 }
