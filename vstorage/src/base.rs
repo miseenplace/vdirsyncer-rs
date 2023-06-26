@@ -31,7 +31,7 @@ pub trait Definition<I: Item>: Sync + Send + std::fmt::Debug {
 ///
 /// The specific type of item that a storage can hold is defined by the `I` generic parameter.
 /// E.g.: a CalDav storage can hold icalendar items. Only items with the same kind of item can be
-/// synchronised (e.g.: it it nos possible to synchronise `Storage<VCardItem>` with
+/// synchronised (e.g.: it it nos possible to synchronise `Storage<VcardItem>` with
 /// `Storage<IcsItem>`
 ///
 /// # Note for implementors
@@ -390,5 +390,92 @@ mod tests {
     fn test_storage_is_object_safe() {
         #[allow(dead_code)]
         fn dummy(_: Box<dyn Storage<IcsItem>>) {}
+    }
+}
+
+/// Immutable wrapper around a `VCARD`.
+///
+/// Note that this is not a proper validating parser for vcard; it's a very simple one with the
+/// sole purpose of extracing a UID. Proper parsing of components is out of scope, since we want to
+/// enable operating on potentially invalid items too.
+#[derive(Debug)]
+pub struct VcardItem {
+    // TODO: make this Vec<u8> instead?
+    raw: String,
+}
+
+/// Properties supported for address books.
+///
+/// This is strongly based on the properties supported by `CardDav`.
+#[non_exhaustive]
+pub enum AddressBookProperty {
+    DisplayName,
+    Description,
+    // TODO: can this have colour too?
+}
+
+impl Item for VcardItem {
+    type CollectionProperty = AddressBookProperty;
+    /// Returns a unique identifier for this item.
+    ///
+    /// The UID does not change when the item is modified. The UID must remain the same when the
+    /// item is copied across storages and storage types.
+    #[must_use]
+    fn uid(&self) -> Option<String> {
+        let mut lines = self.raw.split_terminator("\r\n");
+        let mut uid = lines
+            .find_map(|line| line.strip_prefix("UID:"))
+            .map(String::from)?;
+
+        // If the following lines start with a space or tab, they're a continuation of the UID.
+        // See: https://www.rfc-editor.org/rfc/rfc6350#section-3.2
+        lines
+            .map_while(|line| line.strip_prefix(' ').or_else(|| line.strip_prefix('\t')))
+            .for_each(|part| uid.push_str(part));
+
+        Some(uid)
+    }
+
+    /// Returns the hash of the raw content.
+    ///
+    /// This is used as a fallback when a storage backend doesn't provide [`Etag`] values, or when
+    /// an item is missing its `UID`.
+    ///
+    /// [`util::hash`]: crate::util::hash
+    /// [`Etag`]: crate::Etag
+    #[must_use]
+    fn hash(&self) -> String {
+        crate::util::hash(&self.raw)
+    }
+
+    /// A unique identifier for this item. Is either the UID (if any), or the hash of its contents.
+    #[must_use]
+    fn ident(&self) -> String {
+        self.uid().unwrap_or_else(|| self.hash())
+    }
+
+    /// Returns a new copy of this Item with the supplied UID.
+    ///
+    /// # Panics
+    ///
+    /// This function is not yet implemented.
+    #[must_use]
+    fn with_uid(&self, _new_uid: &str) -> Self {
+        // The logic in vdirsyncer/vobject.py::Item.with_uid seems pretty solid.
+        // TODO: this really needs to be done, although its absence only blocks syncing broken items.
+        todo!()
+    }
+
+    #[inline]
+    #[must_use]
+    /// Returns the raw contents of this item.
+    fn as_str(&self) -> &str {
+        &self.raw
+    }
+}
+
+impl From<String> for VcardItem {
+    fn from(value: String) -> Self {
+        VcardItem { raw: value }
     }
 }
