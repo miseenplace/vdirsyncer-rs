@@ -5,6 +5,7 @@
 
 use http::{status::InvalidStatusCode, StatusCode};
 use log::{debug, trace, warn};
+use quick_xml::name::Namespace;
 use quick_xml::{events::Event, name::ResolveResult, NsReader};
 use std::str::FromStr;
 use std::{borrow::Cow, io::BufRead};
@@ -19,6 +20,8 @@ pub(crate) const CARDDAV_STR: &str = "urn:ietf:params:xml:ns:carddav";
 pub(crate) const DAV: &[u8] = DAV_STR.as_bytes();
 pub(crate) const CALDAV: &[u8] = CALDAV_STR.as_bytes();
 pub(crate) const CARDDAV: &[u8] = CARDDAV_STR.as_bytes();
+
+const NS_DAV: Namespace = Namespace(DAV);
 
 /// An error parsing XML data.
 #[derive(thiserror::Error, Debug)]
@@ -89,7 +92,6 @@ impl FromXml for ItemDetails {
             Prop,
             ResourceType,
             GetContentType,
-            GetEtag,
             SupportedReportSet,
             Report,
         }
@@ -111,7 +113,9 @@ impl FromXml for ItemDetails {
                     match (&state, namespace.as_ref(), element.local_name().as_ref()) {
                         (State::Prop, DAV, b"resourcetype") => state = State::ResourceType,
                         (State::Prop, DAV, b"getcontenttype") => state = State::GetContentType,
-                        (State::Prop, DAV, b"getetag") => state = State::GetEtag,
+                        (State::Prop, DAV, b"getetag") => {
+                            item.etag = GetETag.parse(reader, &mut buf)?;
+                        }
                         (State::Prop, DAV, b"supported-report-set") => {
                             state = State::SupportedReportSet;
                         }
@@ -126,7 +130,6 @@ impl FromXml for ItemDetails {
                         (State::Prop, DAV, b"prop") => break,
                         (State::ResourceType, DAV, b"resourcetype")
                         | (State::GetContentType, DAV, b"getcontenttype")
-                        | (State::GetEtag, DAV, b"getetag")
                         | (State::SupportedReportSet, DAV, b"supported-report-set") => {
                             state = State::Prop;
                         }
@@ -157,9 +160,6 @@ impl FromXml for ItemDetails {
                 }
                 (State::GetContentType, (ResolveResult::Unbound, Event::Text(text))) => {
                     item.content_type = Some(text.unescape()?.to_string());
-                }
-                (State::GetEtag, (ResolveResult::Unbound, Event::Text(text))) => {
-                    item.etag = Some(text.unescape()?.to_string());
                 }
                 (_, (_, Event::Eof)) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
@@ -209,7 +209,6 @@ impl FromXml for Report {
         #[derive(Debug)]
         enum State {
             Prop,
-            GetEtag,
             CalendarData,
         }
 
@@ -225,7 +224,9 @@ impl FromXml for Report {
                         (State::Prop, ns, name) if ns == field.namespace && name == field.name => {
                             state = State::CalendarData;
                         }
-                        (State::Prop, DAV, b"getetag") => state = State::GetEtag,
+                        (State::Prop, DAV, b"getetag") => {
+                            etag = GetETag.parse(reader, &mut buf)?;
+                        }
                         (state, ns, name) => {
                             debug!("unexpected start: {:?}, {}, {}", state, s(ns), s(name));
                         }
@@ -239,7 +240,6 @@ impl FromXml for Report {
                         {
                             state = State::Prop;
                         }
-                        (State::GetEtag, DAV, b"getetag") => state = State::Prop,
                         (state, ns, name) => {
                             debug!("unexpected end: {:?}, {}, {}", state, s(ns), s(name));
                         }
@@ -254,9 +254,6 @@ impl FromXml for Report {
                         .map_err(|e| Error::Parser(quick_xml::Error::NonDecodable(Some(e))))?
                         .to_string();
                     data = Some(text);
-                }
-                (State::GetEtag, (ResolveResult::Unbound, Event::Text(text))) => {
-                    etag = Some(text.unescape()?.to_string());
                 }
                 (_, (_, Event::Eof)) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
@@ -1030,5 +1027,59 @@ mod more_tests {
                 },
             }
         );
+    }
+}
+
+/// A helper that can parse a single XML node.
+///
+/// Implementations can have instance-specific attributes with specific details on extraction
+/// (e.g.: for handling runtime-defined fields, etc).
+trait XmlNode {
+    type ParsedData;
+
+    /// Parse a node with a given reader.
+    ///
+    /// If an error is not returned, then the reader is guaranteed to have read the corresponding
+    /// end tag for the XML node.
+    ///
+    /// # Error
+    ///
+    /// See [`Error`].
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error>;
+}
+
+struct GetETag;
+
+impl XmlNode for GetETag {
+    type ParsedData = Option<String>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut etag = None;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"getetag" =>
+                {
+                    break;
+                }
+                (ResolveResult::Unbound, Event::Text(text)) => {
+                    etag = Some(text.unescape()?.to_string());
+                }
+                (result, event) => {
+                    debug!("unexpected data in GetETag: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        Ok(etag)
     }
 }
