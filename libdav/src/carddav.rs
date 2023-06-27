@@ -5,11 +5,12 @@ use hyper::{Body, Uri};
 use log::debug;
 
 use crate::builder::{ClientBuilder, NeedsUri};
+use crate::common::common_bootstrap;
 use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
 use crate::xml::{ItemDetails, ReportField, ResponseVariant, SimplePropertyMeta};
-use crate::{common_bootstrap, CheckSupportError, FetchedResource};
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
+use crate::{CheckSupportError, FetchedResource};
 
 /// A client to communicate with a carddav server.
 ///
