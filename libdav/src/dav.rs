@@ -617,7 +617,7 @@ impl WebDavClient {
         let response = self.http_client.request(request).await?;
         let status = response.status();
 
-        Ok(())
+        check_status(status).map_err(DavError::BadStatusCode)
     }
 
     /// Force deletion of the resource at `href`.
