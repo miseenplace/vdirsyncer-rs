@@ -397,7 +397,9 @@ impl WebDavClient {
         // From https://www.rfc-editor.org/rfc/rfc6764#section-5:
         // > [...] the server MAY require authentication when a client tries to
         // > access the ".well-known" URI
-        let (head, _body) = self.request(request).await?;
+        let response = self.http_client.request(request).await?;
+        let (head, _body) = response.into_parts();
+        log::debug!("Response finding context path: {}", head.status);
 
         if !head.status.is_redirection() {
             return Ok(None);
