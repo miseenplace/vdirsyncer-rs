@@ -614,8 +614,8 @@ impl WebDavClient {
             .header("If-Match", etag.as_ref())
             .body(Body::empty())?;
 
-        let (head, _body) = self.request(request).await?;
-        check_status(head.status)?;
+        let response = self.http_client.request(request).await?;
+        let status = response.status();
 
         Ok(())
     }
