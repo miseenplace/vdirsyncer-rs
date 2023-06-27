@@ -594,9 +594,13 @@ impl WebDavClient {
     /// The resource MAY be a collection. Because the implementation for deleting resources and
     /// collections is identical, this same method covers both cases.
     ///
+    /// If the Etag does not match (i.e.: if the resource has been altered), the operation will
+    /// fail and return an Error.
+    ///
     /// # Errors
     ///
     /// See [`request_multistatus`](Self::request_multistatus).
+    // TODO: document WHICH error is returned on Etag mismatch.
     pub async fn delete<Href, Etag>(&self, href: Href, etag: Etag) -> Result<(), DavError>
     where
         Href: AsRef<str>,
