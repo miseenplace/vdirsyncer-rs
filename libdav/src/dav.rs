@@ -410,7 +410,11 @@ impl WebDavClient {
             .ok_or(ResolveContextPathError::MissingLocation)?
             .as_bytes();
         let uri = if location.starts_with(b"/") {
-            self.relative_uri(std::str::from_utf8(location)?)?
+            Uri::builder()
+                .scheme(service.scheme())
+                .authority(format!("{host}:{port}"))
+                .path_and_query(std::str::from_utf8(location)?)
+                .build()?
         } else {
             Uri::try_from(location)?
         };
