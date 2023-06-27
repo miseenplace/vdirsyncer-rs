@@ -642,10 +642,10 @@ impl WebDavClient {
             .header("Content-Type", "application/xml; charset=utf-8")
             .body(Body::empty())?;
 
-        let (head, _body) = self.request(request).await?;
-        check_status(head.status)?;
+        let response = self.http_client.request(request).await?;
+        let status = response.status();
 
-        Ok(())
+        check_status(status).map_err(DavError::BadStatusCode)
     }
 
     pub(crate) async fn multi_get(
