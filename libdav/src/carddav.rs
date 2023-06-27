@@ -1,4 +1,4 @@
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 
 use http::Method;
 use hyper::{Body, Uri};
@@ -61,12 +61,6 @@ impl Deref for CardDavClient {
     }
 }
 
-impl DerefMut for CardDavClient {
-    fn deref_mut(&mut self) -> &mut crate::dav::WebDavClient {
-        &mut self.dav_client
-    }
-}
-
 impl ClientBuilder<CardDavClient, crate::builder::Ready> {
     /// Return a built client.
     pub fn build(self) -> CardDavClient {
@@ -102,7 +96,7 @@ impl CardDavClient {
     pub async fn auto_bootstrap(mut self) -> Result<Self, BootstrapError> {
         let port = self.default_port()?;
         let service = self.service()?;
-        common_bootstrap(&mut self, port, service).await?;
+        common_bootstrap(&mut self.dav_client, port, service).await?;
 
         // If obtaining a principal fails, the specification says we should query the user. This
         // tries to use the `base_url` first, since the user might have provided it for a reason.
