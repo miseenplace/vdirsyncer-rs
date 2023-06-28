@@ -13,8 +13,8 @@ use crate::{
     dns::DiscoverableService,
     xml::{
         self, HrefParentParser, ItemDetails, ItemDetailsParser, Multistatus,
-        MultistatusDocumentParser, PropParser, ReportPropParser, Response, ResponseParser,
-        ResponseVariant, TextNodeParser, XmlParser, CALDAV_STR, CARDDAV_STR, DAV,
+        MultistatusDocumentParser, Parser, PropParser, ReportPropParser, Response, ResponseParser,
+        ResponseVariant, TextNodeParser, CALDAV_STR, CARDDAV_STR, DAV,
     },
     Auth, AuthError, FetchedResource, FetchedResourceContent,
 };
@@ -195,7 +195,7 @@ impl WebDavClient {
     /// Internal helper to find an `href` property
     ///
     /// Very specific, but de-duplicates a few identical methods.
-    pub(crate) async fn find_href_prop_as_uri<X: XmlParser<ParsedData = Option<String>>>(
+    pub(crate) async fn find_href_prop_as_uri<X: Parser<ParsedData = Option<String>>>(
         &self,
         url: &Uri,
         prop: &str,
@@ -226,7 +226,7 @@ impl WebDavClient {
     /// # Errors
     ///
     /// See [`request_multistatus`](Self::request_multistatus).
-    pub async fn propfind<X: XmlParser>(
+    pub async fn propfind<X: Parser>(
         &self,
         url: &Uri,
         prop: &str,
@@ -257,7 +257,7 @@ impl WebDavClient {
     /// - If the server returns an error status code.
     /// - If the response is not a valid XML document.
     /// - If the response's XML schema does not match the expected type.
-    pub async fn request_multistatus<T: XmlParser>(
+    pub async fn request_multistatus<T: Parser>(
         &self,
         request: Request<Body>,
         parser: &T,

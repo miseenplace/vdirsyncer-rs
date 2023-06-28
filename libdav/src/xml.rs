@@ -54,7 +54,7 @@ pub struct ItemDetails {
 
 pub(crate) struct ItemDetailsParser;
 
-impl XmlParser for ItemDetailsParser {
+impl Parser for ItemDetailsParser {
     type ParsedData = ItemDetails;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -139,7 +139,7 @@ pub struct ReportPropParser {
 
 impl ReportPropParser {}
 
-impl XmlParser for ReportPropParser {
+impl Parser for ReportPropParser {
     type ParsedData = ReportProp;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -321,7 +321,7 @@ impl<T> Multistatus<T> {
 /// If parsing the XML fails in any way or any necessary fields are missing.
 pub(crate) fn parse_xml<X>(raw: &[u8], parser: &X) -> Result<X::ParsedData, Error>
 where
-    X: XmlParser,
+    X: Parser,
 {
     let mut reader = NsReader::from_reader(raw);
     reader.trim_text(true);
@@ -538,7 +538,7 @@ mod more_tests {
 ///
 /// Implementations can have instance-specific attributes with specific details on extraction
 /// (e.g.: for handling runtime-defined fields, etc).
-pub trait XmlParser {
+pub trait Parser {
     type ParsedData;
 
     /// Parse a node with a given reader.
@@ -552,7 +552,7 @@ pub trait XmlParser {
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error>;
 }
 
-pub trait NamedNodeParser: XmlParser {
+pub trait NamedNodeParser: Parser {
     fn name(&self) -> &[u8];
 
     fn namespace(&self) -> &[u8];
@@ -560,7 +560,7 @@ pub trait NamedNodeParser: XmlParser {
 
 struct GetETagParser;
 
-impl XmlParser for GetETagParser {
+impl Parser for GetETagParser {
     type ParsedData = Option<String>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -591,7 +591,7 @@ impl XmlParser for GetETagParser {
 
 struct StatusParser;
 
-impl XmlParser for StatusParser {
+impl Parser for StatusParser {
     type ParsedData = Option<StatusCode>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -621,12 +621,12 @@ impl XmlParser for StatusParser {
 }
 
 /// Parses a single [`PropStat`] node.
-struct PropStatParser<'a, Prop: XmlParser> {
+struct PropStatParser<'a, Prop: Parser> {
     /// A parser for the inner prop type.
     prop: &'a Prop,
 }
 
-impl<'a, P: XmlParser> XmlParser for PropStatParser<'a, P> {
+impl<'a, P: Parser> Parser for PropStatParser<'a, P> {
     type ParsedData = PropStat<P::ParsedData>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -718,7 +718,7 @@ impl NamedNodeParser for HrefParentParser<'_> {
     }
 }
 
-impl XmlParser for HrefParentParser<'_> {
+impl Parser for HrefParentParser<'_> {
     type ParsedData = Option<String>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -752,7 +752,7 @@ impl XmlParser for HrefParentParser<'_> {
 
 struct ReportParser;
 
-impl XmlParser for ReportParser {
+impl Parser for ReportParser {
     type ParsedData = Option<bool>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -785,7 +785,7 @@ impl XmlParser for ReportParser {
 
 struct SupportedReportSetParser;
 
-impl XmlParser for SupportedReportSetParser {
+impl Parser for SupportedReportSetParser {
     type ParsedData = Option<bool>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -821,7 +821,7 @@ impl XmlParser for SupportedReportSetParser {
 //       But there's also the empty node in: https://www.rfc-editor.org/rfc/rfc2518#section-8.1.3
 struct GetContentTypeParser;
 
-impl XmlParser for GetContentTypeParser {
+impl Parser for GetContentTypeParser {
     type ParsedData = Option<String>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -860,7 +860,7 @@ struct ResourceType {
     is_address_book: bool,
 }
 
-impl XmlParser for ResourceTypeParser {
+impl Parser for ResourceTypeParser {
     type ParsedData = ResourceType;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -901,9 +901,9 @@ impl XmlParser for ResourceTypeParser {
     }
 }
 
-pub struct ResponseParser<'a, T: XmlParser>(pub(crate) &'a T);
+pub struct ResponseParser<'a, T: Parser>(pub(crate) &'a T);
 
-impl<'a, T: XmlParser> XmlParser for ResponseParser<'a, T> {
+impl<'a, T: Parser> Parser for ResponseParser<'a, T> {
     type ParsedData = Response<T::ParsedData>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -991,7 +991,7 @@ impl<'a, T: XmlParser> XmlParser for ResponseParser<'a, T> {
 /// Parses an entire XML containing a [`Multistatus`] node.
 pub struct MultistatusDocumentParser<'a, T>(pub(crate) &'a T);
 
-impl<'a, T: XmlParser> XmlParser for MultistatusDocumentParser<'a, T> {
+impl<'a, T: Parser> Parser for MultistatusDocumentParser<'a, T> {
     type ParsedData = Multistatus<T::ParsedData>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -1035,7 +1035,7 @@ impl<'a, T: XmlParser> XmlParser for MultistatusDocumentParser<'a, T> {
 /// Parses a single [`Multistatus`] node.
 struct MultistatusParser<'a, T>(&'a T);
 
-impl<'a, T: XmlParser> XmlParser for MultistatusParser<'a, T> {
+impl<'a, T: Parser> Parser for MultistatusParser<'a, T> {
     type ParsedData = Multistatus<T::ParsedData>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -1076,7 +1076,7 @@ pub struct PropParser<'a, X: NamedNodeParser> {
     pub inner: &'a X,
 }
 
-impl<'a, X: NamedNodeParser> XmlParser for PropParser<'a, X> {
+impl<'a, X: NamedNodeParser> Parser for PropParser<'a, X> {
     type ParsedData = X::ParsedData;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
@@ -1127,7 +1127,7 @@ impl TextNodeParser<'_> {
     };
 }
 
-impl<'a> XmlParser for TextNodeParser<'a> {
+impl<'a> Parser for TextNodeParser<'a> {
     type ParsedData = Option<String>;
 
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
