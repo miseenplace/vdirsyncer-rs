@@ -8,7 +8,10 @@ use crate::builder::{ClientBuilder, NeedsUri};
 use crate::common::common_bootstrap;
 use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
-use crate::xml::{ItemDetails, ReportField, ResponseVariant, SimplePropertyMeta, StringProperty};
+use crate::xml::{
+    HrefParentParser, ItemDetailsParser, PropParser, ReportPropParser, Response, ResponseVariant,
+    TextNodeParser, CALDAV,
+};
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 use crate::{CheckSupportError, FetchedResource};
 
@@ -108,15 +111,17 @@ impl CalDavClient {
     }
 
     async fn find_calendar_home_set(&self, url: &Uri) -> Result<Option<Uri>, FindHomeSetError> {
-        let property_data = SimplePropertyMeta {
-            name: b"calendar-home-set".to_vec(),
-            namespace: crate::xml::CALDAV.to_vec(),
+        let parser = PropParser {
+            inner: &HrefParentParser {
+                name: b"calendar-home-set",
+                namespace: &crate::xml::CALDAV,
+            },
         };
 
         self.find_href_prop_as_uri(
             url,
             "<calendar-home-set xmlns=\"urn:ietf:params:xml:ns:caldav\"/>",
-            &property_data,
+            &parser,
         )
         .await
         .map_err(FindHomeSetError)
@@ -137,12 +142,13 @@ impl CalDavClient {
         url: Option<&Uri>,
     ) -> Result<Vec<FoundCollection>, DavError> {
         let url = url.unwrap_or(self.calendar_home_set.as_ref().unwrap_or(&self.base_url));
+        let parser = ItemDetailsParser;
         let items = self
-            .propfind::<ItemDetails>(
+            .propfind(
                 url,
                 "<resourcetype/><getetag/><supported-report-set/>",
                 1,
-                &(),
+                &parser,
             )
             .await
             .map_err(DavError::from)?
@@ -186,24 +192,26 @@ impl CalDavClient {
     pub async fn get_calendar_colour(&self, href: &str) -> Result<Option<String>, DavError> {
         let url = self.relative_uri(href)?;
 
-        let property_data = SimplePropertyMeta {
-            name: b"calendar-color".to_vec(),
-            namespace: b"http://apple.com/ns/ical/".to_vec(),
-            // TODO: fastmail uses namespace=="DAV:" in responses. Needs to be reported.
+        let parser = PropParser {
+            inner: &TextNodeParser {
+                name: b"calendar-color",
+                namespace: b"http://apple.com/ns/ical/",
+                // TODO: fastmail uses namespace=="DAV:" in responses. Needs to be reported.
+            },
         };
 
-        self.propfind::<StringProperty>(
+        self.propfind(
             &url,
             "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>",
             0,
-            &property_data,
+            &parser,
         )
         .await?
         .pop()
         .ok_or(DavError::from(crate::xml::Error::MissingData(
             "calendar-color",
         )))
-        .map(Option::<String>::from)
+        .map(Response::first_prop)
     }
 
     /// Sets the `displayname` for a collection
@@ -215,13 +223,8 @@ impl CalDavClient {
         colour: Option<&str>,
     ) -> Result<(), DavError> {
         let url = self.relative_uri(href)?;
-        self.propupdate::<StringProperty>(
-            &url,
-            "calendar-color",
-            "http://apple.com/ns/ical/",
-            colour,
-        )
-        .await
+        self.propupdate(&url, "calendar-color", "http://apple.com/ns/ical/", colour)
+            .await
     }
 
     // TODO: get_calendar_description ("calendar-description", "urn:ietf:params:xml:ns:caldav")
@@ -256,7 +259,7 @@ impl CalDavClient {
         }
         body.push_str("</C:calendar-multiget>");
 
-        self.multi_get(calendar_href.as_ref(), body, &ReportField::CALENDAR_DATA)
+        self.multi_get(calendar_href.as_ref(), body, &CALENDAR_DATA)
             .await
     }
 
@@ -333,3 +336,8 @@ impl CalDavClient {
         }
     }
 }
+
+pub const CALENDAR_DATA: ReportPropParser = ReportPropParser {
+    namespace: CALDAV,
+    name: b"calendar-data",
+};

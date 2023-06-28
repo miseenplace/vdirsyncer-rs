@@ -8,7 +8,9 @@ use crate::builder::{ClientBuilder, NeedsUri};
 use crate::common::common_bootstrap;
 use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
-use crate::xml::{ItemDetails, ReportField, ResponseVariant, SimplePropertyMeta};
+use crate::xml::{
+    HrefParentParser, ItemDetailsParser, PropParser, ReportPropParser, ResponseVariant, CARDDAV,
+};
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 use crate::{CheckSupportError, FetchedResource};
 
@@ -108,15 +110,17 @@ impl CardDavClient {
     }
 
     async fn find_addressbook_home_set(&self, url: &Uri) -> Result<Option<Uri>, FindHomeSetError> {
-        let property_data = SimplePropertyMeta {
-            name: b"addressbook-home-set".to_vec(),
-            namespace: crate::xml::CARDDAV.to_vec(),
+        let parser = PropParser {
+            inner: &HrefParentParser {
+                name: b"addressbook-home-set",
+                namespace: crate::xml::CARDDAV,
+            },
         };
 
         self.find_href_prop_as_uri(
             url,
             "<addressbook-home-set xmlns=\"urn:ietf:params:xml:ns:carddav\"/>",
-            &property_data,
+            &parser,
         )
         .await
         .map_err(FindHomeSetError)
@@ -138,9 +142,10 @@ impl CardDavClient {
     ) -> Result<Vec<FoundCollection>, DavError> {
         let url = url.unwrap_or(self.addressbook_home_set.as_ref().unwrap_or(&self.base_url));
         // FIXME: DRY: This is almost a copy-paste of the same method from CalDavClient
+        let parser = ItemDetailsParser;
         let items = self
             // XXX: depth 1 or infinity?
-            .propfind::<ItemDetails>(url, "<resourcetype/><getetag/>", 1, &())
+            .propfind(url, "<resourcetype/><getetag/>", 1, &parser)
             .await
             .map_err(DavError::from)?
             .into_iter()
@@ -204,7 +209,7 @@ impl CardDavClient {
         }
         body.push_str("</C:addressbook-multiget>");
 
-        self.multi_get(addressbook_href.as_ref(), body, &ReportField::ADDRESS_DATA)
+        self.multi_get(addressbook_href.as_ref(), body, &ADDRESS_DATA)
             .await
     }
 
@@ -275,3 +280,8 @@ impl CardDavClient {
         }
     }
 }
+
+pub const ADDRESS_DATA: ReportPropParser = ReportPropParser {
+    namespace: CARDDAV,
+    name: b"address-data",
+};

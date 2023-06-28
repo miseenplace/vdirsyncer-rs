@@ -4,11 +4,11 @@
 //! **for advanced usage**.
 
 use http::{status::InvalidStatusCode, StatusCode};
-use log::{debug, trace, warn};
+use log::{debug, warn};
 use quick_xml::name::Namespace;
 use quick_xml::{events::Event, name::ResolveResult, NsReader};
+use std::io::BufRead;
 use std::str::FromStr;
-use std::{borrow::Cow, io::BufRead};
 
 /// Namespace for properties defined in webdav specifications.
 ///
@@ -22,6 +22,8 @@ pub(crate) const CALDAV: &[u8] = CALDAV_STR.as_bytes();
 pub(crate) const CARDDAV: &[u8] = CARDDAV_STR.as_bytes();
 
 const NS_DAV: Namespace = Namespace(DAV);
+const NS_CALDAV: Namespace = Namespace(CALDAV);
+const NS_CARDDAV: Namespace = Namespace(CARDDAV);
 
 /// An error parsing XML data.
 #[derive(thiserror::Error, Debug)]
@@ -36,32 +38,6 @@ pub enum Error {
     Parser(#[from] quick_xml::Error),
 }
 
-/// A type that can be built by parsing XML.
-#[allow(clippy::module_name_repetitions)]
-pub trait FromXml: Sized {
-    /// Optional information used to extract values.
-    ///
-    /// Some `FromXml` implementations can be generic and parse data with
-    /// dynamic rules. This associated type allows passing such rules.
-    ///
-    /// When unnecessary, just set this to `()`.
-    type ExtractionData;
-    /// Builds a new instance by parsing the XML reader.
-    ///
-    /// The opening tag for this type is expected to have been consumed prior
-    /// to calling this method. The end tag will be consumed before returning,
-    /// unless an error is returned.
-    ///
-    /// # Errors
-    ///
-    /// - If parsing the XML fails in any way.
-    /// - If any mandatory fields are missing.
-    fn from_xml<R: BufRead>(
-        reader: &mut NsReader<R>,
-        data: &Self::ExtractionData,
-    ) -> Result<Self, Error>;
-}
-
 /// Details of a single item that are returned when listing them.
 ///
 /// This does not include actual item data, it only includes their metadata.
@@ -69,6 +45,7 @@ pub trait FromXml: Sized {
 pub struct ItemDetails {
     pub content_type: Option<String>,
     pub etag: Option<String>,
+    // TODO: replace these three fields with ResourceType
     pub is_collection: bool,
     pub is_calendar: bool,
     pub is_address_book: bool,
@@ -76,28 +53,16 @@ pub struct ItemDetails {
     pub supports_sync: bool,
 }
 
-/// Shortcut to keep log statements short.
-// TODO: calls to this should really be wrapped in `log::log_enabled`.
-#[inline]
-fn s(data: &[u8]) -> Cow<'_, str> {
-    String::from_utf8_lossy(data)
-}
+pub(crate) struct ItemDetailsParser;
 
-impl FromXml for ItemDetails {
-    type ExtractionData = ();
+impl XmlParser for ItemDetailsParser {
+    type ParsedData = ItemDetails;
 
-    fn from_xml<R: BufRead>(reader: &mut NsReader<R>, _: &()) -> Result<ItemDetails, Error> {
-        #[derive(Debug)]
-        enum State {
-            Prop,
-            ResourceType,
-            GetContentType,
-            SupportedReportSet,
-            Report,
-        }
-
-        let mut buf = Vec::new();
-        let mut state = State::Prop;
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
         let mut item = ItemDetails {
             content_type: None,
             etag: None,
@@ -108,64 +73,49 @@ impl FromXml for ItemDetails {
         };
 
         loop {
-            match (&state, reader.read_resolved_event_into(&mut buf)?) {
-                (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
-                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Prop, DAV, b"resourcetype") => state = State::ResourceType,
-                        (State::Prop, DAV, b"getcontenttype") => state = State::GetContentType,
-                        (State::Prop, DAV, b"getetag") => {
-                            item.etag = GetETag.parse(reader, &mut buf)?;
-                        }
-                        (State::Prop, DAV, b"supported-report-set") => {
-                            state = State::SupportedReportSet;
-                        }
-                        (State::SupportedReportSet, DAV, b"report") => state = State::Report,
-                        (state, ns, name) => {
-                            debug!("unexpected start: {:?}, {}, {}", state, s(ns), s(name));
-                        }
-                    }
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"prop" =>
+                {
+                    break;
                 }
-                (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
-                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Prop, DAV, b"prop") => break,
-                        (State::ResourceType, DAV, b"resourcetype")
-                        | (State::GetContentType, DAV, b"getcontenttype")
-                        | (State::SupportedReportSet, DAV, b"supported-report-set") => {
-                            state = State::Prop;
-                        }
-                        (State::Report, DAV, b"report") => state = State::SupportedReportSet,
-                        (state, ns, name) => {
-                            debug!("unexpected end: {:?}, {}, {}", state, s(ns), s(name));
-                        }
-                    }
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"resourcetype" =>
+                {
+                    let resource_type = ResourceTypeParser.parse(reader, buf)?;
+                    item.is_collection = resource_type.is_collection;
+                    item.is_calendar = resource_type.is_calendar;
+                    item.is_address_book = resource_type.is_address_book;
                 }
-                (_, (ResolveResult::Bound(namespace), Event::Empty(element))) => {
-                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Prop, DAV, b"resourcetype") => {}
-                        (State::ResourceType, DAV, b"collection") => item.is_collection = true,
-                        (State::ResourceType, CALDAV, b"calendar") => item.is_calendar = true,
-                        (State::ResourceType, CARDDAV, b"addressbook") => {
-                            item.is_address_book = true;
-                        }
-                        (State::Prop, DAV, b"getetag") => warn!("missing etag in response"),
-                        (State::Report, DAV, b"sync-collection") => item.supports_sync = true,
-                        // TODO: don't the `s()` calls run even if
-                        (State::Report, ns, name) => {
-                            trace!("collection supports report {:?}, {:?}", s(ns), s(name));
-                        }
-                        (state, ns, name) => {
-                            debug!("unexpected empty: {:?}, {}, {}", state, s(ns), s(name));
-                        }
-                    }
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"getcontenttype" =>
+                {
+                    item.content_type = GetContentTypeParser.parse(reader, buf)?;
                 }
-                (State::GetContentType, (ResolveResult::Unbound, Event::Text(text))) => {
-                    item.content_type = Some(text.unescape()?.to_string());
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"getetag" =>
+                {
+                    item.etag = GetETagParser.parse(reader, buf)?;
                 }
-                (_, (_, Event::Eof)) => {
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"supported-report-set" =>
+                {
+                    item.supports_sync = SupportedReportSetParser
+                        .parse(reader, buf)?
+                        .unwrap_or(false);
+                }
+                (ResolveResult::Bound(NS_DAV), Event::Empty(element))
+                    if element.local_name().as_ref() == b"resourcetype" => {}
+                (ResolveResult::Bound(NS_DAV), Event::Empty(element))
+                    if element.local_name().as_ref() == b"getetag" =>
+                {
+                    warn!("missing etag in response");
+                }
+                (_, Event::Eof) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
-                (state, (_, event)) => {
-                    debug!("unexpected event: {:?}, {:?}", state, event);
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
                 }
             };
         }
@@ -175,116 +125,91 @@ impl FromXml for ItemDetails {
 }
 
 /// Etag and contents of a single calendar resource.
+///
+/// This is a single prop from a `REPORT`.
 #[derive(Debug, PartialEq, Eq)]
-pub struct Report {
+pub struct ReportProp {
     pub etag: Option<String>,
     pub data: Option<String>,
 }
 
-/// Metadata describing which field contains the `data` for a `Report`.
-pub struct ReportField {
+/// A custom named node.
+///
+/// This is, essentially, a `PropParser` which contains multiple inner nodes. The node name is
+/// `DAV:prop`. This likely needs to be refactored and folded into [`PropParser`] somehow.
+///
+/// See: <https://www.rfc-editor.org/rfc/rfc4791#appendix-B>
+pub struct ReportPropParser {
     pub namespace: &'static [u8],
     pub name: &'static [u8],
 }
 
-impl ReportField {
-    pub const CALENDAR_DATA: ReportField = ReportField {
-        namespace: CALDAV,
-        name: b"calendar-data",
-    };
+impl ReportPropParser {}
 
-    pub const ADDRESS_DATA: ReportField = ReportField {
-        namespace: CARDDAV,
-        name: b"address-data",
-    };
-}
+impl XmlParser for ReportPropParser {
+    type ParsedData = ReportProp;
 
-impl FromXml for Report {
-    type ExtractionData = ReportField;
-
-    fn from_xml<R>(reader: &mut NsReader<R>, field: &ReportField) -> Result<Report, Error>
-    where
-        R: BufRead,
-    {
-        #[derive(Debug)]
-        enum State {
-            Prop,
-            CalendarData,
-        }
-
-        let mut buf = Vec::new();
-        let mut state = State::Prop;
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
         let mut etag = None;
         let mut data = None;
 
         loop {
-            match (&state, reader.read_resolved_event_into(&mut buf)?) {
-                (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
-                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Prop, ns, name) if ns == field.namespace && name == field.name => {
-                            state = State::CalendarData;
-                        }
-                        (State::Prop, DAV, b"getetag") => {
-                            etag = GetETag.parse(reader, &mut buf)?;
-                        }
-                        (state, ns, name) => {
-                            debug!("unexpected start: {:?}, {}, {}", state, s(ns), s(name));
-                        }
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(namespace), Event::Start(element))
+                    if namespace.as_ref() == self.namespace
+                        && element.local_name().as_ref() == self.name =>
+                {
+                    data = TextNodeParser {
+                        namespace: self.namespace,
+                        name: self.name,
                     }
+                    .parse(reader, buf)?;
                 }
-                (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
-                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Prop, DAV, b"prop") => break,
-                        (State::CalendarData, ns, name)
-                            if ns == field.namespace && name == field.name =>
-                        {
-                            state = State::Prop;
-                        }
-                        (state, ns, name) => {
-                            debug!("unexpected end: {:?}, {}, {}", state, s(ns), s(name));
-                        }
-                    }
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"getetag" =>
+                {
+                    etag = GetETagParser.parse(reader, buf)?;
                 }
-                (State::CalendarData, (ResolveResult::Unbound, Event::Text(text))) => {
-                    data = Some(text.unescape()?.to_string());
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"prop" =>
+                {
+                    break;
                 }
-                (State::CalendarData, (ResolveResult::Unbound, Event::CData(c))) => {
-                    // TODO: assuming UTF-8
-                    let text = std::str::from_utf8(&c.into_inner())
-                        .map_err(|e| Error::Parser(quick_xml::Error::NonDecodable(Some(e))))?
-                        .to_string();
-                    data = Some(text);
-                }
-                (_, (_, Event::Eof)) => {
+                (_, Event::Eof) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
-                (state, (_, event)) => {
-                    debug!("unexpected event: {:?}, {:?}", state, event);
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
                 }
-            };
+            }
         }
 
-        Ok(Report { etag, data })
+        Ok(ReportProp { etag, data })
     }
 }
 
-/// A single response from a multistatus response.
+/// A single response as defined in [rfc2518 section-12.9.1]
 ///
 /// The inner type `T` will be parsed from the response's `prop` node.
 /// Generally, this is used for responses to `PROPFIND` or `REPORT`.
 ///
-/// See: <https://www.rfc-editor.org/rfc/rfc2518>
+///[rfc2518 section-12.9.1]: https://www.rfc-editor.org/rfc/rfc2518#section-12.9.1
 #[derive(Debug, PartialEq, Eq)]
-pub struct Response<T>
-where
-    T: FromXml,
-{
+pub struct Response<T> {
     pub href: String,
     pub variant: ResponseVariant<T>,
+    // TODO: responsedescription
 }
 
+/// One of the two variants for WebDav responses.
+///
+/// See [`Response`].
 #[derive(Debug, PartialEq, Eq)]
-pub enum ResponseVariant<T: FromXml> {
+pub enum ResponseVariant<T> {
     WithProps {
         propstats: Vec<PropStat<T>>,
     },
@@ -294,13 +219,25 @@ pub enum ResponseVariant<T: FromXml> {
     },
 }
 
+impl<T> Response<Option<T>> {
+    /// Returns the first prop inside the response, if any.
+    pub fn first_prop(self) -> Option<T> {
+        if let ResponseVariant::WithProps { mut propstats } = self.variant {
+            propstats.pop()?.prop
+        } else {
+            None
+        }
+    }
+}
+
+/// A `propstat` as defined in [rfc2518 section-12.9.1.1]
+///
+/// [rfc2518 section-12.9.1.1]: https://www.rfc-editor.org/rfc/rfc2518#section-12.9.1.1
 #[derive(Debug, PartialEq, Eq)]
-pub struct PropStat<T>
-where
-    T: FromXml,
-{
+pub struct PropStat<T> {
     pub prop: T,
     pub status: StatusCode,
+    // TODO: responsedescription
 }
 
 // See: https://www.rfc-editor.org/rfc/rfc2068#section-6.1
@@ -311,513 +248,96 @@ fn parse_statusline<S: AsRef<str>>(status_line: S) -> Result<StatusCode, Invalid
     StatusCode::from_str(code)
 }
 
-impl<T> FromXml for PropStat<T>
-where
-    T: FromXml,
-{
-    type ExtractionData = T::ExtractionData;
+/// Internal helper to build `ResponseVariant`.
+enum ResponseVariantBuilder<T> {
+    None,
+    WithProps {
+        propstats: Vec<PropStat<T>>,
+    },
+    WithoutProps {
+        hrefs: Vec<String>,
+        status: Option<StatusCode>,
+    },
+}
 
-    fn from_xml<R: BufRead>(
-        reader: &mut NsReader<R>,
-        data: &Self::ExtractionData,
-    ) -> Result<Self, Error> {
-        #[derive(Debug)]
-        enum State {
-            PropStat,
-            Status,
+impl<T> ResponseVariantBuilder<T> {
+    fn build(self) -> Result<ResponseVariant<T>, Error> {
+        match self {
+            ResponseVariantBuilder::None => Ok(ResponseVariant::WithProps {
+                propstats: Vec::new(),
+            }),
+            ResponseVariantBuilder::WithProps { propstats } => {
+                Ok(ResponseVariant::WithProps { propstats })
+            }
+            ResponseVariantBuilder::WithoutProps { hrefs, status } => {
+                Ok(ResponseVariant::WithoutProps {
+                    hrefs,
+                    status: status.ok_or(Error::MissingData("status"))?,
+                })
+            }
         }
+    }
 
-        let mut buf = Vec::new();
-        let mut state = State::PropStat;
-        let mut status = None;
-        let mut prop = None;
-
-        loop {
-            match (&state, reader.read_resolved_event_into(&mut buf)?) {
-                (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
-                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::PropStat, DAV, b"status") => state = State::Status,
-                        (State::PropStat, DAV, b"prop") => {
-                            prop = Some(T::from_xml(reader, data)?);
-                        }
-                        (state, ns, name) => {
-                            debug!("unexpected end: {:?}, {}, {}", state, s(ns), s(name));
-                        }
-                    }
-                }
-                (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
-                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::PropStat, DAV, b"propstat") => break,
-                        (State::Status, DAV, b"status") => {
-                            state = State::PropStat;
-                        }
-                        (state, ns, name) => {
-                            debug!("unexpected empty: {:?}, {}, {}", state, s(ns), s(name));
-                        }
-                    }
-                }
-                (State::Status, (ResolveResult::Unbound, Event::Text(text))) => {
-                    status = Some(parse_statusline(text.unescape()?)?);
-                }
-                (_, (_, Event::Eof)) => {
-                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
-                }
-                (_, (_, event)) => {
-                    debug!("unexpected event: {:?}, {:?}", state, event);
-                }
+    fn add_href(&mut self, href: String) -> Result<(), Error> {
+        match self {
+            ResponseVariantBuilder::None => {
+                *self = ResponseVariantBuilder::WithoutProps {
+                    hrefs: vec![href],
+                    status: None,
+                };
+            }
+            ResponseVariantBuilder::WithProps { .. } => {
+                return Err(Error::Parser(quick_xml::Error::UnexpectedToken(
+                    "href in response with props".to_string(),
+                )))
+            }
+            ResponseVariantBuilder::WithoutProps { ref mut hrefs, .. } => {
+                hrefs.push(href);
             }
         }
 
-        Ok(PropStat {
-            prop: prop.ok_or(Error::MissingData("prop"))?,
-            status: status.ok_or(Error::MissingData("status"))?,
-        })
+        Ok(())
     }
 }
 
-impl<T> FromXml for Response<T>
-where
-    T: FromXml,
-{
-    type ExtractionData = T::ExtractionData;
-
-    fn from_xml<R: BufRead>(
-        reader: &mut NsReader<R>,
-        data: &T::ExtractionData,
-    ) -> Result<Self, Error> {
-        #[derive(Debug)]
-        enum State {
-            Response,
-            Href,
-            Status, // Only for one variant
-        }
-
-        enum VariantBuilder<T: FromXml> {
-            None,
-            WithProps {
-                propstats: Vec<PropStat<T>>,
-            },
-            WithoutProps {
-                hrefs: Vec<String>,
-                status: Option<StatusCode>,
-            },
-        }
-
-        impl<T: FromXml> VariantBuilder<T> {
-            fn build(self) -> Result<ResponseVariant<T>, Error> {
-                match self {
-                    VariantBuilder::None => Ok(ResponseVariant::WithProps {
-                        propstats: Vec::new(),
-                    }),
-                    VariantBuilder::WithProps { propstats } => {
-                        Ok(ResponseVariant::WithProps { propstats })
-                    }
-                    VariantBuilder::WithoutProps { hrefs, status } => {
-                        Ok(ResponseVariant::WithoutProps {
-                            hrefs,
-                            status: status.ok_or(Error::MissingData("status"))?,
-                        })
-                    }
-                }
-            }
-        }
-
-        let mut buf = Vec::new();
-        let mut state = State::Response;
-        let mut href = Option::<String>::None;
-        let mut variant = VariantBuilder::None;
-
-        loop {
-            match (&state, reader.read_resolved_event_into(&mut buf)?) {
-                (_, (ResolveResult::Bound(namespace), Event::Start(element))) => {
-                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Response, DAV, b"href") => {
-                            if href.is_some() {
-                                match variant {
-                                    VariantBuilder::None => {
-                                        variant = VariantBuilder::WithoutProps {
-                                            hrefs: Vec::new(),
-                                            status: None,
-                                        };
-                                    }
-                                    VariantBuilder::WithProps { .. } => {
-                                        return Err(Error::Parser(
-                                            quick_xml::Error::UnexpectedToken("href".to_string()),
-                                        ))
-                                    }
-                                    VariantBuilder::WithoutProps { .. } => {}
-                                }
-                            }
-                            state = State::Href;
-                        }
-                        (State::Response, DAV, b"propstat") => {
-                            let propstat = PropStat::<T>::from_xml(reader, data)?;
-
-                            match variant {
-                                VariantBuilder::None => {
-                                    variant = VariantBuilder::WithProps {
-                                        propstats: vec![propstat],
-                                    };
-                                }
-                                VariantBuilder::WithProps { ref mut propstats } => {
-                                    propstats.push(propstat);
-                                }
-                                VariantBuilder::WithoutProps { .. } => {
-                                    return Err(Error::Parser(quick_xml::Error::UnexpectedToken(
-                                        "propstat".to_string(),
-                                    )))
-                                }
-                            }
-                        }
-                        (State::Response, DAV, b"status") => {
-                            match variant {
-                                VariantBuilder::None => {
-                                    variant = VariantBuilder::WithoutProps {
-                                        hrefs: Vec::new(),
-                                        status: None,
-                                    }
-                                }
-                                VariantBuilder::WithProps { .. } => {
-                                    return Err(Error::Parser(quick_xml::Error::UnexpectedToken(
-                                        "status".to_string(),
-                                    )))
-                                }
-                                VariantBuilder::WithoutProps { .. } => {}
-                            }
-                            state = State::Status;
-                        }
-                        (state, ns, name) => {
-                            debug!("unexpected end: {:?}, {}, {}", state, s(ns), s(name));
-                        }
-                    }
-                }
-                (_, (ResolveResult::Bound(namespace), Event::End(element))) => {
-                    match (&state, namespace.as_ref(), element.local_name().as_ref()) {
-                        (State::Response, DAV, b"response") => break,
-                        (State::Status, DAV, b"status") | (State::Href, DAV, b"href") => {
-                            state = State::Response;
-                        }
-                        (state, ns, name) => {
-                            debug!("unexpected empty: {:?}, {}, {}", state, s(ns), s(name));
-                        }
-                    }
-                }
-                (State::Href, (ResolveResult::Unbound, Event::Text(text))) => {
-                    let h = text.unescape()?.to_string();
-                    match href {
-                        None => href = Some(h),
-                        Some(_) => match variant {
-                            VariantBuilder::None | VariantBuilder::WithProps { .. } => {
-                                unreachable!()
-                            }
-                            VariantBuilder::WithoutProps { ref mut hrefs, .. } => hrefs.push(h),
-                        },
-                    }
-                }
-                (State::Status, (ResolveResult::Unbound, Event::Text(text))) => match variant {
-                    VariantBuilder::None | VariantBuilder::WithProps { .. } => unreachable!(),
-                    VariantBuilder::WithoutProps { ref mut status, .. } => {
-                        *status = Some(parse_statusline(text.unescape()?)?);
-                    }
-                },
-                (_, (_, Event::Eof)) => {
-                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
-                }
-                (state, (_, event)) => {
-                    debug!("unexpected event: {:?}, {:?}", state, event);
-                }
-            }
-        }
-
-        Ok(Response {
-            href: href.ok_or(Error::MissingData("href"))?,
-            variant: variant.build()?,
-        })
-    }
-}
-
-/// A simple string property, like a `displayname`, `color`, etc.
-#[derive(Debug, PartialEq, Eq)]
-pub struct StringProperty(Option<String>);
-
-#[derive(Debug, Clone)]
-pub struct SimplePropertyMeta {
-    pub name: Vec<u8>,
-    pub namespace: Vec<u8>,
-}
-
-impl From<Response<StringProperty>> for Option<String> {
-    fn from(value: Response<StringProperty>) -> Option<String> {
-        if let ResponseVariant::WithProps { mut propstats } = value.variant {
-            propstats.pop()?.prop.0
-        } else {
-            None
-        }
-    }
-}
-
-impl FromXml for StringProperty {
-    type ExtractionData = SimplePropertyMeta;
-
-    fn from_xml<R: BufRead>(
-        reader: &mut NsReader<R>,
-        data: &SimplePropertyMeta,
-    ) -> Result<Self, Error> {
-        #[derive(Debug)]
-        enum State {
-            Prop,
-            Inner,
-        }
-
-        let mut buf = Vec::new();
-        let mut state = State::Prop;
-        let mut value = Option::<String>::None;
-
-        loop {
-            match (&state, reader.read_resolved_event_into(&mut buf)?) {
-                (State::Prop, (ResolveResult::Bound(namespace), Event::Start(element)))
-                    if namespace.as_ref() == data.namespace
-                        && element.local_name().as_ref() == data.name =>
-                {
-                    state = State::Inner;
-                }
-                (State::Prop, (ResolveResult::Bound(namespace), Event::End(element)))
-                    if namespace.as_ref() == DAV && element.local_name().as_ref() == b"prop" =>
-                {
-                    break;
-                }
-                (State::Prop, (ResolveResult::Bound(namespace), Event::Empty(element)))
-                    if namespace.as_ref() == data.namespace
-                        && element.local_name().as_ref() == data.name =>
-                {
-                    // No-op
-                }
-                (State::Inner, (ResolveResult::Bound(namespace), Event::End(element)))
-                    if namespace.as_ref() == data.namespace
-                        && element.local_name().as_ref() == data.name =>
-                {
-                    state = State::Prop;
-                }
-                (State::Inner, (ResolveResult::Unbound, Event::Text(text))) => {
-                    value = Some(text.unescape()?.to_string());
-                }
-                (State::Inner, (ResolveResult::Unbound, Event::CData(c))) => {
-                    let text = std::str::from_utf8(&c.into_inner())
-                        .map_err(|e| Error::Parser(quick_xml::Error::NonDecodable(Some(e))))?
-                        .to_string();
-                    value = Some(text);
-                }
-                (_, (_, Event::Eof)) => {
-                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
-                }
-                (state, (_, event)) => {
-                    debug!("unexpected event: {:?}, {:?}", state, event);
-                }
-            }
-        }
-
-        Ok(StringProperty(value))
-    }
-}
-
-/// A property with a single `href` node.
+/// A `multistatus` response.
 ///
-/// This example:
-///
-/// ```xml
-/// <?xml version="1.0" encoding="utf-8"?>
-/// <multistatus xmlns="DAV:">
-///   <response>
-///     <href>/dav/calendars</href>
-///     <propstat>
-///       <prop>
-///         <current-user-principal>
-///           <href>/dav/principals/user/vdirsyncer@example.com/</href>
-///         </current-user-principal>
-///       </prop>
-///       <status>HTTP/1.1 200 OK</status>
-///     </propstat>
-///   </response>
-/// </multistatus>
-/// ```
-///
-/// Can be parsed with the following [`SimplePropertyMeta`]:
-///
-/// ```rust
-/// # use libdav::xml::SimplePropertyMeta;;
-/// let property_data = SimplePropertyMeta {
-///     name: b"current-user-principal".to_vec(),
-///     namespace: b"DAV:".to_vec(),
-/// };
-/// ```
-pub struct HrefProperty(Option<String>);
-
-impl Response<HrefProperty> {
-    #[must_use]
-    pub fn into_maybe_string(self) -> Option<String> {
-        if let ResponseVariant::WithProps { mut propstats } = self.variant {
-            propstats.pop()?.prop.0
-        } else {
-            None
-        }
-    }
-}
-
-impl FromXml for HrefProperty {
-    type ExtractionData = SimplePropertyMeta;
-
-    fn from_xml<R>(reader: &mut NsReader<R>, data: &SimplePropertyMeta) -> Result<Self, Error>
-    where
-        R: BufRead,
-    {
-        #[derive(Debug)]
-        enum State {
-            Prop,
-            Inner,
-            Href,
-        }
-
-        let mut buf = Vec::new();
-        let mut state = State::Prop;
-        let mut value = Option::<String>::None;
-
-        loop {
-            match (&state, reader.read_resolved_event_into(&mut buf)?) {
-                (State::Prop, (ResolveResult::Bound(namespace), Event::Start(element)))
-                    if namespace.as_ref() == data.namespace
-                        && element.local_name().as_ref() == data.name =>
-                {
-                    state = State::Inner;
-                }
-                (State::Prop, (ResolveResult::Bound(namespace), Event::End(element)))
-                    if namespace.as_ref() == DAV && element.local_name().as_ref() == b"prop" =>
-                {
-                    break;
-                }
-                (State::Inner, (ResolveResult::Bound(namespace), Event::Start(element)))
-                    if namespace.as_ref() == DAV && element.local_name().as_ref() == b"href" =>
-                {
-                    state = State::Href;
-                }
-                (State::Inner, (ResolveResult::Bound(namespace), Event::End(element)))
-                    if namespace.as_ref() == data.namespace
-                        && element.local_name().as_ref() == data.name =>
-                {
-                    state = State::Prop;
-                }
-                (State::Href, (ResolveResult::Unbound, Event::Text(text))) => {
-                    value = Some(text.unescape()?.to_string());
-                }
-                (State::Href, (ResolveResult::Unbound, Event::CData(c))) => {
-                    let text = std::str::from_utf8(&c.into_inner())
-                        .map_err(|e| Error::Parser(quick_xml::Error::NonDecodable(Some(e))))?
-                        .to_string();
-                    value = Some(text);
-                }
-                (State::Href, (ResolveResult::Bound(namespace), Event::End(element)))
-                    if namespace.as_ref() == DAV && element.local_name().as_ref() == b"href" =>
-                {
-                    state = State::Inner;
-                }
-                (_, (_, Event::Eof)) => {
-                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
-                }
-                (state, (_, event)) => {
-                    debug!("unexpected event: {:?}, {:?}", state, event);
-                }
-            }
-        }
-
-        Ok(HrefProperty(value))
-    }
-}
-
+/// See: <https://www.rfc-editor.org/rfc/rfc2518#section-12.9>
 #[derive(Debug)]
-pub struct Multistatus<F> {
-    responses: Vec<F>,
+pub struct Multistatus<T> {
+    pub responses: Vec<T>,
+    // TODO: responsedescription
 }
 
-impl<F> Multistatus<F> {
+impl<T> Multistatus<T> {
+    #[must_use]
+    fn empty() -> Self {
+        Self {
+            responses: Vec::default(),
+        }
+    }
+
     #[must_use]
     #[inline]
-    pub fn into_responses(self) -> Vec<F> {
+    pub fn into_responses(self) -> Vec<T> {
         self.responses
     }
 }
 
-impl<F> FromXml for Multistatus<F>
-where
-    F: FromXml,
-{
-    type ExtractionData = F::ExtractionData;
-
-    fn from_xml<R: BufRead>(
-        reader: &mut NsReader<R>,
-        data: &Self::ExtractionData,
-    ) -> Result<Self, Error> {
-        #[derive(Debug)]
-        enum State {
-            Root,
-            Multistatus,
-        }
-
-        let mut state = State::Root;
-        let mut buf = Vec::new();
-        let mut items = Vec::new();
-
-        loop {
-            match (&state, reader.read_resolved_event_into(&mut buf)?) {
-                (State::Root, (_, Event::Decl(_))) => {}
-                (State::Root, (ResolveResult::Bound(namespace), Event::Start(element)))
-                    if namespace.as_ref() == DAV
-                        && element.local_name().as_ref() == b"multistatus" =>
-                {
-                    state = State::Multistatus;
-                }
-                (State::Root, (ResolveResult::Bound(namespace), Event::Empty(element)))
-                    if namespace.as_ref() == DAV
-                        && element.local_name().as_ref() == b"multistatus" =>
-                {
-                    return Ok(Multistatus { responses: items });
-                }
-                (State::Root, (_, Event::Eof)) => return Err(Error::MissingData("multistatus")),
-                (State::Multistatus, (ResolveResult::Bound(namespace), Event::Start(element)))
-                    if namespace.as_ref() == DAV
-                        && element.local_name().as_ref() == b"response" =>
-                {
-                    items.push(F::from_xml(reader, data)?);
-                }
-                (State::Multistatus, (ResolveResult::Bound(namespace), Event::End(element)))
-                    if namespace.as_ref() == DAV
-                        && element.local_name().as_ref() == b"multistatus" =>
-                {
-                    return Ok(Multistatus { responses: items });
-                }
-                (_, (_, Event::Eof)) => {
-                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
-                }
-                (state, (_, event)) => {
-                    debug!("unexpected event: {:?}, {:?}", state, event);
-                }
-            }
-        }
-    }
-}
-
-/// Parse a raw multi-response when listing items.
+/// Parse an XML document using the given parser.
 ///
 /// # Errors
 ///
-/// - If parsing the XML fails in any way.
-/// - If any necessary fields are missing.
-/// - If any unexpected XML nodes are found.
-pub(crate) fn parse_xml<F>(raw: &[u8], data: &F::ExtractionData) -> Result<F, Error>
+/// If parsing the XML fails in any way or any necessary fields are missing.
+pub(crate) fn parse_xml<X>(raw: &[u8], parser: &X) -> Result<X::ParsedData, Error>
 where
-    F: FromXml,
+    X: XmlParser,
 {
     let mut reader = NsReader::from_reader(raw);
     reader.trim_text(true);
-    F::from_xml(&mut reader, data)
+
+    let mut buf = Vec::new();
+    parser.parse(&mut reader, &mut buf)
 }
 
 #[cfg(test)]
@@ -857,9 +377,8 @@ mod more_tests {
   </response>
 </multistatus>"#;
 
-        let parsed = parse_xml::<Multistatus<Response<ItemDetails>>>(raw, &())
-            .unwrap()
-            .into_responses();
+        let parser = MultistatusDocumentParser(&ResponseParser(&ItemDetailsParser));
+        let parsed = parse_xml(raw, &parser).unwrap().into_responses();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0], Response {
             href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/".to_string(),
@@ -922,9 +441,8 @@ mod more_tests {
         </d:propstat>
     </d:response>
 </d:multistatus>"#;
-        let parsed = parse_xml::<Multistatus<Response<ItemDetails>>>(raw, &())
-            .unwrap()
-            .into_responses();
+        let parser = MultistatusDocumentParser(&ResponseParser(&ItemDetailsParser));
+        let parsed = parse_xml(raw, &parser).unwrap().into_responses();
         assert_eq!(parsed.len(), 1);
         match &parsed.first().unwrap().variant {
             ResponseVariant::WithProps { propstats } => assert_eq!(propstats.len(), 2),
@@ -952,9 +470,8 @@ mod more_tests {
 		<ns0:status>HTTP/1.1 404 Not Found</ns0:status>
 	</ns0:response>
 </ns0:multistatus>"#;
-        let parsed = parse_xml::<Multistatus<Response<Report>>>(raw, &ReportField::CALENDAR_DATA)
-            .unwrap()
-            .into_responses();
+        let parser = MultistatusDocumentParser(&ResponseParser(&crate::caldav::CALENDAR_DATA));
+        let parsed = parse_xml(raw, &parser).unwrap().into_responses();
         assert_eq!(parsed.len(), 2);
         assert_eq!(
             parsed[0],
@@ -962,7 +479,7 @@ mod more_tests {
                 href: "/user/calendars/Q208cKvMGjAdJFUw/qJJ9Li5DPJYr.ics".to_string(),
                 variant: ResponseVariant::WithProps {
                     propstats: vec![PropStat {
-                        prop: Report {
+                        prop: ReportProp {
                             etag: Some("\"adb2da8d3cb1280a932ed8f8a2e8b4ecf66d6a02\"".to_string()),
                             data: Some("CALENDAR-DATA-HERE".to_string())
                         },
@@ -986,9 +503,8 @@ mod more_tests {
     #[test]
     fn test_empty_response() {
         let raw = br#"<multistatus xmlns="DAV:" />"#;
-        let parsed = parse_xml::<Multistatus<Response<ItemDetails>>>(raw, &())
-            .unwrap()
-            .into_responses();
+        let parser = MultistatusDocumentParser(&ResponseParser(&ItemDetailsParser));
+        let parsed = parse_xml(raw, &parser).unwrap().into_responses();
         assert_eq!(parsed.len(), 0);
     }
 
@@ -1007,13 +523,13 @@ mod more_tests {
                 </response>
             </multistatus>
             "#;
-        let property_data = SimplePropertyMeta {
-            name: b"displayname".to_vec(),
-            namespace: DAV.to_vec(),
-        };
-        let parsed = parse_xml::<Multistatus<Response<StringProperty>>>(raw, &property_data)
-            .unwrap()
-            .into_responses();
+        let parser = MultistatusDocumentParser(&ResponseParser(&PropParser {
+            inner: &TextNodeParser {
+                name: b"displayname",
+                namespace: DAV,
+            },
+        }));
+        let parsed = parse_xml(raw, &parser).unwrap().into_responses();
         assert_eq!(parsed.len(), 1);
         assert_eq!(
             parsed[0],
@@ -1021,7 +537,7 @@ mod more_tests {
                 href: "/path".to_string(),
                 variant: ResponseVariant::WithProps {
                     propstats: vec![PropStat {
-                        prop: StringProperty(Some("test calendar".to_string())),
+                        prop: Some("test calendar".to_string()),
                         status: StatusCode::OK,
                     }],
                 },
@@ -1034,7 +550,7 @@ mod more_tests {
 ///
 /// Implementations can have instance-specific attributes with specific details on extraction
 /// (e.g.: for handling runtime-defined fields, etc).
-trait XmlNode {
+pub trait XmlParser {
     type ParsedData;
 
     /// Parse a node with a given reader.
@@ -1052,9 +568,15 @@ trait XmlNode {
     ) -> Result<Self::ParsedData, Error>;
 }
 
-struct GetETag;
+pub trait NamedNodeParser: XmlParser {
+    fn name(&self) -> &[u8];
 
-impl XmlNode for GetETag {
+    fn namespace(&self) -> &[u8];
+}
+
+struct GetETagParser;
+
+impl XmlParser for GetETagParser {
     type ParsedData = Option<String>;
 
     fn parse<R: BufRead>(
@@ -1074,12 +596,649 @@ impl XmlNode for GetETag {
                 (ResolveResult::Unbound, Event::Text(text)) => {
                     etag = Some(text.unescape()?.to_string());
                 }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
                 (result, event) => {
-                    debug!("unexpected data in GetETag: {:?}, {:?}", result, event);
+                    debug!("unexpected data: {:?}, {:?}", result, event);
                 }
             };
         }
 
         Ok(etag)
+    }
+}
+
+struct StatusParser;
+
+impl XmlParser for StatusParser {
+    type ParsedData = Option<StatusCode>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut status = None;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"status" =>
+                {
+                    break;
+                }
+                (ResolveResult::Unbound, Event::Text(text)) => {
+                    status = Some(parse_statusline(text.unescape()?)?);
+                }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        Ok(status)
+    }
+}
+
+/// Parses a single [`PropStat`] node.
+struct PropStatParser<'a, Prop: XmlParser> {
+    /// A parser for the inner prop type.
+    prop: &'a Prop,
+}
+
+impl<'a, P: XmlParser> XmlParser for PropStatParser<'a, P> {
+    type ParsedData = PropStat<P::ParsedData>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut status = None;
+        let mut prop = None;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"status" =>
+                {
+                    status = StatusParser.parse(reader, buf)?;
+                }
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"prop" =>
+                {
+                    prop = Some(self.prop.parse(reader, buf)?);
+                }
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"propstat" =>
+                {
+                    break;
+                }
+                (ResolveResult::Unbound, Event::Text(text)) => {
+                    status = Some(parse_statusline(text.unescape()?)?);
+                }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        Ok(PropStat {
+            prop: prop.ok_or(Error::MissingData("prop"))?,
+            status: status.ok_or(Error::MissingData("status"))?,
+        })
+    }
+}
+
+/// A named node with a single `href` child.
+///
+/// This example:
+///
+/// ```xml
+/// <?xml version="1.0" encoding="utf-8"?>
+/// <multistatus xmlns="DAV:">
+///   <response>
+///     <href>/dav/calendars</href>
+///     <propstat>
+///       <prop>
+///         <current-user-principal>
+///           <href>/dav/principals/user/vdirsyncer@example.com/</href>
+///         </current-user-principal>
+///       </prop>
+///       <status>HTTP/1.1 200 OK</status>
+///     </propstat>
+///   </response>
+/// </multistatus>
+/// ```
+///
+/// Can be parsed with the following [`HrefParentParser`]:
+///
+/// ```rust
+/// # use libdav::xml::{PropParser, HrefParentParser};;
+/// let parser = PropParser {
+///     inner: &HrefParentParser {
+///         name: b"current-user-principal",
+///         namespace: b"DAV:",
+///     },
+/// };
+/// ```
+pub struct HrefParentParser<'a> {
+    pub namespace: &'a [u8],
+    pub name: &'a [u8],
+}
+
+impl NamedNodeParser for HrefParentParser<'_> {
+    #[inline]
+    fn name(&self) -> &[u8] {
+        &self.name
+    }
+
+    #[inline]
+    fn namespace(&self) -> &[u8] {
+        self.namespace
+    }
+}
+
+impl XmlParser for HrefParentParser<'_> {
+    type ParsedData = Option<String>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut value = None;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(namespace), Event::End(element))
+                    if namespace.as_ref() == self.namespace
+                        && element.local_name().as_ref() == self.name =>
+                {
+                    break;
+                }
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"href" =>
+                {
+                    value = TextNodeParser::HREF_PARSER.parse(reader, buf)?;
+                }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        Ok(value)
+    }
+}
+
+struct ReportParser;
+
+impl XmlParser for ReportParser {
+    type ParsedData = Option<bool>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut supports_sync = None;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"report" =>
+                {
+                    break;
+                }
+                (ResolveResult::Bound(NS_DAV), Event::Empty(element))
+                    if element.local_name().as_ref() == b"sync-collection" =>
+                {
+                    supports_sync = Some(true);
+                }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        Ok(supports_sync)
+    }
+}
+
+struct SupportedReportSetParser;
+
+impl XmlParser for SupportedReportSetParser {
+    type ParsedData = Option<bool>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut supports_sync = None;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"supported-report-set" =>
+                {
+                    break;
+                }
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"report" =>
+                {
+                    supports_sync = ReportParser.parse(reader, buf)?;
+                }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        Ok(supports_sync)
+    }
+}
+
+/// Parses a `getcontenttype` node.
+// TODO: The PROPERTY always has data: https://www.rfc-editor.org/rfc/rfc2518#section-13.5
+//       But there's also the empty node in: https://www.rfc-editor.org/rfc/rfc2518#section-8.1.3
+struct GetContentTypeParser;
+
+impl XmlParser for GetContentTypeParser {
+    type ParsedData = Option<String>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut content_type = None;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"getcontenttype" =>
+                {
+                    break;
+                }
+                (ResolveResult::Unbound, Event::Text(text)) => {
+                    content_type = Some(text.unescape()?.to_string());
+                }
+
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        Ok(content_type)
+    }
+}
+
+struct ResourceTypeParser;
+
+#[derive(Default)]
+struct ResourceType {
+    is_collection: bool,
+    is_calendar: bool,
+    is_address_book: bool,
+}
+
+impl XmlParser for ResourceTypeParser {
+    type ParsedData = ResourceType;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut resource_type = ResourceType::default();
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"resourcetype" =>
+                {
+                    break;
+                }
+                (ResolveResult::Bound(NS_DAV), Event::Empty(element))
+                    if element.local_name().as_ref() == b"collection" =>
+                {
+                    resource_type.is_collection = true;
+                }
+                (ResolveResult::Bound(NS_CALDAV), Event::Empty(element))
+                    if element.local_name().as_ref() == b"calendar" =>
+                {
+                    resource_type.is_calendar = true;
+                }
+                (ResolveResult::Bound(NS_CARDDAV), Event::Empty(element))
+                    if element.local_name().as_ref() == b"addressbook" =>
+                {
+                    resource_type.is_address_book = true;
+                }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        Ok(resource_type)
+    }
+}
+
+pub struct ResponseParser<'a, T: XmlParser>(pub(crate) &'a T);
+
+impl<'a, T: XmlParser> XmlParser for ResponseParser<'a, T> {
+    type ParsedData = Response<T::ParsedData>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut href = None;
+        let mut variant = ResponseVariantBuilder::None;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"href" =>
+                {
+                    let h = TextNodeParser::HREF_PARSER
+                        .parse(reader, buf)?
+                        .ok_or(Error::MissingData("text in href"))?;
+
+                    // The first `href` is stored separately.
+                    if href.is_some() {
+                        variant.add_href(h)?;
+                    } else {
+                        href = Some(h);
+                    }
+                }
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"propstat" =>
+                {
+                    let propstat = PropStatParser { prop: self.0 }.parse(reader, buf)?;
+
+                    match variant {
+                        ResponseVariantBuilder::None => {
+                            variant = ResponseVariantBuilder::WithProps {
+                                propstats: vec![propstat],
+                            };
+                        }
+                        ResponseVariantBuilder::WithProps { ref mut propstats } => {
+                            propstats.push(propstat);
+                        }
+                        ResponseVariantBuilder::WithoutProps { .. } => {
+                            return Err(Error::Parser(quick_xml::Error::UnexpectedToken(
+                                "propstat".to_string(),
+                            )))
+                        }
+                    }
+                }
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"status" =>
+                {
+                    match variant {
+                        ResponseVariantBuilder::None => {
+                            variant = ResponseVariantBuilder::WithoutProps {
+                                hrefs: Vec::new(),
+                                status: StatusParser.parse(reader, buf)?,
+                            };
+                        }
+                        ResponseVariantBuilder::WithProps { .. } => {
+                            return Err(Error::Parser(quick_xml::Error::UnexpectedToken(
+                                "status".to_string(),
+                            )))
+                        }
+                        ResponseVariantBuilder::WithoutProps { ref mut status, .. } => {
+                            *status = StatusParser.parse(reader, buf)?;
+                        }
+                    }
+                }
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"response" =>
+                {
+                    break
+                }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (resolve, event) => {
+                    debug!("unexpected event: {:?}, {:?}", resolve, event);
+                }
+            }
+        }
+
+        Ok(Response {
+            href: href.ok_or(Error::MissingData("href"))?,
+            variant: variant.build()?,
+        })
+    }
+}
+
+/// Parses an entire XML containing a [`Multistatus`] node.
+pub struct MultistatusDocumentParser<'a, T>(pub(crate) &'a T);
+
+impl<'a, T: XmlParser> XmlParser for MultistatusDocumentParser<'a, T> {
+    type ParsedData = Multistatus<T::ParsedData>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut multistatus = None::<Multistatus<T::ParsedData>>;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"multistatus" =>
+                {
+                    match multistatus {
+                        Some(ref mut m) => m
+                            .responses
+                            .append(&mut MultistatusParser(self.0).parse(reader, buf)?.responses),
+                        None => {
+                            multistatus = Some(MultistatusParser(self.0).parse(reader, buf)?);
+                        }
+                    }
+                }
+                (ResolveResult::Bound(NS_DAV), Event::Empty(element))
+                    if element.local_name().as_ref() == b"multistatus" =>
+                {
+                    if multistatus.is_none() {
+                        multistatus = Some(Multistatus::empty());
+                    }
+                }
+                (_, Event::Decl(_)) => {}
+                (_, Event::Eof) => {
+                    break;
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        multistatus.ok_or(Error::MissingData("multistatus"))
+    }
+}
+
+/// Parses a single [`Multistatus`] node.
+struct MultistatusParser<'a, T>(&'a T);
+
+impl<'a, T: XmlParser> XmlParser for MultistatusParser<'a, T> {
+    type ParsedData = Multistatus<T::ParsedData>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut items = Vec::new();
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::Start(element))
+                    if element.local_name().as_ref() == b"response" =>
+                {
+                    let item = self.0.parse(reader, buf)?;
+                    items.push(item);
+                }
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"multistatus" =>
+                {
+                    // XXX: orignal impl returns abruply here (e.g.: ends parent).
+                    break;
+                }
+                // (ResolveResult::Unbound, Event::Text(text)) => {
+                //     etag = Some(text.unescape()?.to_string());
+                // }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        Ok(Multistatus { responses: items })
+    }
+}
+
+/// A `prop` node which contains a single node.
+pub struct PropParser<'a, X: NamedNodeParser> {
+    pub inner: &'a X,
+}
+
+impl<'a, X: NamedNodeParser> XmlParser for PropParser<'a, X> {
+    type ParsedData = X::ParsedData;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut inner = None;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"prop" =>
+                {
+                    break;
+                }
+                (ResolveResult::Bound(namespace), Event::Start(element))
+                    if namespace.as_ref() == self.inner.namespace()
+                        && element.local_name().as_ref() == self.inner.name() =>
+                {
+                    inner = Some(self.inner.parse(reader, buf)?);
+                }
+                (ResolveResult::Bound(namespace), Event::Empty(element))
+                    if namespace.as_ref() == self.inner.namespace()
+                        && element.local_name().as_ref() == self.inner.name() =>
+                {
+                    // no-op
+                }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        inner.ok_or(Error::MissingData("inner data for propparser"))
+    }
+}
+
+/// A node with just has text (or cdata) content.
+pub(crate) struct TextNodeParser<'a> {
+    pub namespace: &'a [u8],
+    pub name: &'a [u8],
+}
+
+impl TextNodeParser<'_> {
+    const HREF_PARSER: TextNodeParser<'static> = TextNodeParser {
+        namespace: DAV,
+        name: b"href",
+    };
+}
+
+impl<'a> XmlParser for TextNodeParser<'a> {
+    type ParsedData = Option<String>;
+
+    fn parse<R: BufRead>(
+        &self,
+        reader: &mut NsReader<R>,
+        buf: &mut Vec<u8>,
+    ) -> Result<Self::ParsedData, Error> {
+        let mut value = None;
+
+        loop {
+            match reader.read_resolved_event_into(buf)? {
+                (ResolveResult::Bound(namespace), Event::End(element))
+                    if namespace.as_ref() == self.namespace
+                        && element.local_name().as_ref() == self.name =>
+                {
+                    break;
+                }
+                (ResolveResult::Unbound, Event::Text(text)) => {
+                    value = Some(text.unescape()?.to_string());
+                }
+                (ResolveResult::Unbound, Event::CData(cdata)) => {
+                    let text = std::str::from_utf8(&cdata.into_inner())
+                        .map_err(|e| Error::Parser(quick_xml::Error::NonDecodable(Some(e))))?
+                        .to_string();
+                    value = Some(text);
+                }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            };
+        }
+
+        Ok(value)
+    }
+}
+
+impl NamedNodeParser for TextNodeParser<'_> {
+    #[inline]
+    fn name(&self) -> &[u8] {
+        &self.name
+    }
+
+    #[inline]
+    fn namespace(&self) -> &[u8] {
+        self.namespace
     }
 }

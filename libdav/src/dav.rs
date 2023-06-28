@@ -12,8 +12,9 @@ use crate::{
     auth::AuthExt,
     dns::DiscoverableService,
     xml::{
-        self, FromXml, HrefProperty, ItemDetails, Multistatus, Report, ReportField, Response,
-        ResponseVariant, SimplePropertyMeta, StringProperty, CALDAV_STR, CARDDAV_STR, DAV,
+        self, HrefParentParser, ItemDetails, ItemDetailsParser, Multistatus,
+        MultistatusDocumentParser, PropParser, ReportPropParser, Response, ResponseParser,
+        ResponseVariant, TextNodeParser, XmlParser, CALDAV_STR, CARDDAV_STR, DAV,
     },
     Auth, AuthError, FetchedResource, FetchedResourceContent,
 };
@@ -163,14 +164,16 @@ impl WebDavClient {
     pub async fn find_current_user_principal(
         &self,
     ) -> Result<Option<Uri>, FindCurrentUserPrincipalError> {
-        let property_data = SimplePropertyMeta {
-            name: b"current-user-principal".to_vec(),
-            namespace: xml::DAV.to_vec(),
+        let parser = PropParser {
+            inner: &HrefParentParser {
+                name: b"current-user-principal",
+                namespace: xml::DAV,
+            },
         };
 
         // Try querying the provided base url...
         let maybe_principal = self
-            .find_href_prop_as_uri(&self.base_url, "<current-user-principal/>", &property_data)
+            .find_href_prop_as_uri(&self.base_url, "<current-user-principal/>", &parser)
             .await;
 
         match maybe_principal {
@@ -181,7 +184,7 @@ impl WebDavClient {
 
         // ... Otherwise, try querying the root path.
         let root = self.relative_uri("/")?;
-        self.find_href_prop_as_uri(&root, "<current-user-principal/>", &property_data)
+        self.find_href_prop_as_uri(&root, "<current-user-principal/>", &parser)
             .await
             .map_err(FindCurrentUserPrincipalError::RequestError)
 
@@ -192,18 +195,14 @@ impl WebDavClient {
     /// Internal helper to find an `href` property
     ///
     /// Very specific, but de-duplicates a few identical methods.
-    pub(crate) async fn find_href_prop_as_uri(
+    pub(crate) async fn find_href_prop_as_uri<X: XmlParser<ParsedData = Option<String>>>(
         &self,
         url: &Uri,
         prop: &str,
-        prop_type: &SimplePropertyMeta,
+        parser: &X,
     ) -> Result<Option<Uri>, DavError> {
-        let maybe_href = match self
-            .propfind::<HrefProperty>(url, prop, 0, prop_type)
-            .await?
-            .pop()
-        {
-            Some(prop) => prop.into_maybe_string(),
+        let maybe_href = match self.propfind(url, prop, 0, parser).await?.pop() {
+            Some(prop) => prop.first_prop(),
             None => return Ok(None),
         };
 
@@ -227,13 +226,13 @@ impl WebDavClient {
     /// # Errors
     ///
     /// See [`request_multistatus`](Self::request_multistatus).
-    pub async fn propfind<T: FromXml>(
+    pub async fn propfind<X: XmlParser>(
         &self,
         url: &Uri,
         prop: &str,
         depth: u8,
-        data: &T::ExtractionData,
-    ) -> Result<Vec<Response<T>>, DavError> {
+        parser: &X,
+    ) -> Result<Vec<Response<X::ParsedData>>, DavError> {
         let request = self
             .request_builder()?
             .method(Method::from_bytes(b"PROPFIND").expect("API for HTTP methods is stupid"))
@@ -244,7 +243,8 @@ impl WebDavClient {
                 r#"<propfind xmlns="DAV:"><prop>{prop}</prop></propfind>"#
             )))?;
 
-        self.request_multistatus(request, data)
+        let parser = ResponseParser(parser);
+        self.request_multistatus(request, &parser)
             .await
             .map(Multistatus::into_responses)
     }
@@ -257,15 +257,16 @@ impl WebDavClient {
     /// - If the server returns an error status code.
     /// - If the response is not a valid XML document.
     /// - If the response's XML schema does not match the expected type.
-    pub async fn request_multistatus<T: FromXml>(
+    pub async fn request_multistatus<T: XmlParser>(
         &self,
         request: Request<Body>,
-        data: &T::ExtractionData,
-    ) -> Result<Multistatus<T>, DavError> {
+        parser: &T,
+    ) -> Result<Multistatus<T::ParsedData>, DavError> {
         let (head, body) = self.request(request).await?;
         check_status(head.status)?;
 
-        xml::parse_xml::<Multistatus<T>>(&body, data).map_err(DavError::from)
+        let parser = MultistatusDocumentParser(parser);
+        xml::parse_xml(&body, &parser).map_err(DavError::from)
     }
 
     // Internal wrapper around `http_client.request` that logs all response bodies.
@@ -295,20 +296,22 @@ impl WebDavClient {
     pub async fn get_collection_displayname(&self, href: &str) -> Result<Option<String>, DavError> {
         let url = self.relative_uri(href)?;
 
-        let property_data = SimplePropertyMeta {
-            name: b"displayname".to_vec(),
-            namespace: DAV.to_vec(),
+        let parser = PropParser {
+            inner: &TextNodeParser {
+                name: b"displayname",
+                namespace: DAV,
+            },
         };
 
-        self.propfind::<StringProperty>(&url, "<displayname/>", 0, &property_data)
+        self.propfind(&url, "<displayname/>", 0, &parser)
             .await?
             .pop()
             .ok_or(xml::Error::MissingData("displayname"))
-            .map(Option::<String>::from)
+            .map(Response::first_prop)
             .map_err(DavError::from)
     }
 
-    pub async fn propupdate<T: FromXml>(
+    pub async fn propupdate(
         &self,
         url: &Uri,
         prop: &str,
@@ -357,7 +360,7 @@ impl WebDavClient {
         displayname: Option<&str>,
     ) -> Result<(), DavError> {
         let url = self.relative_uri(href)?;
-        self.propupdate::<StringProperty>(&url, "displayname", "DAV:", displayname)
+        self.propupdate(&url, "displayname", "DAV:", displayname)
             .await
     }
 
@@ -437,7 +440,12 @@ impl WebDavClient {
         let url = self.relative_uri(collection_href)?;
 
         let items = self
-            .propfind::<ItemDetails>(&url, "<resourcetype/><getcontenttype/><getetag/>", 1, &())
+            .propfind::<ItemDetailsParser>(
+                &url,
+                "<resourcetype/><getcontenttype/><getetag/>",
+                1,
+                &ItemDetailsParser,
+            )
             .await?
             .into_iter()
             .filter(|r| r.href != collection_href);
@@ -652,7 +660,7 @@ impl WebDavClient {
         &self,
         collection_href: &str,
         body: String,
-        data: &ReportField,
+        data: &ReportPropParser,
     ) -> Result<Vec<FetchedResource>, DavError> {
         let request = self
             .request_builder()?
@@ -661,8 +669,9 @@ impl WebDavClient {
             .header("Content-Type", "application/xml; charset=utf-8")
             .body(Body::from(body))?;
 
+        let parser = ResponseParser(data);
         let responses = self
-            .request_multistatus::<Response<Report>>(request, data)
+            .request_multistatus(request, &parser)
             .await?
             .into_responses();
 
