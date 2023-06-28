@@ -152,6 +152,8 @@ impl<'a> Component<'a> {
     ///
     /// Calendar components will be put inside their own wrapper (e.g.: a `VEVENT` will be wrapped
     /// inside its own `VCALENDAR`.
+    ///
+    /// [`Collection`]: crate::base::Collection
     fn split_inner(
         self: Component<'a>,
         inline: &mut Vec<Component<'a>>,
