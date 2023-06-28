@@ -110,11 +110,18 @@ impl CalDavClient {
         Ok(self)
     }
 
+    /// Queries a server for the calendar home set.
+    ///
+    /// See: <https://www.rfc-editor.org/rfc/rfc4791#section-6.2.1>
+    ///
+    /// # Errors
+    ///
+    /// If there are any network errors or the response could not be parsed.
     async fn find_calendar_home_set(&self, url: &Uri) -> Result<Option<Uri>, FindHomeSetError> {
         let parser = PropParser {
             inner: &HrefParentParser {
                 name: b"calendar-home-set",
-                namespace: &crate::xml::CALDAV,
+                namespace: crate::xml::CALDAV,
             },
         };
 
@@ -214,9 +221,14 @@ impl CalDavClient {
         .map(Response::first_prop)
     }
 
-    /// Sets the `displayname` for a collection
+    /// Sets the `colour` for a collection
     ///
-    /// The `displayname` string is expected not to be escaped.
+    /// The `colour` string should be an unescaped hex value with a leading pound sign (e.g.
+    /// `#ff0000`).
+    ///
+    /// # Errors
+    ///
+    /// If there are any network errors or the response could not be parsed.
     pub async fn set_calendar_colour(
         &self,
         href: &str,

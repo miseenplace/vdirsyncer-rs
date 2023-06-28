@@ -311,6 +311,11 @@ impl WebDavClient {
             .map_err(DavError::from)
     }
 
+    /// Sends a `PROPUPDATE` query to the server.
+    ///
+    /// # Errors
+    ///
+    /// If there are any network errors or the response could not be parsed.
     pub async fn propupdate(
         &self,
         url: &Uri,
@@ -354,6 +359,10 @@ impl WebDavClient {
     /// Sets the `displayname` for a collection
     ///
     /// The `displayname` string is expected not to be escaped.
+    ///
+    /// # Errors
+    ///
+    /// If there are any network errors or the response could not be parsed.
     pub async fn set_collection_displayname(
         &self,
         href: &str,

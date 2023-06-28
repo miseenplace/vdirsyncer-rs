@@ -210,6 +210,7 @@ pub enum ResponseVariant<T> {
 
 impl<T> Response<Option<T>> {
     /// Returns the first prop inside the response, if any.
+    #[must_use]
     pub fn first_prop(self) -> Option<T> {
         if let ResponseVariant::WithProps { mut propstats } = self.variant {
             propstats.pop()?.prop
@@ -545,7 +546,7 @@ pub trait XmlParser {
     /// If an error is not returned, then the reader is guaranteed to have read the corresponding
     /// end tag for the XML node.
     ///
-    /// # Error
+    /// # Errors
     ///
     /// See [`Error`].
     fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error>;
@@ -708,7 +709,7 @@ pub struct HrefParentParser<'a> {
 impl NamedNodeParser for HrefParentParser<'_> {
     #[inline]
     fn name(&self) -> &[u8] {
-        &self.name
+        self.name
     }
 
     #[inline]
@@ -1165,7 +1166,7 @@ impl<'a> XmlParser for TextNodeParser<'a> {
 impl NamedNodeParser for TextNodeParser<'_> {
     #[inline]
     fn name(&self) -> &[u8] {
-        &self.name
+        self.name
     }
 
     #[inline]
