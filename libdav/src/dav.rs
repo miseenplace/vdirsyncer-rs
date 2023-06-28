@@ -13,8 +13,8 @@ use crate::{
     dns::DiscoverableService,
     xml::{
         self, HrefParentParser, ItemDetails, ItemDetailsParser, Multistatus,
-        MultistatusDocumentParser, Parser, PropParser, ReportPropParser, Response, ResponseParser,
-        ResponseVariant, SelfClosingPropertyNode, TextNodeParser, CALDAV_STR, CARDDAV_STR, DAV,
+        MultistatusDocumentParser, Parser, PropParser, ReportPropParser, Response, ResponseVariant,
+        SelfClosingPropertyNode, TextNodeParser, CALDAV_STR, CARDDAV_STR, DAV,
     },
     Auth, AuthError, FetchedResource, FetchedResourceContent,
 };
@@ -243,8 +243,7 @@ impl WebDavClient {
                 r#"<propfind xmlns="DAV:"><prop>{prop}</prop></propfind>"#
             )))?;
 
-        let parser = ResponseParser(parser);
-        self.request_multistatus(request, &parser)
+        self.request_multistatus(request, parser)
             .await
             .map(Multistatus::into_responses)
     }
@@ -355,7 +354,6 @@ impl WebDavClient {
             namespace: prop.as_bytes(),
             name: prop_ns.as_bytes(),
         };
-        let parser = &ResponseParser(parser);
         let parser = MultistatusDocumentParser(parser);
         let response = xml::parse_xml(&body, &parser).map_err(DavError::from)?;
 
@@ -688,7 +686,7 @@ impl WebDavClient {
         &self,
         collection_href: &str,
         body: String,
-        data: &ReportPropParser,
+        parser: &ReportPropParser,
     ) -> Result<Vec<FetchedResource>, DavError> {
         let request = self
             .request_builder()?
@@ -697,9 +695,8 @@ impl WebDavClient {
             .header("Content-Type", "application/xml; charset=utf-8")
             .body(Body::from(body))?;
 
-        let parser = ResponseParser(data);
         let responses = self
-            .request_multistatus(request, &parser)
+            .request_multistatus(request, parser)
             .await?
             .into_responses();
 

@@ -295,12 +295,13 @@ impl<T> ResponseVariantBuilder<T> {
     }
 }
 
-/// A `multistatus` response.
+/// A [`multistatus` element](https://www.rfc-editor.org/rfc/rfc2518#section-12.9).
 ///
-/// See: <https://www.rfc-editor.org/rfc/rfc2518#section-12.9>
+/// A multistatus element always contains one or more [`Response`] elements. The generic type `T`
+/// corresponds to the generic type `T` for the [`PropStat`] elements inside the `Response`.
 #[derive(Debug)]
 pub struct Multistatus<T> {
-    pub responses: Vec<T>,
+    pub responses: Vec<Response<T>>,
     // TODO: responsedescription
 }
 
@@ -314,7 +315,7 @@ impl<T> Multistatus<T> {
 
     #[must_use]
     #[inline]
-    pub fn into_responses(self) -> Vec<T> {
+    pub fn into_responses(self) -> Vec<Response<T>> {
         self.responses
     }
 }
@@ -370,7 +371,7 @@ mod more_tests {
   </response>
 </multistatus>"#;
 
-        let parser = MultistatusDocumentParser(&ResponseParser(&ItemDetailsParser));
+        let parser = MultistatusDocumentParser(&ItemDetailsParser);
         let parsed = parse_xml(raw, &parser).unwrap().into_responses();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0], Response {
@@ -438,7 +439,7 @@ mod more_tests {
         </d:propstat>
     </d:response>
 </d:multistatus>"#;
-        let parser = MultistatusDocumentParser(&ResponseParser(&ItemDetailsParser));
+        let parser = MultistatusDocumentParser(&ItemDetailsParser);
         let parsed = parse_xml(raw, &parser).unwrap().into_responses();
         assert_eq!(parsed.len(), 1);
         match &parsed.first().unwrap().variant {
@@ -467,7 +468,7 @@ mod more_tests {
 		<ns0:status>HTTP/1.1 404 Not Found</ns0:status>
 	</ns0:response>
 </ns0:multistatus>"#;
-        let parser = MultistatusDocumentParser(&ResponseParser(&crate::caldav::CALENDAR_DATA));
+        let parser = MultistatusDocumentParser(&crate::caldav::CALENDAR_DATA);
         let parsed = parse_xml(raw, &parser).unwrap().into_responses();
         assert_eq!(parsed.len(), 2);
         assert_eq!(
@@ -500,7 +501,7 @@ mod more_tests {
     #[test]
     fn test_empty_response() {
         let raw = br#"<multistatus xmlns="DAV:" />"#;
-        let parser = MultistatusDocumentParser(&ResponseParser(&ItemDetailsParser));
+        let parser = MultistatusDocumentParser(&ItemDetailsParser);
         let parsed = parse_xml(raw, &parser).unwrap().into_responses();
         assert_eq!(parsed.len(), 0);
     }
@@ -520,12 +521,12 @@ mod more_tests {
                 </response>
             </multistatus>
             "#;
-        let parser = MultistatusDocumentParser(&ResponseParser(&PropParser {
+        let parser = MultistatusDocumentParser(&PropParser {
             inner: &TextNodeParser {
                 name: b"displayname",
                 namespace: DAV,
             },
-        }));
+        });
         let parsed = parse_xml(raw, &parser).unwrap().into_responses();
         assert_eq!(parsed.len(), 1);
         assert_eq!(
@@ -910,7 +911,7 @@ impl Parser for ResourceTypeParser {
     }
 }
 
-pub struct ResponseParser<'a, T: Parser>(pub(crate) &'a T);
+struct ResponseParser<'a, T: Parser>(&'a T);
 
 impl<'a, T: Parser> Parser for ResponseParser<'a, T> {
     type ParsedData = Response<T::ParsedData>;
@@ -998,6 +999,8 @@ impl<'a, T: Parser> Parser for ResponseParser<'a, T> {
 }
 
 /// Parses an entire XML containing a [`Multistatus`] node.
+///
+/// The parametrised type `T` is the parser for the node contained inside each `response` node.
 pub struct MultistatusDocumentParser<'a, T>(pub(crate) &'a T);
 
 impl<'a, T: Parser> Parser for MultistatusDocumentParser<'a, T> {
@@ -1055,7 +1058,7 @@ impl<'a, T: Parser> Parser for MultistatusParser<'a, T> {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"response" =>
                 {
-                    let item = self.0.parse(reader)?;
+                    let item = ResponseParser(self.0).parse(reader)?;
                     items.push(item);
                 }
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
