@@ -236,7 +236,7 @@ impl Storage<VcardItem> for CardDavStorage {
             .await
             // FIXME: etag may be missing. In such case, we should fetch it.
             .map(|opt| opt.ok_or(Error::new(ErrorKind::InvalidData, "No Etag in response")))?
-            .map(|e| e.into())
+            .map(Etag::from)
     }
 
     /// # Panics
