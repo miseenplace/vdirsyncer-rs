@@ -148,6 +148,11 @@ impl XmlParser for ReportPropParser {
 
         loop {
             match reader.read_resolved_event()? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"prop" =>
+                {
+                    break;
+                }
                 (ResolveResult::Bound(namespace), Event::Start(element))
                     if namespace.as_ref() == self.namespace
                         && element.local_name().as_ref() == self.name =>
@@ -162,11 +167,6 @@ impl XmlParser for ReportPropParser {
                     if element.local_name().as_ref() == b"getetag" =>
                 {
                     etag = GetETagParser.parse(reader)?;
-                }
-                (ResolveResult::Bound(NS_DAV), Event::End(element))
-                    if element.local_name().as_ref() == b"prop" =>
-                {
-                    break;
                 }
                 (_, Event::Eof) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
@@ -634,6 +634,11 @@ impl<'a, P: XmlParser> XmlParser for PropStatParser<'a, P> {
 
         loop {
             match reader.read_resolved_event()? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"propstat" =>
+                {
+                    break;
+                }
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"status" =>
                 {
@@ -643,11 +648,6 @@ impl<'a, P: XmlParser> XmlParser for PropStatParser<'a, P> {
                     if element.local_name().as_ref() == b"prop" =>
                 {
                     prop = Some(self.prop.parse(reader)?);
-                }
-                (ResolveResult::Bound(NS_DAV), Event::End(element))
-                    if element.local_name().as_ref() == b"propstat" =>
-                {
-                    break;
                 }
                 (ResolveResult::Unbound, Event::Text(text)) => {
                     status = Some(parse_statusline(text.unescape()?)?);
@@ -911,6 +911,11 @@ impl<'a, T: XmlParser> XmlParser for ResponseParser<'a, T> {
 
         loop {
             match reader.read_resolved_event()? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"response" =>
+                {
+                    break
+                }
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"href" =>
                 {
@@ -966,11 +971,6 @@ impl<'a, T: XmlParser> XmlParser for ResponseParser<'a, T> {
                         }
                     }
                 }
-                (ResolveResult::Bound(NS_DAV), Event::End(element))
-                    if element.local_name().as_ref() == b"response" =>
-                {
-                    break
-                }
                 (_, Event::Eof) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
                 }
@@ -998,6 +998,9 @@ impl<'a, T: XmlParser> XmlParser for MultistatusDocumentParser<'a, T> {
 
         loop {
             match reader.read_resolved_event()? {
+                (_, Event::Eof) => {
+                    break;
+                }
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"multistatus" =>
                 {
@@ -1018,9 +1021,6 @@ impl<'a, T: XmlParser> XmlParser for MultistatusDocumentParser<'a, T> {
                     }
                 }
                 (_, Event::Decl(_)) => {}
-                (_, Event::Eof) => {
-                    break;
-                }
                 (result, event) => {
                     debug!("unexpected data: {:?}, {:?}", result, event);
                 }
