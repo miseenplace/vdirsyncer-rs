@@ -7,7 +7,6 @@ use http::{status::InvalidStatusCode, StatusCode};
 use log::{debug, warn};
 use quick_xml::name::Namespace;
 use quick_xml::{events::Event, name::ResolveResult, NsReader};
-use std::io::BufRead;
 use std::str::FromStr;
 
 /// Namespace for properties defined in webdav specifications.
@@ -58,11 +57,7 @@ pub(crate) struct ItemDetailsParser;
 impl XmlParser for ItemDetailsParser {
     type ParsedData = ItemDetails;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut item = ItemDetails {
             content_type: None,
             etag: None,
@@ -73,7 +68,7 @@ impl XmlParser for ItemDetailsParser {
         };
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
                     if element.local_name().as_ref() == b"prop" =>
                 {
@@ -82,7 +77,7 @@ impl XmlParser for ItemDetailsParser {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"resourcetype" =>
                 {
-                    let resource_type = ResourceTypeParser.parse(reader, buf)?;
+                    let resource_type = ResourceTypeParser.parse(reader)?;
                     item.is_collection = resource_type.is_collection;
                     item.is_calendar = resource_type.is_calendar;
                     item.is_address_book = resource_type.is_address_book;
@@ -90,19 +85,17 @@ impl XmlParser for ItemDetailsParser {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"getcontenttype" =>
                 {
-                    item.content_type = GetContentTypeParser.parse(reader, buf)?;
+                    item.content_type = GetContentTypeParser.parse(reader)?;
                 }
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"getetag" =>
                 {
-                    item.etag = GetETagParser.parse(reader, buf)?;
+                    item.etag = GetETagParser.parse(reader)?;
                 }
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"supported-report-set" =>
                 {
-                    item.supports_sync = SupportedReportSetParser
-                        .parse(reader, buf)?
-                        .unwrap_or(false);
+                    item.supports_sync = SupportedReportSetParser.parse(reader)?.unwrap_or(false);
                 }
                 (ResolveResult::Bound(NS_DAV), Event::Empty(element))
                     if element.local_name().as_ref() == b"resourcetype" => {}
@@ -149,16 +142,12 @@ impl ReportPropParser {}
 impl XmlParser for ReportPropParser {
     type ParsedData = ReportProp;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut etag = None;
         let mut data = None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(namespace), Event::Start(element))
                     if namespace.as_ref() == self.namespace
                         && element.local_name().as_ref() == self.name =>
@@ -167,12 +156,12 @@ impl XmlParser for ReportPropParser {
                         namespace: self.namespace,
                         name: self.name,
                     }
-                    .parse(reader, buf)?;
+                    .parse(reader)?;
                 }
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"getetag" =>
                 {
-                    etag = GetETagParser.parse(reader, buf)?;
+                    etag = GetETagParser.parse(reader)?;
                 }
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
                     if element.local_name().as_ref() == b"prop" =>
@@ -335,9 +324,7 @@ where
 {
     let mut reader = NsReader::from_reader(raw);
     reader.trim_text(true);
-
-    let mut buf = Vec::new();
-    parser.parse(&mut reader, &mut buf)
+    parser.parse(&mut reader)
 }
 
 #[cfg(test)]
@@ -561,11 +548,7 @@ pub trait XmlParser {
     /// # Error
     ///
     /// See [`Error`].
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error>;
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error>;
 }
 
 pub trait NamedNodeParser: XmlParser {
@@ -579,15 +562,11 @@ struct GetETagParser;
 impl XmlParser for GetETagParser {
     type ParsedData = Option<String>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut etag = None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
                     if element.local_name().as_ref() == b"getetag" =>
                 {
@@ -614,15 +593,11 @@ struct StatusParser;
 impl XmlParser for StatusParser {
     type ParsedData = Option<StatusCode>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut status = None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
                     if element.local_name().as_ref() == b"status" =>
                 {
@@ -653,25 +628,21 @@ struct PropStatParser<'a, Prop: XmlParser> {
 impl<'a, P: XmlParser> XmlParser for PropStatParser<'a, P> {
     type ParsedData = PropStat<P::ParsedData>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut status = None;
         let mut prop = None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"status" =>
                 {
-                    status = StatusParser.parse(reader, buf)?;
+                    status = StatusParser.parse(reader)?;
                 }
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"prop" =>
                 {
-                    prop = Some(self.prop.parse(reader, buf)?);
+                    prop = Some(self.prop.parse(reader)?);
                 }
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
                     if element.local_name().as_ref() == b"propstat" =>
@@ -749,15 +720,11 @@ impl NamedNodeParser for HrefParentParser<'_> {
 impl XmlParser for HrefParentParser<'_> {
     type ParsedData = Option<String>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut value = None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(namespace), Event::End(element))
                     if namespace.as_ref() == self.namespace
                         && element.local_name().as_ref() == self.name =>
@@ -767,7 +734,7 @@ impl XmlParser for HrefParentParser<'_> {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"href" =>
                 {
-                    value = TextNodeParser::HREF_PARSER.parse(reader, buf)?;
+                    value = TextNodeParser::HREF_PARSER.parse(reader)?;
                 }
                 (_, Event::Eof) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
@@ -787,15 +754,11 @@ struct ReportParser;
 impl XmlParser for ReportParser {
     type ParsedData = Option<bool>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut supports_sync = None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
                     if element.local_name().as_ref() == b"report" =>
                 {
@@ -824,15 +787,11 @@ struct SupportedReportSetParser;
 impl XmlParser for SupportedReportSetParser {
     type ParsedData = Option<bool>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut supports_sync = None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
                     if element.local_name().as_ref() == b"supported-report-set" =>
                 {
@@ -841,7 +800,7 @@ impl XmlParser for SupportedReportSetParser {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"report" =>
                 {
-                    supports_sync = ReportParser.parse(reader, buf)?;
+                    supports_sync = ReportParser.parse(reader)?;
                 }
                 (_, Event::Eof) => {
                     return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
@@ -864,15 +823,11 @@ struct GetContentTypeParser;
 impl XmlParser for GetContentTypeParser {
     type ParsedData = Option<String>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut content_type = None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
                     if element.local_name().as_ref() == b"getcontenttype" =>
                 {
@@ -907,15 +862,11 @@ struct ResourceType {
 impl XmlParser for ResourceTypeParser {
     type ParsedData = ResourceType;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut resource_type = ResourceType::default();
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
                     if element.local_name().as_ref() == b"resourcetype" =>
                 {
@@ -954,21 +905,17 @@ pub struct ResponseParser<'a, T: XmlParser>(pub(crate) &'a T);
 impl<'a, T: XmlParser> XmlParser for ResponseParser<'a, T> {
     type ParsedData = Response<T::ParsedData>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut href = None;
         let mut variant = ResponseVariantBuilder::None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"href" =>
                 {
                     let h = TextNodeParser::HREF_PARSER
-                        .parse(reader, buf)?
+                        .parse(reader)?
                         .ok_or(Error::MissingData("text in href"))?;
 
                     // The first `href` is stored separately.
@@ -981,7 +928,7 @@ impl<'a, T: XmlParser> XmlParser for ResponseParser<'a, T> {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"propstat" =>
                 {
-                    let propstat = PropStatParser { prop: self.0 }.parse(reader, buf)?;
+                    let propstat = PropStatParser { prop: self.0 }.parse(reader)?;
 
                     match variant {
                         ResponseVariantBuilder::None => {
@@ -1006,7 +953,7 @@ impl<'a, T: XmlParser> XmlParser for ResponseParser<'a, T> {
                         ResponseVariantBuilder::None => {
                             variant = ResponseVariantBuilder::WithoutProps {
                                 hrefs: Vec::new(),
-                                status: StatusParser.parse(reader, buf)?,
+                                status: StatusParser.parse(reader)?,
                             };
                         }
                         ResponseVariantBuilder::WithProps { .. } => {
@@ -1015,7 +962,7 @@ impl<'a, T: XmlParser> XmlParser for ResponseParser<'a, T> {
                             )))
                         }
                         ResponseVariantBuilder::WithoutProps { ref mut status, .. } => {
-                            *status = StatusParser.parse(reader, buf)?;
+                            *status = StatusParser.parse(reader)?;
                         }
                     }
                 }
@@ -1046,24 +993,20 @@ pub struct MultistatusDocumentParser<'a, T>(pub(crate) &'a T);
 impl<'a, T: XmlParser> XmlParser for MultistatusDocumentParser<'a, T> {
     type ParsedData = Multistatus<T::ParsedData>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut multistatus = None::<Multistatus<T::ParsedData>>;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"multistatus" =>
                 {
                     match multistatus {
                         Some(ref mut m) => m
                             .responses
-                            .append(&mut MultistatusParser(self.0).parse(reader, buf)?.responses),
+                            .append(&mut MultistatusParser(self.0).parse(reader)?.responses),
                         None => {
-                            multistatus = Some(MultistatusParser(self.0).parse(reader, buf)?);
+                            multistatus = Some(MultistatusParser(self.0).parse(reader)?);
                         }
                     }
                 }
@@ -1094,19 +1037,15 @@ struct MultistatusParser<'a, T>(&'a T);
 impl<'a, T: XmlParser> XmlParser for MultistatusParser<'a, T> {
     type ParsedData = Multistatus<T::ParsedData>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut items = Vec::new();
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"response" =>
                 {
-                    let item = self.0.parse(reader, buf)?;
+                    let item = self.0.parse(reader)?;
                     items.push(item);
                 }
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
@@ -1139,15 +1078,11 @@ pub struct PropParser<'a, X: NamedNodeParser> {
 impl<'a, X: NamedNodeParser> XmlParser for PropParser<'a, X> {
     type ParsedData = X::ParsedData;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut inner = None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(NS_DAV), Event::End(element))
                     if element.local_name().as_ref() == b"prop" =>
                 {
@@ -1157,7 +1092,7 @@ impl<'a, X: NamedNodeParser> XmlParser for PropParser<'a, X> {
                     if namespace.as_ref() == self.inner.namespace()
                         && element.local_name().as_ref() == self.inner.name() =>
                 {
-                    inner = Some(self.inner.parse(reader, buf)?);
+                    inner = Some(self.inner.parse(reader)?);
                 }
                 (ResolveResult::Bound(namespace), Event::Empty(element))
                     if namespace.as_ref() == self.inner.namespace()
@@ -1194,15 +1129,11 @@ impl TextNodeParser<'_> {
 impl<'a> XmlParser for TextNodeParser<'a> {
     type ParsedData = Option<String>;
 
-    fn parse<R: BufRead>(
-        &self,
-        reader: &mut NsReader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<Self::ParsedData, Error> {
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
         let mut value = None;
 
         loop {
-            match reader.read_resolved_event_into(buf)? {
+            match reader.read_resolved_event()? {
                 (ResolveResult::Bound(namespace), Event::End(element))
                     if namespace.as_ref() == self.namespace
                         && element.local_name().as_ref() == self.name =>
