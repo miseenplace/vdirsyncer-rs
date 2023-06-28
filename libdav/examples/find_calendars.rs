@@ -67,7 +67,7 @@ async fn main() {
             .await
             .unwrap()
             .into_iter()
-            .filter(|i| !i.details.is_collection);
+            .filter(|i| !i.details.resource_type.is_collection);
         for item in items {
             println!("   {}, {}", item.href, item.details.etag.unwrap());
         }

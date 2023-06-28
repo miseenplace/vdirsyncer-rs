@@ -44,10 +44,7 @@ pub enum Error {
 pub struct ItemDetails {
     pub content_type: Option<String>,
     pub etag: Option<String>,
-    // TODO: replace these three fields with ResourceType
-    pub is_collection: bool,
-    pub is_calendar: bool,
-    pub is_address_book: bool,
+    pub resource_type: ResourceType,
     /// From: <https://www.rfc-editor.org/rfc/rfc6578>
     pub supports_sync: bool,
 }
@@ -61,9 +58,7 @@ impl Parser for ItemDetailsParser {
         let mut item = ItemDetails {
             content_type: None,
             etag: None,
-            is_collection: false,
-            is_calendar: false,
-            is_address_book: false,
+            resource_type: ResourceType::default(),
             supports_sync: false,
         };
 
@@ -77,10 +72,7 @@ impl Parser for ItemDetailsParser {
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"resourcetype" =>
                 {
-                    let resource_type = ResourceTypeParser.parse(reader)?;
-                    item.is_collection = resource_type.is_collection;
-                    item.is_calendar = resource_type.is_calendar;
-                    item.is_address_book = resource_type.is_address_book;
+                    item.resource_type = ResourceTypeParser.parse(reader)?;
                 }
                 (ResolveResult::Bound(NS_DAV), Event::Start(element))
                     if element.local_name().as_ref() == b"getcontenttype" =>
@@ -376,9 +368,11 @@ mod more_tests {
                         prop: ItemDetails {
                             content_type: Some("text/calendar; charset=utf-8".to_string()),
                             etag: Some("\"1591712486-1-1\"".to_string()),
-                            is_collection: true,
-                            is_calendar: true,
-                            is_address_book: false,
+                            resource_type: ResourceType {
+                                is_collection: true,
+                                is_calendar: true,
+                                is_address_book: false,
+                            },
                             supports_sync: false,
                         },
                         status: StatusCode::OK,
@@ -394,9 +388,11 @@ mod more_tests {
                         prop: ItemDetails {
                             content_type: Some("text/calendar; charset=utf-8; component=VEVENT".to_string()),
                             etag: Some("\"e7577ff2b0924fe8e9a91d3fb2eb9072598bf9fb\"".to_string()),
-                            is_collection: false,
-                            is_calendar: false,
-                            is_address_book: false,
+                            resource_type: ResourceType {
+                                is_collection: false,
+                                is_calendar: false,
+                                is_address_book: false,
+                            },
                             supports_sync: false,
                         },
                         status: StatusCode::OK,
@@ -853,11 +849,11 @@ impl Parser for GetContentTypeParser {
 
 struct ResourceTypeParser;
 
-#[derive(Default)]
-struct ResourceType {
-    is_collection: bool,
-    is_calendar: bool,
-    is_address_book: bool,
+#[derive(Default, Debug, PartialEq, Eq)]
+pub struct ResourceType {
+    pub is_collection: bool,
+    pub is_calendar: bool,
+    pub is_address_book: bool,
 }
 
 impl Parser for ResourceTypeParser {

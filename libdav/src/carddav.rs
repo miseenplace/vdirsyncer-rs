@@ -151,7 +151,10 @@ impl CardDavClient {
             .into_iter()
             .filter_map(|c| match c.variant {
                 ResponseVariant::WithProps { propstats } => {
-                    if propstats.iter().any(|p| p.prop.is_address_book) {
+                    if propstats
+                        .iter()
+                        .any(|p| p.prop.resource_type.is_address_book)
+                    {
                         let mut address_book = FoundCollection {
                             href: c.href,
                             etag: None,
