@@ -14,7 +14,7 @@ use crate::{
     xml::{
         self, HrefParentParser, ItemDetails, ItemDetailsParser, Multistatus,
         MultistatusDocumentParser, Parser, PropParser, ReportPropParser, Response, ResponseParser,
-        ResponseVariant, TextNodeParser, CALDAV_STR, CARDDAV_STR, DAV,
+        ResponseVariant, SelfClosingPropertyNode, TextNodeParser, CALDAV_STR, CARDDAV_STR, DAV,
     },
     Auth, AuthError, FetchedResource, FetchedResourceContent,
 };
@@ -348,12 +348,31 @@ impl WebDavClient {
             </propertyupdate>"#
             )))?;
 
-        let (head, _body) = self.request(request).await?;
+        let (head, body) = self.request(request).await?;
         check_status(head.status)?;
 
-        // TODO: need to parse multistatus here and check for any errors.
+        let parser = &SelfClosingPropertyNode {
+            namespace: prop.as_bytes(),
+            name: prop_ns.as_bytes(),
+        };
+        let parser = &ResponseParser(parser);
+        let parser = MultistatusDocumentParser(parser);
+        let response = xml::parse_xml(&body, &parser).map_err(DavError::from)?;
 
-        Ok(())
+        // TODO: should Err if we got more than one response?
+        let status = response
+            .into_responses()
+            .into_iter()
+            .next()
+            .ok_or(DavError::InvalidResponse(
+                "Multistatus has no responses".into(),
+            ))?
+            .first_status()
+            .ok_or(DavError::InvalidResponse(
+                "Expected at least one status code in multiresponse".into(),
+            ))?;
+
+        check_status(status).map_err(DavError::BadStatusCode)
     }
 
     /// Sets the `displayname` for a collection

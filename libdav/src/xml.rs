@@ -175,7 +175,7 @@ impl Parser for ReportPropParser {
 
 /// A single response as defined in [rfc2518 section-12.9.1]
 ///
-/// The inner type `T` will be parsed from the response's `prop` node.
+/// The generic type `T` corresponds to the node inside the response's `prop` node.
 /// Generally, this is used for responses to `PROPFIND` or `REPORT`.
 ///
 ///[rfc2518 section-12.9.1]: https://www.rfc-editor.org/rfc/rfc2518#section-12.9.1
@@ -209,6 +209,19 @@ impl<T> Response<Option<T>> {
         } else {
             None
         }
+    }
+}
+
+impl<T> Response<T> {
+    /// Get the first status code form the response.
+    ///
+    /// This shortcut should only be used when a single status code is expected.
+    #[must_use]
+    pub fn first_status(&self) -> Option<StatusCode> {
+        Some(match &self.variant {
+            ResponseVariant::WithProps { propstats } => propstats.first()?.status,
+            ResponseVariant::WithoutProps { status, .. } => *status,
+        })
     }
 }
 
@@ -1168,5 +1181,42 @@ impl NamedNodeParser for TextNodeParser<'_> {
     #[inline]
     fn namespace(&self) -> &[u8] {
         self.namespace
+    }
+}
+
+/// Expect an empty node with a given name.
+pub(crate) struct SelfClosingPropertyNode<'a> {
+    pub namespace: &'a [u8],
+    pub name: &'a [u8],
+}
+
+impl Parser for SelfClosingPropertyNode<'_> {
+    type ParsedData = bool;
+
+    fn parse(&self, reader: &mut NsReader<&[u8]>) -> Result<Self::ParsedData, Error> {
+        let mut found = false;
+        loop {
+            match reader.read_resolved_event()? {
+                (ResolveResult::Bound(NS_DAV), Event::End(element))
+                    if element.local_name().as_ref() == b"prop" =>
+                {
+                    break;
+                }
+                (ResolveResult::Bound(namespace), Event::Empty(element))
+                    if namespace.as_ref() == self.namespace
+                        && element.local_name().as_ref() == self.name =>
+                {
+                    found = true;
+                }
+                (_, Event::Eof) => {
+                    return Err(Error::from(quick_xml::Error::UnexpectedEof(String::new())));
+                }
+                (result, event) => {
+                    debug!("unexpected data: {:?}, {:?}", result, event);
+                }
+            }
+        }
+
+        Ok(found)
     }
 }
