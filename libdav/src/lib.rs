@@ -58,7 +58,7 @@ pub enum BootstrapError {
 /// Error finding home set.
 #[derive(thiserror::Error, Debug)]
 #[error("error finding home set collection")]
-pub struct FindHomeSetError(pub DavError);
+pub struct FindHomeSetError(#[source] pub DavError);
 
 impl<T> From<T> for FindHomeSetError
 where
