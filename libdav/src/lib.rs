@@ -60,15 +60,6 @@ pub enum BootstrapError {
 #[error("error finding home set collection")]
 pub struct FindHomeSetError(#[source] pub DavError);
 
-impl<T> From<T> for FindHomeSetError
-where
-    DavError: std::convert::From<T>,
-{
-    fn from(value: T) -> Self {
-        FindHomeSetError(DavError::from(value))
-    }
-}
-
 /// See [`FetchedResource`]
 #[derive(Debug, PartialEq, Eq)]
 pub struct FetchedResourceContent {
