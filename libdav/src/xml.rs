@@ -246,8 +246,19 @@ pub struct PropStat<T> {
     // TODO: responsedescription
 }
 
-// See: https://www.rfc-editor.org/rfc/rfc2068#section-6.1
-fn parse_statusline<S: AsRef<str>>(status_line: S) -> Result<StatusCode, InvalidStatusCode> {
+/// Parses a status line string into a [`StatusCode`].
+///
+/// Example input string: `HTTP/1.1 200 OK`.
+///
+/// # See also
+///
+/// - The [status element](https://www.rfc-editor.org/rfc/rfc2518#section-12.9.1.2)
+/// - [Status-Line](https://www.rfc-editor.org/rfc/rfc2068#section-6.1)
+///
+/// # Errors
+///
+/// If the input string does not match a status line.
+pub fn parse_statusline<S: AsRef<str>>(status_line: S) -> Result<StatusCode, InvalidStatusCode> {
     let mut iter = status_line.as_ref().splitn(3, ' ');
     iter.next();
     let code = iter.next().unwrap_or("");
