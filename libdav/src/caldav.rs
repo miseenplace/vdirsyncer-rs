@@ -1,6 +1,7 @@
 use std::ops::Deref;
 
 use http::Method;
+use hyper::body::Bytes;
 use hyper::{Body, Uri};
 use log::debug;
 
@@ -8,10 +9,11 @@ use crate::builder::{ClientBuilder, NeedsUri};
 use crate::common::common_bootstrap;
 use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
-use crate::xml::{
-    HrefParentParser, ItemDetailsParser, PropParser, ReportPropParser, Response, ResponseVariant,
-    TextNodeParser, CALDAV,
+use crate::names::{
+    CALENDAR_COLOUR, CALENDAR_DATA, CALENDAR_HOME_SET, GETETAG, RESOURCETYPE, RESPONSE,
+    SUPPORTED_REPORT_SET, SYNC_COLLECTION,
 };
+use crate::xmlutils::check_multistatus;
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 use crate::{CheckSupportError, FetchedResource};
 
@@ -118,20 +120,9 @@ impl CalDavClient {
     ///
     /// If there are any network errors or the response could not be parsed.
     async fn find_calendar_home_set(&self, url: &Uri) -> Result<Option<Uri>, FindHomeSetError> {
-        let parser = PropParser {
-            inner: &HrefParentParser {
-                name: b"calendar-home-set",
-                namespace: crate::xml::CALDAV,
-            },
-        };
-
-        self.find_href_prop_as_uri(
-            url,
-            "<calendar-home-set xmlns=\"urn:ietf:params:xml:ns:caldav\"/>",
-            &parser,
-        )
-        .await
-        .map_err(FindHomeSetError)
+        self.find_href_prop_as_uri(url, &CALENDAR_HOME_SET)
+            .await
+            .map_err(FindHomeSetError)
     }
 
     /// Find calendars collections under the given `url`.
@@ -149,42 +140,61 @@ impl CalDavClient {
         url: Option<&Uri>,
     ) -> Result<Vec<FoundCollection>, DavError> {
         let url = url.unwrap_or(self.calendar_home_set.as_ref().unwrap_or(&self.base_url));
-        let parser = ItemDetailsParser;
-        let items = self
-            .propfind(
-                url,
-                "<resourcetype/><getetag/><supported-report-set/>",
-                1,
-                &parser,
-            )
-            .await
-            .map_err(DavError::from)?
-            .into_iter()
-            .filter_map(|c| match c.variant {
-                ResponseVariant::WithProps { propstats } => {
-                    if propstats.iter().any(|p| p.prop.resource_type.is_calendar) {
-                        let mut calendar = FoundCollection {
-                            href: c.href,
-                            etag: None,
-                            supports_sync: false,
-                        };
-                        for ps in propstats {
-                            if ps.prop.supports_sync {
-                                calendar.supports_sync = true;
-                            }
-                            if ps.prop.etag.is_some() {
-                                calendar.etag = ps.prop.etag;
-                            }
-                        }
+        let (head, body) = self
+            .propfind(url, &[&RESOURCETYPE, &GETETAG, &SUPPORTED_REPORT_SET], 1)
+            .await?;
+        check_status(head.status)?;
 
-                        Some(calendar)
-                    } else {
-                        None
-                    }
-                }
-                ResponseVariant::WithoutProps { .. } => None,
-            })
-            .collect();
+        Self::find_calendars_parse(body)
+    }
+
+    fn find_calendars_parse(body: Bytes) -> Result<Vec<FoundCollection>, DavError> {
+        let body = std::str::from_utf8(body.as_ref())?;
+        let doc = roxmltree::Document::parse(body)?;
+        let root = doc.root_element();
+
+        let responses = root
+            .descendants()
+            .filter(|node| node.tag_name() == RESPONSE);
+
+        let mut items = Vec::new();
+        for response in responses {
+            let is_calendar = response
+                .descendants()
+                .find(|node| node.tag_name() == crate::names::RESOURCETYPE)
+                .map_or(false, |node| {
+                    node.descendants()
+                        .any(|node| node.tag_name() == crate::names::CALENDAR)
+                });
+            if !is_calendar {
+                continue;
+            }
+
+            let href = response
+                .descendants()
+                .find(|node| node.tag_name() == crate::names::HREF)
+                .ok_or(DavError::InvalidResponse("missing href in response".into()))?
+                .text()
+                .ok_or(DavError::InvalidResponse("missing text in href".into()))?
+                .to_string();
+            let etag = response
+                .descendants()
+                .find(|node| node.tag_name() == crate::names::GETETAG)
+                .and_then(|node| node.text().map(str::to_string));
+            let supports_sync = response
+                .descendants()
+                .find(|node| node.tag_name() == crate::names::SUPPORTED_REPORT_SET)
+                .map_or(false, |node| {
+                    node.descendants()
+                        .any(|node| node.tag_name() == SYNC_COLLECTION)
+                });
+
+            items.push(FoundCollection {
+                href,
+                etag,
+                supports_sync,
+            });
+        }
 
         Ok(items)
     }
@@ -193,32 +203,43 @@ impl CalDavClient {
     ///
     /// This is not a formally standardised property, but is relatively widespread.
     ///
+    /// # Quirks
+    ///
+    /// The namespace of the value in the response from the server is ignored. This is a workaround
+    /// for an [issue in the `cyrus-imapd` implemenetation][cyrus-issue].
+    ///
+    /// [cyrus-issue]: https://github.com/cyrusimap/cyrus-imapd/issues/4489
+    ///
     /// # Errors
     ///
     /// If the network request fails, or if the response cannot be parsed.
     pub async fn get_calendar_colour(&self, href: &str) -> Result<Option<String>, DavError> {
         let url = self.relative_uri(href)?;
 
-        let parser = PropParser {
-            inner: &TextNodeParser {
-                name: b"calendar-color",
-                namespace: b"http://apple.com/ns/ical/",
-                // TODO: fastmail uses namespace=="DAV:" in responses. Needs to be reported.
-            },
-        };
+        let (head, body) = self.propfind(&url, &[&CALENDAR_COLOUR], 0).await?;
+        check_status(head.status)?;
 
-        self.propfind(
-            &url,
-            "<calendar-color xmlns=\"http://apple.com/ns/ical/\"/>",
-            0,
-            &parser,
-        )
-        .await?
-        .pop()
-        .ok_or(DavError::from(crate::xml::Error::MissingData(
-            "calendar-color",
-        )))
-        .map(Response::first_prop)
+        let body = std::str::from_utf8(body.as_ref())?;
+        let doc = roxmltree::Document::parse(body)?;
+        let root = doc.root_element();
+
+        let props = root
+            .descendants()
+            .filter(|node| {
+                // Ignoring namespace as workaround for https://github.com/cyrusimap/cyrus-imapd/issues/4489
+                node.tag_name().name() == "calendar-color"
+            })
+            .collect::<Vec<_>>();
+
+        if props.len() == 1 {
+            return Ok(props[0].text().map(str::to_string));
+        }
+
+        check_multistatus(root)?;
+
+        Err(DavError::InvalidResponse(
+            "missing property in response with no error".into(),
+        ))
     }
 
     /// Sets the `colour` for a collection
@@ -235,8 +256,7 @@ impl CalDavClient {
         colour: Option<&str>,
     ) -> Result<(), DavError> {
         let url = self.relative_uri(href)?;
-        self.propupdate(&url, "calendar-color", "http://apple.com/ns/ical/", colour)
-            .await
+        self.propupdate(&url, &CALENDAR_COLOUR, colour).await
     }
 
     // TODO: get_calendar_description ("calendar-description", "urn:ietf:params:xml:ns:caldav")
@@ -248,7 +268,7 @@ impl CalDavClient {
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](WebDavClient::request_multistatus).
+    /// If there are any network errors or the response could not be parsed.
     pub async fn get_resources<S1, S2>(
         &self,
         calendar_href: S1,
@@ -348,8 +368,3 @@ impl CalDavClient {
         }
     }
 }
-
-pub const CALENDAR_DATA: ReportPropParser = ReportPropParser {
-    namespace: CALDAV,
-    name: b"calendar-data",
-};

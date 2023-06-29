@@ -20,10 +20,15 @@ mod carddav;
 mod common;
 pub mod dav;
 pub mod dns;
-pub mod xml;
+pub mod names;
+pub mod xmlutils;
 
 pub use caldav::CalDavClient;
 pub use carddav::CardDavClient;
+
+/// Re-export of `roxmltree::ExpandedName`.
+///
+pub use roxmltree::ExpandedName;
 
 /// An error automatically bootstrapping a new client.
 #[derive(thiserror::Error, Debug)]
@@ -109,4 +114,24 @@ impl From<StatusCode> for CheckSupportError {
     fn from(status: StatusCode) -> Self {
         CheckSupportError::BadStatusCode(status)
     }
+}
+
+/// Details of a single item that are returned when listing them.
+///
+/// This does not include actual item data, it only includes their metadata.
+#[derive(Debug, PartialEq, Eq, Default)]
+pub struct ItemDetails {
+    pub content_type: Option<String>,
+    pub etag: Option<String>,
+    pub resource_type: ResourceType,
+    /// From: <https://www.rfc-editor.org/rfc/rfc6578>
+    // TODO: move this field into `FoundCollection`; it is meaningless for non-collections.
+    pub supports_sync: bool,
+}
+
+#[derive(Default, Debug, PartialEq, Eq)]
+pub struct ResourceType {
+    pub is_collection: bool,
+    pub is_calendar: bool,
+    pub is_address_book: bool,
 }

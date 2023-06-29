@@ -2,21 +2,22 @@
 //!
 //! This mostly implements the necessary bits for the caldav and carddav implementations. It should
 //! not be considered a general purpose webdav implementation.
-use std::{iter::once, string::FromUtf8Error};
+use std::string::FromUtf8Error;
 
-use http::{response::Parts, Method, Request, StatusCode, Uri};
+use http::{response::Parts, status::InvalidStatusCode, Method, Request, StatusCode, Uri};
 use hyper::{body::Bytes, client::HttpConnector, Body, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
+use roxmltree::ExpandedName;
 
 use crate::{
     auth::AuthExt,
     dns::DiscoverableService,
-    xml::{
-        self, HrefParentParser, ItemDetails, ItemDetailsParser, Multistatus,
-        MultistatusDocumentParser, Parser, PropParser, ReportPropParser, Response, ResponseVariant,
-        SelfClosingPropertyNode, TextNodeParser, CALDAV_STR, CARDDAV_STR, DAV,
+    names::{
+        ADDRESSBOOK, CALDAV, CALENDAR, CARDDAV, COLLECTION, CURRENT_USER_PRINCIPAL, DISPLAY_NAME,
+        GETCONTENTTYPE, GETETAG, HREF, PROPSTAT, RESOURCETYPE, RESPONSE,
     },
-    Auth, AuthError, FetchedResource, FetchedResourceContent,
+    xmlutils::{check_multistatus, render_xml, render_xml_with_text},
+    Auth, AuthError, FetchedResource, FetchedResourceContent, ItemDetails, ResourceType,
 };
 
 /// A generic error for WebDav operations.
@@ -25,8 +26,14 @@ pub enum DavError {
     #[error("http error executing request")]
     Network(#[from] hyper::Error),
 
-    #[error("failure parsing XML response")]
-    Xml(#[from] crate::xml::Error),
+    #[error("missing field '{0}' in response XML")]
+    MissingData(&'static str),
+
+    #[error("invalid status code in response")]
+    InvalidStatusCode(#[from] InvalidStatusCode),
+
+    #[error("could not parse XML response")]
+    Xml(#[from] roxmltree::Error),
 
     #[error("http request returned {0}")]
     BadStatusCode(http::StatusCode),
@@ -40,8 +47,11 @@ pub enum DavError {
     #[error("the server returned an response with an invalid etag header")]
     InvalidEtag(#[from] FromUtf8Error),
 
-    #[error("the server returned an invalid response")]
+    #[error("the server returned an invalid response: {0}")]
     InvalidResponse(Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("could not decode response as utf-8")]
+    NotUtf8(#[from] std::str::Utf8Error),
 }
 
 impl From<StatusCode> for DavError {
@@ -164,16 +174,9 @@ impl WebDavClient {
     pub async fn find_current_user_principal(
         &self,
     ) -> Result<Option<Uri>, FindCurrentUserPrincipalError> {
-        let parser = PropParser {
-            inner: &HrefParentParser {
-                name: b"current-user-principal",
-                namespace: xml::DAV,
-            },
-        };
-
         // Try querying the provided base url...
         let maybe_principal = self
-            .find_href_prop_as_uri(&self.base_url, "<current-user-principal/>", &parser)
+            .find_href_prop_as_uri(&self.base_url, &CURRENT_USER_PRINCIPAL)
             .await;
 
         match maybe_principal {
@@ -184,7 +187,7 @@ impl WebDavClient {
 
         // ... Otherwise, try querying the root path.
         let root = self.relative_uri("/")?;
-        self.find_href_prop_as_uri(&root, "<current-user-principal/>", &parser)
+        self.find_href_prop_as_uri(&root, &CURRENT_USER_PRINCIPAL)
             .await
             .map_err(FindCurrentUserPrincipalError::RequestError)
 
@@ -195,77 +198,45 @@ impl WebDavClient {
     /// Internal helper to find an `href` property
     ///
     /// Very specific, but de-duplicates a few identical methods.
-    pub(crate) async fn find_href_prop_as_uri<X: Parser<ParsedData = Option<String>>>(
+    pub(crate) async fn find_href_prop_as_uri(
         &self,
         url: &Uri,
-        prop: &str,
-        parser: &X,
+        property: &ExpandedName<'_, '_>,
     ) -> Result<Option<Uri>, DavError> {
-        let maybe_href = match self.propfind(url, prop, 0, parser).await?.pop() {
-            Some(prop) => prop.first_prop(),
-            None => return Ok(None),
-        };
+        let (head, body) = self.propfind(url, &[property], 0).await?;
+        check_status(head.status)?;
 
-        let Some(href) = maybe_href else { return Ok(None) };
-
-        let path = href
-            .try_into()
-            .map_err(|e| DavError::InvalidResponse(Box::from(e)))?;
-
-        let mut parts = url.clone().into_parts();
-        parts.path_and_query = Some(path);
-        Some(Uri::from_parts(parts))
-            .transpose()
-            .map_err(|e| DavError::InvalidResponse(Box::from(e)))
+        parse_prop_href(body, url, property)
     }
 
-    /// Sends a `PROPFIND` request and parses the result.
+    /// Sends a `PROPFIND` request.
     ///
     /// This is a shortcut for simple `PROPFIND` requests.
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](Self::request_multistatus).
-    pub async fn propfind<X: Parser>(
+    /// If there are any network errors.
+    pub async fn propfind(
         &self,
         url: &Uri,
-        prop: &str,
+        properties: &[&ExpandedName<'_, '_>],
         depth: u8,
-        parser: &X,
-    ) -> Result<Vec<Response<X::ParsedData>>, DavError> {
+    ) -> Result<(Parts, Bytes), DavError> {
+        let mut props = String::new();
+        for prop in properties {
+            props.push_str(&render_xml(prop));
+        }
         let request = self
             .request_builder()?
-            .method(Method::from_bytes(b"PROPFIND").expect("API for HTTP methods is stupid"))
+            .method("PROPFIND")
             .uri(url)
             .header("Content-Type", "application/xml; charset=utf-8")
             .header("Depth", depth.to_string())
             .body(Body::from(format!(
-                r#"<propfind xmlns="DAV:"><prop>{prop}</prop></propfind>"#
+                r#"<propfind xmlns="DAV:"><prop>{props}</prop></propfind>"#
             )))?;
 
-        self.request_multistatus(request, parser)
-            .await
-            .map(Multistatus::into_responses)
-    }
-
-    /// Send a request which expects a multistatus response and parse it as `T`.
-    ///
-    /// # Errors
-    ///
-    /// - If a network error occurs executing the underlying HTTP request.
-    /// - If the server returns an error status code.
-    /// - If the response is not a valid XML document.
-    /// - If the response's XML schema does not match the expected type.
-    pub async fn request_multistatus<T: Parser>(
-        &self,
-        request: Request<Body>,
-        parser: &T,
-    ) -> Result<Multistatus<T::ParsedData>, DavError> {
-        let (head, body) = self.request(request).await?;
-        check_status(head.status)?;
-
-        let parser = MultistatusDocumentParser(parser);
-        xml::parse_xml(&body, &parser).map_err(DavError::from)
+        self.request(request).await.map_err(DavError::Network)
     }
 
     // Internal wrapper around `http_client.request` that logs all response bodies.
@@ -291,23 +262,14 @@ impl WebDavClient {
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](Self::request_multistatus).
+    /// If there are any network errors or the response could not be parsed.
     pub async fn get_collection_displayname(&self, href: &str) -> Result<Option<String>, DavError> {
         let url = self.relative_uri(href)?;
 
-        let parser = PropParser {
-            inner: &TextNodeParser {
-                name: b"displayname",
-                namespace: DAV,
-            },
-        };
+        let (head, body) = self.propfind(&url, &[&DISPLAY_NAME], 0).await?;
+        check_status(head.status)?;
 
-        self.propfind(&url, "<displayname/>", 0, &parser)
-            .await?
-            .pop()
-            .ok_or(xml::Error::MissingData("displayname"))
-            .map(Response::first_prop)
-            .map_err(DavError::from)
+        parse_prop(body, &DISPLAY_NAME)
     }
 
     /// Sends a `PROPUPDATE` query to the server.
@@ -318,20 +280,14 @@ impl WebDavClient {
     pub async fn propupdate(
         &self,
         url: &Uri,
-        prop: &str,
-        prop_ns: &str,
+        property: &ExpandedName<'_, '_>,
         value: Option<&str>,
     ) -> Result<(), DavError> {
-        let (action, inner) = match value {
-            Some(value) => {
-                let escaped = quick_xml::escape::partial_escape(value);
-                (
-                    "set",
-                    format!("<{prop} xmlns=\"{prop_ns}\">{escaped}</{prop}>"),
-                )
-            }
-            None => ("remove", format!("<{prop} />")),
+        let action = match value {
+            Some(_) => "set",
+            None => "remove",
         };
+        let inner = render_xml_with_text(property, value);
         let request = self
             .request_builder()?
             .method(Method::from_bytes(b"PROPPATCH").expect("ugh"))
@@ -350,27 +306,24 @@ impl WebDavClient {
         let (head, body) = self.request(request).await?;
         check_status(head.status)?;
 
-        let parser = &SelfClosingPropertyNode {
-            namespace: prop.as_bytes(),
-            name: prop_ns.as_bytes(),
-        };
-        let parser = MultistatusDocumentParser(parser);
-        let response = xml::parse_xml(&body, &parser).map_err(DavError::from)?;
+        let body = std::str::from_utf8(body.as_ref())?;
+        let doc = roxmltree::Document::parse(body)?;
+        let root = doc.root_element();
 
-        // TODO: should Err if we got more than one response?
-        let status = response
-            .into_responses()
-            .into_iter()
-            .next()
-            .ok_or(DavError::InvalidResponse(
-                "Multistatus has no responses".into(),
-            ))?
-            .first_status()
-            .ok_or(DavError::InvalidResponse(
-                "Expected at least one status code in multiresponse".into(),
-            ))?;
+        let props = root
+            .descendants()
+            .filter(|node| node.tag_name() == *property)
+            .collect::<Vec<_>>();
 
-        check_status(status).map_err(DavError::BadStatusCode)
+        if props.len() == 1 {
+            return Ok(());
+        }
+
+        check_multistatus(root)?;
+
+        Err(DavError::InvalidResponse(
+            "missing property in response but no error".into(),
+        ))
     }
 
     /// Sets the `displayname` for a collection
@@ -386,8 +339,7 @@ impl WebDavClient {
         displayname: Option<&str>,
     ) -> Result<(), DavError> {
         let url = self.relative_uri(href)?;
-        self.propupdate(&url, "displayname", "DAV:", displayname)
-            .await
+        self.propupdate(&url, &DISPLAY_NAME, displayname).await
     }
 
     /// Resolve the default context path using a well-known path.
@@ -458,44 +410,19 @@ impl WebDavClient {
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](Self::request_multistatus).
+    /// If there are any network errors or the response could not be parsed.
     pub async fn list_resources(
         &self,
         collection_href: &str,
     ) -> Result<Vec<ListedResource>, DavError> {
         let url = self.relative_uri(collection_href)?;
 
-        let items = self
-            .propfind::<ItemDetailsParser>(
-                &url,
-                "<resourcetype/><getcontenttype/><getetag/>",
-                1,
-                &ItemDetailsParser,
-            )
-            .await?
-            .into_iter()
-            .filter(|r| r.href != collection_href);
+        let (head, body) = self
+            .propfind(&url, &[&RESOURCETYPE, &GETCONTENTTYPE, &GETETAG], 1)
+            .await?;
+        check_status(head.status)?;
 
-        let mut result = Vec::new();
-        for item in items {
-            match item.variant {
-                ResponseVariant::WithProps { mut propstats } => {
-                    result.push(ListedResource {
-                        details: propstats
-                            .pop()
-                            .ok_or(xml::Error::MissingData("props"))?
-                            .prop,
-                        href: item.href,
-                    });
-                }
-                ResponseVariant::WithoutProps { .. } => {
-                    // FIXME: this fails when a collection has nested collections. It should not.
-                    return Err(DavError::Xml(xml::Error::MissingData("propstat")));
-                }
-            }
-        }
-
-        Ok(result)
+        list_resources_parse(body, collection_href)
     }
 
     /// Inner helper with common logic between `create` and `update`.
@@ -543,7 +470,7 @@ impl WebDavClient {
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](Self::request_multistatus).
+    /// If there are any network errors or the response could not be parsed.
     pub async fn create_resource<Href, MimeType>(
         &self,
         href: Href,
@@ -564,7 +491,7 @@ impl WebDavClient {
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](Self::request_multistatus).
+    /// If there are any network errors or the response could not be parsed.
     pub async fn update_resource<Href, Etag, MimeType>(
         &self,
         href: Href,
@@ -589,7 +516,7 @@ impl WebDavClient {
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](Self::request_multistatus).
+    /// If there are any network errors or the response could not be parsed.
     pub async fn create_collection<Href: AsRef<str>>(
         &self,
         href: Href,
@@ -633,7 +560,7 @@ impl WebDavClient {
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](Self::request_multistatus).
+    /// If there are any network errors or the response could not be parsed.
     // TODO: document WHICH error is returned on Etag mismatch.
     pub async fn delete<Href, Etag>(&self, href: Href, etag: Etag) -> Result<(), DavError>
     where
@@ -664,7 +591,7 @@ impl WebDavClient {
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](Self::request_multistatus).
+    /// If there are any network errors or the response could not be parsed.
     pub async fn force_delete<Href>(&self, href: Href) -> Result<(), DavError>
     where
         Href: AsRef<str>,
@@ -686,7 +613,7 @@ impl WebDavClient {
         &self,
         collection_href: &str,
         body: String,
-        parser: &ReportPropParser,
+        property: &ExpandedName<'_, '_>,
     ) -> Result<Vec<FetchedResource>, DavError> {
         let request = self
             .request_builder()?
@@ -695,54 +622,10 @@ impl WebDavClient {
             .header("Content-Type", "application/xml; charset=utf-8")
             .body(Body::from(body))?;
 
-        let responses = self
-            .request_multistatus(request, parser)
-            .await?
-            .into_responses();
+        let (head, body) = self.request(request).await?;
+        check_status(head.status)?;
 
-        let mut items = Vec::new();
-        for r in responses {
-            match r.variant {
-                ResponseVariant::WithProps { propstats } => {
-                    let err_prop = propstats.iter().find(|p| !p.status.is_success());
-                    let content = if let Some(prop) = err_prop {
-                        Err(prop.status)
-                    } else {
-                        let mut data = None;
-                        let mut etag = None;
-                        for propstat in propstats {
-                            if let Some(d) = propstat.prop.data {
-                                data = Some(d);
-                            }
-                            if let Some(e) = propstat.prop.etag {
-                                etag = Some(e);
-                            }
-                        }
-                        // Missing `etag` or `data` with a non-error status is invalid.
-                        // This may be an invalid response or a parser issue.
-                        Ok(FetchedResourceContent {
-                            data: data.ok_or(crate::xml::Error::MissingData("data"))?,
-                            etag: etag.ok_or(crate::xml::Error::MissingData("etag"))?,
-                        })
-                    };
-
-                    items.push(FetchedResource {
-                        href: r.href,
-                        content,
-                    });
-                }
-                ResponseVariant::WithoutProps { hrefs, status } => {
-                    for href in hrefs.into_iter().chain(once(r.href)) {
-                        items.push(FetchedResource {
-                            href,
-                            content: Err(status),
-                        });
-                    }
-                }
-            };
-        }
-
-        Ok(items)
+        multi_get_parse(body, property)
     }
 }
 
@@ -760,8 +643,8 @@ impl std::fmt::Display for CollectionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CollectionType::Collection => write!(f, "<collection xmlns=\"DAV:\" />"),
-            CollectionType::Calendar => write!(f, "<calendar xmlns=\"{CALDAV_STR}\" />"),
-            CollectionType::AddressBook => write!(f, "<addressbook xmlns=\"{CARDDAV_STR}\" />"),
+            CollectionType::Calendar => write!(f, "<calendar xmlns=\"{CALDAV}\" />"),
+            CollectionType::AddressBook => write!(f, "<addressbook xmlns=\"{CARDDAV}\" />"),
         }
     }
 }
@@ -784,6 +667,7 @@ pub mod mime_types {
 ///
 /// This type is returned when listing resources. It contains metadata on
 /// resources but no the resource data itself.
+#[derive(Debug, PartialEq)]
 pub struct ListedResource {
     pub details: ItemDetails,
     pub href: String,
@@ -799,4 +683,424 @@ pub struct FoundCollection {
     pub etag: Option<String>,
     pub supports_sync: bool,
     // TODO: query displayname by default too.
+}
+
+pub(crate) fn parse_prop_href(
+    body: Bytes,
+    url: &Uri,
+    property: &ExpandedName<'_, '_>,
+) -> Result<Option<Uri>, DavError> {
+    let body = std::str::from_utf8(body.as_ref())?;
+    let doc = roxmltree::Document::parse(body)?;
+    let root = doc.root_element();
+
+    let props = root
+        .descendants()
+        .filter(|node| node.tag_name() == *property)
+        .collect::<Vec<_>>();
+
+    if props.len() == 1 {
+        if let Some(href_node) = props[0].children().find(|node| node.tag_name() == HREF) {
+            let maybe_href = href_node.text().map(str::to_string);
+            let Some(href) = maybe_href else { return Ok(None) };
+            let path = href
+                .try_into()
+                .map_err(|e| DavError::InvalidResponse(Box::from(e)))?;
+
+            let mut parts = url.clone().into_parts();
+            parts.path_and_query = Some(path);
+            return Some(Uri::from_parts(parts))
+                .transpose()
+                .map_err(|e| DavError::InvalidResponse(Box::from(e)));
+        }
+    }
+
+    check_multistatus(root)?;
+
+    Err(DavError::InvalidResponse(
+        "missing property in response but no error".into(),
+    ))
+}
+
+fn parse_prop(body: Bytes, property: &ExpandedName<'_, '_>) -> Result<Option<String>, DavError> {
+    let body = std::str::from_utf8(body.as_ref())?;
+    let doc = roxmltree::Document::parse(body)?;
+    let root = doc.root_element();
+
+    let props = root
+        .descendants()
+        .filter(|node| node.tag_name() == *property)
+        .collect::<Vec<_>>();
+
+    if props.len() == 1 {
+        return Ok(props[0].text().map(str::to_string));
+    }
+
+    check_multistatus(root)?;
+
+    Err(DavError::InvalidResponse(
+        "missing property in response but no error".into(),
+    ))
+}
+
+fn list_resources_parse(
+    body: Bytes,
+    collection_href: &str,
+) -> Result<Vec<ListedResource>, DavError> {
+    let body = std::str::from_utf8(body.as_ref())?;
+    let doc = roxmltree::Document::parse(body)?;
+    let root = doc.root_element();
+    let responses = root
+        .descendants()
+        .filter(|node| node.tag_name() == RESPONSE);
+
+    let mut items = Vec::new();
+    for response in responses {
+        let href = response
+            .descendants()
+            .find(|node| node.tag_name() == HREF)
+            .ok_or(DavError::InvalidResponse("missing href in response".into()))?
+            .text()
+            .ok_or(DavError::InvalidResponse("missing text in href".into()))?
+            .to_string();
+
+        // Don't list the collection itself.
+        if href == collection_href {
+            continue;
+        }
+
+        let etag = response
+            .descendants()
+            .find(|node| node.tag_name() == GETETAG)
+            .and_then(|node| node.text().map(str::to_string));
+        let content_type = response
+            .descendants()
+            .find(|node| node.tag_name() == GETCONTENTTYPE)
+            .and_then(|node| node.text().map(str::to_string));
+        let resource_type = if let Some(r) = response
+            .descendants()
+            .find(|node| node.tag_name() == RESOURCETYPE)
+        {
+            ResourceType {
+                is_calendar: r.descendants().any(|n| n.tag_name() == CALENDAR),
+                is_collection: r.descendants().any(|n| n.tag_name() == COLLECTION),
+                is_address_book: r.descendants().any(|n| n.tag_name() == ADDRESSBOOK),
+            }
+        } else {
+            ResourceType::default()
+        };
+
+        items.push(ListedResource {
+            details: ItemDetails {
+                content_type,
+                etag,
+                resource_type,
+                // TODO: this field is only relevant for collections.
+                supports_sync: false,
+            },
+            href,
+        });
+    }
+
+    Ok(items)
+}
+
+fn multi_get_parse(
+    body: Bytes,
+    property: &ExpandedName<'_, '_>,
+) -> Result<Vec<FetchedResource>, DavError> {
+    let body = std::str::from_utf8(body.as_ref())?;
+    let doc = roxmltree::Document::parse(body)?;
+    let responses = doc
+        .root_element()
+        .descendants()
+        .filter(|node| node.tag_name() == RESPONSE);
+
+    let mut items = Vec::new();
+    for response in responses {
+        let single = response
+            .descendants()
+            .any(|node| node.tag_name() == PROPSTAT);
+
+        let bad_status = match check_multistatus(response) {
+            Ok(()) => None,
+            Err(DavError::BadStatusCode(status)) => Some(status),
+            Err(e) => return Err(e),
+        };
+
+        if single {
+            let href = response
+                .descendants()
+                .find(|node| node.tag_name() == HREF)
+                .ok_or(DavError::InvalidResponse("missing href in response".into()))?
+                .text()
+                .ok_or(DavError::InvalidResponse("missing text in href".into()))?
+                .to_string();
+
+            if let Some(status) = bad_status {
+                items.push(FetchedResource {
+                    href,
+                    content: Err(status),
+                });
+                continue;
+            }
+
+            let etag = response
+                .descendants()
+                .find(|node| node.tag_name() == crate::names::GETETAG)
+                .ok_or(DavError::InvalidResponse("missing etag in response".into()))?
+                .text()
+                .ok_or(DavError::InvalidResponse("missing text in etag".into()))?
+                .to_string();
+            let data = response
+                .descendants()
+                .find(|node| node.tag_name() == *property)
+                .ok_or(DavError::InvalidResponse(
+                    format!("missing {} in response", property.name()).into(),
+                ))?
+                .text()
+                .ok_or(DavError::InvalidResponse("missing text in property".into()))?
+                .to_string();
+
+            items.push(FetchedResource {
+                href,
+                content: Ok(FetchedResourceContent { data, etag }),
+            });
+        } else {
+            let hrefs = response
+                .descendants()
+                .filter(|node| node.tag_name() == HREF);
+
+            for href in hrefs {
+                let href = href
+                    .text()
+                    .ok_or(DavError::InvalidResponse("missing text in href".into()))?
+                    .to_string();
+                let status = bad_status.ok_or(DavError::InvalidResponse(
+                    "missing props but no error status code".into(),
+                ))?;
+                items.push(FetchedResource {
+                    href,
+                    content: Err(status),
+                });
+            }
+        }
+    }
+
+    Ok(items)
+}
+
+#[cfg(test)]
+mod more_tests {
+
+    use http::{StatusCode, Uri};
+
+    use crate::{
+        dav::{list_resources_parse, multi_get_parse, parse_prop, parse_prop_href, ListedResource},
+        names::{CALENDAR_COLOUR, CALENDAR_DATA, CURRENT_USER_PRINCIPAL, DISPLAY_NAME},
+        FetchedResource, FetchedResourceContent, ItemDetails, ResourceType,
+    };
+
+    #[test]
+    fn test_multi_get_parse() {
+        let raw = br#"
+<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/">
+  <response>
+    <href>/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/</href>
+    <propstat>
+      <prop>
+        <resourcetype>
+          <collection/>
+          <C:calendar/>
+        </resourcetype>
+        <getcontenttype>text/calendar; charset=utf-8</getcontenttype>
+        <getetag>"1591712486-1-1"</getetag>
+      </prop>
+      <status>HTTP/1.1 200 OK</status>
+    </propstat>
+  </response>
+  <response>
+    <href>/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/395b00a0-eebc-40fd-a98e-176a06367c82.ics</href>
+    <propstat>
+      <prop>
+        <resourcetype/>
+        <getcontenttype>text/calendar; charset=utf-8; component=VEVENT</getcontenttype>
+        <getetag>"e7577ff2b0924fe8e9a91d3fb2eb9072598bf9fb"</getetag>
+      </prop>
+      <status>HTTP/1.1 200 OK</status>
+    </propstat>
+  </response>
+</multistatus>"#;
+
+        let results = list_resources_parse(
+            raw.to_vec().into(),
+            "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/",
+        )
+        .unwrap();
+
+        assert_eq!(results, vec![ListedResource {
+            details: ItemDetails {
+                content_type: Some("text/calendar; charset=utf-8; component=VEVENT".into()),
+                etag: Some("\"e7577ff2b0924fe8e9a91d3fb2eb9072598bf9fb\"".into()),
+                resource_type: ResourceType {
+                    is_collection: false,
+                    is_calendar: false,
+                    is_address_book: false
+                },
+                supports_sync: false
+            },
+            href: "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/395b00a0-eebc-40fd-a98e-176a06367c82.ics".into()
+        }]);
+    }
+
+    #[test]
+    fn test_multi_get_parse_with_err() {
+        let raw = br#"
+<ns0:multistatus xmlns:ns0="DAV:" xmlns:ns1="urn:ietf:params:xml:ns:caldav">
+  <ns0:response>
+    <ns0:href>/user/calendars/Q208cKvMGjAdJFUw/qJJ9Li5DPJYr.ics</ns0:href>
+    <ns0:propstat>
+      <ns0:status>HTTP/1.1 200 OK</ns0:status>
+      <ns0:prop>
+        <ns0:getetag>"adb2da8d3cb1280a932ed8f8a2e8b4ecf66d6a02"</ns0:getetag>
+        <ns1:calendar-data>CALENDAR-DATA-HERE</ns1:calendar-data>
+      </ns0:prop>
+    </ns0:propstat>
+  </ns0:response>
+  <ns0:response>
+    <ns0:href>/user/calendars/Q208cKvMGjAdJFUw/rKbu4uUn.ics</ns0:href>
+    <ns0:status>HTTP/1.1 404 Not Found</ns0:status>
+  </ns0:response>
+</ns0:multistatus>
+"#;
+
+        let results = multi_get_parse(raw.to_vec().into(), &CALENDAR_DATA).unwrap();
+
+        assert_eq!(
+            results,
+            vec![
+                FetchedResource {
+                    href: "/user/calendars/Q208cKvMGjAdJFUw/qJJ9Li5DPJYr.ics".into(),
+                    content: Ok(FetchedResourceContent {
+                        data: "CALENDAR-DATA-HERE".into(),
+                        etag: "\"adb2da8d3cb1280a932ed8f8a2e8b4ecf66d6a02\"".into(),
+                    })
+                },
+                FetchedResource {
+                    href: "/user/calendars/Q208cKvMGjAdJFUw/rKbu4uUn.ics".into(),
+                    content: Err(StatusCode::NOT_FOUND)
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn test_multi_get_parse_mixed() {
+        let raw = br#"
+<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+    <d:response>
+        <d:href>/remote.php/dav/calendars/vdirsyncer/1678996875/</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:resourcetype>
+                    <d:collection/>
+                    <cal:calendar/>
+                </d:resourcetype>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+        <d:propstat>
+            <d:prop>
+                <d:getetag/>
+            </d:prop>
+            <d:status>HTTP/1.1 404 Not Found</d:status>
+        </d:propstat>
+    </d:response>
+</d:multistatus>"#;
+
+        let results = multi_get_parse(raw.to_vec().into(), &CALENDAR_DATA).unwrap();
+
+        assert_eq!(
+            results,
+            vec![FetchedResource {
+                href: "/remote.php/dav/calendars/vdirsyncer/1678996875/".into(),
+                content: Err(StatusCode::NOT_FOUND)
+            }]
+        );
+    }
+
+    #[test]
+    fn test_parse_prop_href() {
+        let raw = br#"
+<multistatus xmlns="DAV:">
+  <response>
+    <href>/dav/calendars</href>
+    <propstat>
+      <prop>
+        <current-user-principal>
+          <href>/dav/principals/user/vdirsyncer@example.com/</href>
+        </current-user-principal>
+      </prop>
+      <status>HTTP/1.1 200 OK</status>
+    </propstat>
+  </response>
+</multistatus>"#;
+
+        let results = parse_prop_href(
+            raw.to_vec().into(),
+            &Uri::try_from("https://example.com/").unwrap(),
+            &CURRENT_USER_PRINCIPAL,
+        )
+        .unwrap();
+
+        assert_eq!(
+            results,
+            Some(
+                Uri::try_from("https://example.com/dav/principals/user/vdirsyncer@example.com/")
+                    .unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn test_parse_prop_cdata() {
+        let raw = br#"
+            <multistatus xmlns="DAV:">
+                <response>
+                    <href>/path</href>
+                    <propstat>
+                        <prop>
+                            <displayname><![CDATA[test calendar]]></displayname>
+                        </prop>
+                        <status>HTTP/1.1 200 OK</status>
+                    </propstat>
+                </response>
+            </multistatus>
+            "#;
+
+        let results = parse_prop(raw.to_vec().into(), &DISPLAY_NAME).unwrap();
+
+        assert_eq!(results, Some("test calendar".into()));
+    }
+
+    #[test]
+    fn test_parse_prop_text() {
+        let raw = br#"
+<ns0:multistatus xmlns:ns0="DAV:" xmlns:ns1="http://apple.com/ns/ical/">
+  <ns0:response>
+    <ns0:href>/user/calendars/pxE4Wt4twPqcWPbS/</ns0:href>
+    <ns0:propstat>
+      <ns0:status>HTTP/1.1 200 OK</ns0:status>
+      <ns0:prop>
+        <ns1:calendar-color>#ff00ff</ns1:calendar-color>
+      </ns0:prop>
+    </ns0:propstat>
+  </ns0:response>
+</ns0:multistatus>"#;
+
+        let results = parse_prop(raw.to_vec().into(), &CALENDAR_COLOUR).unwrap();
+        assert_eq!(results, Some("#ff00ff".into()));
+
+        parse_prop(raw.to_vec().into(), &DISPLAY_NAME).unwrap_err();
+    }
 }

@@ -657,6 +657,7 @@ dependencies = [
  "hyper-rustls",
  "log",
  "quick-xml",
+ "roxmltree",
  "thiserror",
  "tokio",
 ]
@@ -889,6 +890,14 @@ dependencies = [
  "untrusted",
  "web-sys",
  "winapi",
+]
+
+[[package]]
+name = "roxmltree"
+version = "0.18.0"
+source = "git+https://github.com/RazrFalcon/roxmltree.git#adec50c7361cf1dfbbea03bc928d1d20728f230d"
+dependencies = [
+ "xmlparser",
 ]
 
 [[package]]
@@ -1624,3 +1633,9 @@ checksum = "ae8970b36c66498d8ff1d66685dc86b91b29db0c7739899012f63a63814b4b28"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "xmlparser"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d25c75bf9ea12c4040a97f829154768bbbce366287e2dc044af160cd79a13fd"

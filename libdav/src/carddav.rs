@@ -3,13 +3,15 @@ use std::ops::Deref;
 use http::Method;
 use hyper::{Body, Uri};
 use log::debug;
+use roxmltree::ExpandedName;
 
 use crate::builder::{ClientBuilder, NeedsUri};
 use crate::common::common_bootstrap;
 use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
-use crate::xml::{
-    HrefParentParser, ItemDetailsParser, PropParser, ReportPropParser, ResponseVariant, CARDDAV,
+use crate::names::{
+    ADDRESSBOOK, ADDRESSBOOK_HOME_SET, ADDRESS_DATA, GETETAG, HREF, RESOURCETYPE,
+    SUPPORTED_REPORT_SET, SYNC_COLLECTION,
 };
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 use crate::{CheckSupportError, FetchedResource};
@@ -110,20 +112,9 @@ impl CardDavClient {
     }
 
     async fn find_addressbook_home_set(&self, url: &Uri) -> Result<Option<Uri>, FindHomeSetError> {
-        let parser = PropParser {
-            inner: &HrefParentParser {
-                name: b"addressbook-home-set",
-                namespace: crate::xml::CARDDAV,
-            },
-        };
-
-        self.find_href_prop_as_uri(
-            url,
-            "<addressbook-home-set xmlns=\"urn:ietf:params:xml:ns:carddav\"/>",
-            &parser,
-        )
-        .await
-        .map_err(FindHomeSetError)
+        self.find_href_prop_as_uri(url, &ADDRESSBOOK_HOME_SET)
+            .await
+            .map_err(FindHomeSetError)
     }
 
     /// Find address book collections under the given `url`.
@@ -142,41 +133,58 @@ impl CardDavClient {
     ) -> Result<Vec<FoundCollection>, DavError> {
         let url = url.unwrap_or(self.addressbook_home_set.as_ref().unwrap_or(&self.base_url));
         // FIXME: DRY: This is almost a copy-paste of the same method from CalDavClient
-        let parser = ItemDetailsParser;
-        let items = self
-            // XXX: depth 1 or infinity?
-            .propfind(url, "<resourcetype/><getetag/>", 1, &parser)
-            .await
-            .map_err(DavError::from)?
-            .into_iter()
-            .filter_map(|c| match c.variant {
-                ResponseVariant::WithProps { propstats } => {
-                    if propstats
-                        .iter()
-                        .any(|p| p.prop.resource_type.is_address_book)
-                    {
-                        let mut address_book = FoundCollection {
-                            href: c.href,
-                            etag: None,
-                            supports_sync: false,
-                        };
-                        for ps in propstats {
-                            if ps.prop.supports_sync {
-                                address_book.supports_sync = true;
-                            }
-                            if ps.prop.etag.is_some() {
-                                address_book.etag = ps.prop.etag;
-                            }
-                        }
+        let (head, body) = self
+            .propfind(url, &[&RESOURCETYPE, &GETETAG, &SUPPORTED_REPORT_SET], 1)
+            .await?;
+        check_status(head.status)?;
 
-                        Some(address_book)
-                    } else {
-                        None
-                    }
-                }
-                ResponseVariant::WithoutProps { .. } => None,
-            })
-            .collect();
+        let body = std::str::from_utf8(body.as_ref())?;
+        let doc = roxmltree::Document::parse(body)?;
+        let root = doc.root_element();
+
+        let response_name = ExpandedName::from(("DAV:", "response"));
+        let responses = root
+            .descendants()
+            .filter(|node| node.tag_name() == response_name);
+
+        let mut items = Vec::new();
+        for response in responses {
+            let is_addressbook = response
+                .descendants()
+                .find(|node| node.tag_name() == RESOURCETYPE)
+                .map_or(false, |node| {
+                    node.descendants()
+                        .any(|node| node.tag_name() == ADDRESSBOOK)
+                });
+            if !is_addressbook {
+                continue;
+            }
+
+            let href = response
+                .descendants()
+                .find(|node| node.tag_name() == HREF)
+                .ok_or(DavError::InvalidResponse("missing href in response".into()))?
+                .text()
+                .ok_or(DavError::InvalidResponse("missing text in href".into()))?
+                .to_string();
+            let etag = response
+                .descendants()
+                .find(|node| node.tag_name() == GETETAG)
+                .and_then(|node| node.text().map(str::to_string));
+            let supports_sync = response
+                .descendants()
+                .find(|node| node.tag_name() == SUPPORTED_REPORT_SET)
+                .map_or(false, |node| {
+                    node.descendants()
+                        .any(|node| node.tag_name() == SYNC_COLLECTION)
+                });
+
+            items.push(FoundCollection {
+                href,
+                etag,
+                supports_sync,
+            });
+        }
 
         Ok(items)
     }
@@ -189,7 +197,7 @@ impl CardDavClient {
     ///
     /// # Errors
     ///
-    /// See [`request_multistatus`](WebDavClient::request_multistatus).
+    /// If there are any network errors or the response could not be parsed.
     pub async fn get_resources<S1, S2>(
         &self,
         addressbook_href: S1,
@@ -283,8 +291,3 @@ impl CardDavClient {
         }
     }
 }
-
-pub const ADDRESS_DATA: ReportPropParser = ReportPropParser {
-    namespace: CARDDAV,
-    name: b"address-data",
-};
