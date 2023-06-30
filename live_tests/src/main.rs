@@ -40,7 +40,6 @@ impl Profile {
 struct TestData {
     client: CalDavClient,
     home_set: Uri,
-    #[allow(dead_code)] // TODO: will be used for expected failures.
     profile: Profile,
 }
 
