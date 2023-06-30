@@ -1,4 +1,5 @@
 //! Utilities for handling XML data.
+use std::borrow::Cow;
 use std::str::FromStr;
 
 use http::status::InvalidStatusCode;
@@ -64,16 +65,108 @@ pub(crate) fn render_xml(name: &ExpandedName) -> String {
 pub fn render_xml_with_text<S: AsRef<str>>(name: &ExpandedName, text: Option<S>) -> String {
     match (name.namespace(), text) {
         (None, None) => format!("<{}/>", name.name()),
-        (None, Some(t)) => format!(
-            "<{0}>{1}</{0}>",
-            name.name(),
-            quick_xml::escape::partial_escape(t.as_ref())
-        ),
+        (None, Some(t)) => format!("<{0}>{1}</{0}>", name.name(), escape_text(t.as_ref())),
         (Some(ns), None) => format!("<{0} xmlns=\"{ns}\"/>", name.name()),
         (Some(ns), Some(t)) => format!(
             "<{0} xmlns=\"{ns}\">{1}</{0}>",
             name.name(),
-            quick_xml::escape::partial_escape(t.as_ref())
+            escape_text(t.as_ref())
         ),
+    }
+}
+
+/// Replaces characters that need to be escaped in texts.
+///
+/// `<` --> `&lt;`
+/// `>` --> `&gt;`
+/// `&` --> `&amp;`
+///
+/// This IS NOT usable in other contexts of XML encoding.
+#[must_use]
+pub fn escape_text(raw: &str) -> Cow<str> {
+    // This function is strongly based on `escape_partial` from `quick-xml`:
+    {
+        // The MIT License (MIT)
+        //
+        // Copyright (c) 2016 Johann Tuffe
+        //
+        // Permission is hereby granted, free of charge, to any person obtaining a copy
+        // of this software and associated documentation files (the "Software"), to deal
+        // in the Software without restriction, including without limitation the rights
+        // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        // copies of the Software, and to permit persons to whom the Software is
+        // furnished to do so, subject to the following conditions:
+        //
+        //
+        // The above copyright notice and this permission notice shall be included in
+        // all copies or substantial portions of the Software.
+        //
+        //
+        // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+        // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+        // THE SOFTWARE.
+        let bytes = raw.as_bytes();
+        let mut escaped = None;
+        let mut iter = bytes.iter();
+        let mut pos = 0;
+        while let Some(i) = iter.position(|&b| matches!(b, b'<' | b'>' | b'&')) {
+            let escaped = escaped.get_or_insert_with(|| Vec::with_capacity(raw.len()));
+            let new_pos = pos + i;
+            escaped.extend_from_slice(&bytes[pos..new_pos]);
+            match bytes[new_pos] {
+                b'<' => escaped.extend_from_slice(b"&lt;"),
+                b'>' => escaped.extend_from_slice(b"&gt;"),
+                b'&' => escaped.extend_from_slice(b"&amp;"),
+                _ => unreachable!("Only '<', '>' and '&', are escaped"),
+            }
+            pos = new_pos + 1;
+        }
+
+        if let Some(mut escaped) = escaped {
+            if let Some(raw) = bytes.get(pos..) {
+                escaped.extend_from_slice(raw);
+            }
+            // SAFETY: we operate on UTF-8 input and search for an one byte chars only,
+            // so all slices that was put to the `escaped` is a valid UTF-8 encoded strings
+            // TODO: Can be replaced with the following unsafe snippet:
+            // Cow::Owned(unsafe { String::from_utf8_unchecked(escaped) })
+            Cow::Owned(
+                String::from_utf8(escaped).expect("manually escaped string must be valid utf-8"),
+            )
+        } else {
+            Cow::Borrowed(raw)
+        }
+    }
+    // End copied code.
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+
+    use crate::xmlutils::escape_text;
+
+    #[test]
+    fn test_escape_text() {
+        match escape_text("HELLO THERE") {
+            Cow::Borrowed(s) => assert_eq!(s, "HELLO THERE"),
+            Cow::Owned(_) => panic!("expected Borrowed, got Owned"),
+        }
+        match escape_text("HELLO <") {
+            Cow::Borrowed(_) => panic!("expected Owned, got Borrowed"),
+            Cow::Owned(s) => assert_eq!(s, "HELLO &lt;"),
+        }
+        match escape_text("HELLO &lt;") {
+            Cow::Borrowed(_) => panic!("expected Owned, got Borrowed"),
+            Cow::Owned(s) => assert_eq!(s, "HELLO &amp;lt;"),
+        }
+        match escape_text("你吃过了吗？") {
+            Cow::Borrowed(s) => assert_eq!(s, "你吃过了吗？"),
+            Cow::Owned(_) => panic!("expected Borrowed, got Owned"),
+        }
     }
 }

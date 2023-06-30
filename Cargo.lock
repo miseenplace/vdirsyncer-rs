@@ -656,7 +656,6 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "log",
- "quick-xml",
  "roxmltree",
  "thiserror",
  "tokio",
@@ -809,15 +808,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b63bdb0cd06f1f4dedf69b254734f9b45af66e4a031e42a7480257d9898b435"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "quick-xml"
-version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffc053f057dd768a56f62cd7e434c42c831d296968997e9ac1f76ea7c2d14c41"
-dependencies = [
- "memchr",
 ]
 
 [[package]]
