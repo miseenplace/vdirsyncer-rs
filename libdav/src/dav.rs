@@ -685,8 +685,8 @@ pub struct FoundCollection {
     // TODO: query displayname by default too.
 }
 
-pub(crate) fn parse_prop_href(
-    body: Bytes,
+pub(crate) fn parse_prop_href<B: AsRef<[u8]>>(
+    body: B,
     url: &Uri,
     property: &ExpandedName<'_, '_>,
 ) -> Result<Option<Uri>, DavError> {
@@ -722,7 +722,10 @@ pub(crate) fn parse_prop_href(
     ))
 }
 
-fn parse_prop(body: Bytes, property: &ExpandedName<'_, '_>) -> Result<Option<String>, DavError> {
+fn parse_prop<B: AsRef<[u8]>>(
+    body: B,
+    property: &ExpandedName<'_, '_>,
+) -> Result<Option<String>, DavError> {
     let body = std::str::from_utf8(body.as_ref())?;
     let doc = roxmltree::Document::parse(body)?;
     let root = doc.root_element();
@@ -743,8 +746,8 @@ fn parse_prop(body: Bytes, property: &ExpandedName<'_, '_>) -> Result<Option<Str
     ))
 }
 
-fn list_resources_parse(
-    body: Bytes,
+fn list_resources_parse<B: AsRef<[u8]>>(
+    body: B,
     collection_href: &str,
 ) -> Result<Vec<ListedResource>, DavError> {
     let body = std::str::from_utf8(body.as_ref())?;
@@ -805,8 +808,8 @@ fn list_resources_parse(
     Ok(items)
 }
 
-fn multi_get_parse(
-    body: Bytes,
+fn multi_get_parse<B: AsRef<[u8]>>(
+    body: B,
     property: &ExpandedName<'_, '_>,
 ) -> Result<Vec<FetchedResource>, DavError> {
     let body = std::str::from_utf8(body.as_ref())?;
@@ -933,7 +936,7 @@ mod more_tests {
 </multistatus>"#;
 
         let results = list_resources_parse(
-            raw.to_vec().into(),
+            raw,
             "/dav/calendars/user/vdirsyncer@fastmail.com/cc396171-0227-4e1c-b5ee-d42b5e17d533/",
         )
         .unwrap();
@@ -974,7 +977,7 @@ mod more_tests {
 </ns0:multistatus>
 "#;
 
-        let results = multi_get_parse(raw.to_vec().into(), &CALENDAR_DATA).unwrap();
+        let results = multi_get_parse(raw, &CALENDAR_DATA).unwrap();
 
         assert_eq!(
             results,
@@ -1018,7 +1021,7 @@ mod more_tests {
     </d:response>
 </d:multistatus>"#;
 
-        let results = multi_get_parse(raw.to_vec().into(), &CALENDAR_DATA).unwrap();
+        let results = multi_get_parse(raw, &CALENDAR_DATA).unwrap();
 
         assert_eq!(
             results,
@@ -1047,7 +1050,7 @@ mod more_tests {
 </multistatus>"#;
 
         let results = parse_prop_href(
-            raw.to_vec().into(),
+            raw,
             &Uri::try_from("https://example.com/").unwrap(),
             &CURRENT_USER_PRINCIPAL,
         )
@@ -1078,7 +1081,7 @@ mod more_tests {
             </multistatus>
             "#;
 
-        let results = parse_prop(raw.to_vec().into(), &DISPLAY_NAME).unwrap();
+        let results = parse_prop(raw, &DISPLAY_NAME).unwrap();
 
         assert_eq!(results, Some("test calendar".into()));
     }
@@ -1098,9 +1101,9 @@ mod more_tests {
   </ns0:response>
 </ns0:multistatus>"#;
 
-        let results = parse_prop(raw.to_vec().into(), &CALENDAR_COLOUR).unwrap();
+        let results = parse_prop(raw, &CALENDAR_COLOUR).unwrap();
         assert_eq!(results, Some("#ff00ff".into()));
 
-        parse_prop(raw.to_vec().into(), &DISPLAY_NAME).unwrap_err();
+        parse_prop(raw, &DISPLAY_NAME).unwrap_err();
     }
 }
