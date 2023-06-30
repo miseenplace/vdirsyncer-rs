@@ -78,13 +78,7 @@ pub enum Auth {
 /// is invalid). It IS NOT returned when authentication was rejected by the server.
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct AuthError(pub Box<dyn std::error::Error + Sync + Send>);
-
-impl AuthError {
-    fn from<E: std::error::Error + Sync + Send + 'static>(err: E) -> Self {
-        Self(Box::from(err))
-    }
-}
+pub struct AuthError(#[from] std::io::Error);
 
 pub(crate) trait AuthExt: Sized {
     /// Apply this authentication to an object.
@@ -100,11 +94,11 @@ impl AuthExt for Builder {
                 let mut sequence = b"Basic ".to_vec();
                 let mut encoder = EncoderWriter::new(sequence, &BASE64_STANDARD);
                 if let Some(pwd) = password {
-                    write!(encoder, "{username}:{}", pwd.0).map_err(AuthError::from)?;
+                    write!(encoder, "{username}:{}", pwd.0)?;
                 } else {
-                    write!(encoder, "{username}:").map_err(AuthError::from)?;
+                    write!(encoder, "{username}:")?;
                 }
-                sequence = encoder.finish().map_err(AuthError::from)?;
+                sequence = encoder.finish()?;
 
                 let mut header = HeaderValue::from_bytes(&sequence)
                     .expect("base64 string contains only ascii characters");
