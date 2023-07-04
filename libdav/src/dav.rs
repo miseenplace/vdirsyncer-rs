@@ -6,11 +6,14 @@
 //!
 //! This mostly implements the necessary bits for the caldav and carddav implementations. It should
 //! not be considered a general purpose webdav implementation.
-use std::string::FromUtf8Error;
+use std::{str::FromStr, string::FromUtf8Error};
 
-use http::{response::Parts, status::InvalidStatusCode, Method, Request, StatusCode, Uri};
+use http::{
+    response::Parts, status::InvalidStatusCode, uri::PathAndQuery, Method, Request, StatusCode, Uri,
+};
 use hyper::{body::Bytes, client::HttpConnector, Body, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
+use percent_encoding::percent_decode_str;
 use roxmltree::ExpandedName;
 
 use crate::{
@@ -20,7 +23,7 @@ use crate::{
         ADDRESSBOOK, CALDAV, CALENDAR, CARDDAV, COLLECTION, CURRENT_USER_PRINCIPAL, DISPLAY_NAME,
         GETCONTENTTYPE, GETETAG, HREF, PROPSTAT, RESOURCETYPE, RESPONSE,
     },
-    xmlutils::{check_multistatus, render_xml, render_xml_with_text},
+    xmlutils::{check_multistatus, get_unquoted_href, render_xml, render_xml_with_text},
     Auth, AuthError, FetchedResource, FetchedResourceContent, ItemDetails, ResourceType,
 };
 
@@ -705,10 +708,12 @@ pub(crate) fn parse_prop_href<B: AsRef<[u8]>>(
 
     if props.len() == 1 {
         if let Some(href_node) = props[0].children().find(|node| node.tag_name() == HREF) {
-            let maybe_href = href_node.text().map(str::to_string);
+            let maybe_href = href_node
+                .text()
+                .map(|raw| percent_decode_str(raw).decode_utf8())
+                .transpose()?;
             let Some(href) = maybe_href else { return Ok(None) };
-            let path = href
-                .try_into()
+            let path = PathAndQuery::from_str(&href)
                 .map_err(|e| DavError::InvalidResponse(Box::from(e)))?;
 
             let mut parts = url.clone().into_parts();
@@ -763,13 +768,7 @@ fn list_resources_parse<B: AsRef<[u8]>>(
 
     let mut items = Vec::new();
     for response in responses {
-        let href = response
-            .descendants()
-            .find(|node| node.tag_name() == HREF)
-            .ok_or(DavError::InvalidResponse("missing href in response".into()))?
-            .text()
-            .ok_or(DavError::InvalidResponse("missing text in href".into()))?
-            .to_string();
+        let href = get_unquoted_href(&response)?.to_string();
 
         // Don't list the collection itself.
         if href == collection_href {
@@ -836,13 +835,7 @@ fn multi_get_parse<B: AsRef<[u8]>>(
         };
 
         if single {
-            let href = response
-                .descendants()
-                .find(|node| node.tag_name() == HREF)
-                .ok_or(DavError::InvalidResponse("missing href in response".into()))?
-                .text()
-                .ok_or(DavError::InvalidResponse("missing text in href".into()))?
-                .to_string();
+            let href = get_unquoted_href(&response)?.to_string();
 
             if let Some(status) = bad_status {
                 items.push(FetchedResource {
@@ -881,7 +874,9 @@ fn multi_get_parse<B: AsRef<[u8]>>(
             for href in hrefs {
                 let href = href
                     .text()
+                    .map(percent_decode_str)
                     .ok_or(DavError::InvalidResponse("missing text in href".into()))?
+                    .decode_utf8()?
                     .to_string();
                 let status = bad_status.ok_or(DavError::InvalidResponse(
                     "missing props but no error status code".into(),

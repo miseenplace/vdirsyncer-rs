@@ -14,9 +14,10 @@ use crate::common::common_bootstrap;
 use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
 use crate::names::{
-    ADDRESSBOOK, ADDRESSBOOK_HOME_SET, ADDRESS_DATA, GETETAG, HREF, RESOURCETYPE,
-    SUPPORTED_REPORT_SET, SYNC_COLLECTION,
+    ADDRESSBOOK, ADDRESSBOOK_HOME_SET, ADDRESS_DATA, GETETAG, RESOURCETYPE, SUPPORTED_REPORT_SET,
+    SYNC_COLLECTION,
 };
+use crate::xmlutils::get_unquoted_href;
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 use crate::{CheckSupportError, FetchedResource};
 
@@ -164,13 +165,7 @@ impl CardDavClient {
                 continue;
             }
 
-            let href = response
-                .descendants()
-                .find(|node| node.tag_name() == HREF)
-                .ok_or(DavError::InvalidResponse("missing href in response".into()))?
-                .text()
-                .ok_or(DavError::InvalidResponse("missing text in href".into()))?
-                .to_string();
+            let href = get_unquoted_href(&response)?.to_string();
             let etag = response
                 .descendants()
                 .find(|node| node.tag_name() == GETETAG)
@@ -220,6 +215,7 @@ impl CardDavClient {
                 </D:prop>"#,
         );
         for href in hrefs {
+            // TODO: maybe escape it?
             body.push_str(&format!("<href>{}</href>", href.as_ref()));
         }
         body.push_str("</C:addressbook-multiget>");

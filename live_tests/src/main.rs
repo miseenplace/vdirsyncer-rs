@@ -432,20 +432,52 @@ async fn test_create_and_fetch_resource(test_data: &TestData) -> anyhow::Result<
         .create_collection(&collection, CollectionType::Calendar)
         .await?;
 
-    let resource = format!("{}{}.ics", collection, &random_string(12));
-    test_data
-        .client
-        .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
-        .await?;
+    {
+        let resource = format!("{}{}.ics", collection, &random_string(12));
+        test_data
+            .client
+            .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
+            .await?;
 
-    let items = test_data.client.list_resources(&collection).await?;
-    ensure!(items.len() == 1);
+        let items = test_data.client.list_resources(&collection).await?;
+        ensure!(items.len() == 1);
 
-    let fetched = test_data
-        .client
-        .get_resources(&collection, &[&items[0].href])
-        .await?;
-    ensure!(fetched.len() == 1);
+        let fetched = test_data
+            .client
+            .get_resources(&collection, &[&items[0].href])
+            .await?;
+        ensure!(fetched.len() == 1);
+        assert_eq!(fetched[0].href, resource);
+    }
+
+    let mut count = 1;
+    // We should escape the following in requests: /?#&
+    // Fails only on radicale: ;
+    // TODO: maybe we should always encode hrefs in requests
+    //       and our API should clearly declare that all inputs must be unescaped.
+    for symbol in ":[]@!$'()*+,=".chars() {
+        let resource = format!("{}weird-{}-{}.ics", collection, symbol, &random_string(6));
+        test_data
+            .client
+            .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
+            .await?;
+        count += 1;
+
+        let items = test_data
+            .client
+            .list_resources(&collection)
+            .await
+            .context("xxx")?;
+        ensure!(items.len() == count);
+
+        let fetched = test_data
+            .client
+            .get_resources(&collection, &[&resource])
+            .await
+            .context(format!("with character '{symbol}'"))?;
+        ensure!(fetched.len() == 1);
+        assert_eq!(fetched[0].href, resource);
+    }
 
     // FIXME: some servers will fail here due to tampering PRODID
     // FIXME: order of lines may vary but items are still equivalent.

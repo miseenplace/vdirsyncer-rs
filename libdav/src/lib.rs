@@ -9,6 +9,11 @@
 //!
 //! Both clients implement `Deref<Target = DavClient>`, so all the associated
 //! functions for [`dav::WebDavClient`] are usable directly.
+//!
+//! # Hrefs
+//!
+//! All `href` strings returned by the server are returned unquoted by this library before being
+//! returned to consumers.
 
 use crate::auth::{Auth, AuthError};
 use dav::DavError;

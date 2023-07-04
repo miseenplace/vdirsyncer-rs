@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use http::status::InvalidStatusCode;
 use http::StatusCode;
+use percent_encoding::percent_decode_str;
 use roxmltree::ExpandedName;
 use roxmltree::Node;
 
@@ -173,4 +174,18 @@ mod tests {
             Cow::Owned(_) => panic!("expected Borrowed, got Owned"),
         }
     }
+}
+
+/// Find an `href` node and return its unescaped text value.
+//
+// TODO: document that all input to libdav should be unescaped, and that all output is unescaped.
+pub(crate) fn get_unquoted_href<'a>(node: &'a Node) -> Result<Cow<'a, str>, DavError> {
+    Ok(node
+        .descendants()
+        .find(|node| node.tag_name() == crate::names::HREF)
+        .ok_or(DavError::InvalidResponse("missing href in response".into()))?
+        .text()
+        .map(percent_decode_str)
+        .ok_or(DavError::InvalidResponse("missing text in href".into()))?
+        .decode_utf8()?)
 }

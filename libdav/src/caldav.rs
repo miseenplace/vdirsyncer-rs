@@ -17,7 +17,7 @@ use crate::names::{
     CALENDAR_COLOUR, CALENDAR_DATA, CALENDAR_HOME_SET, GETETAG, RESOURCETYPE, RESPONSE,
     SUPPORTED_REPORT_SET, SYNC_COLLECTION,
 };
-use crate::xmlutils::check_multistatus;
+use crate::xmlutils::{check_multistatus, get_unquoted_href};
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 use crate::{CheckSupportError, FetchedResource};
 
@@ -174,13 +174,7 @@ impl CalDavClient {
                 continue;
             }
 
-            let href = response
-                .descendants()
-                .find(|node| node.tag_name() == crate::names::HREF)
-                .ok_or(DavError::InvalidResponse("missing href in response".into()))?
-                .text()
-                .ok_or(DavError::InvalidResponse("missing text in href".into()))?
-                .to_string();
+            let href = get_unquoted_href(&response)?.to_string();
             let etag = response
                 .descendants()
                 .find(|node| node.tag_name() == crate::names::GETETAG)
@@ -291,6 +285,7 @@ impl CalDavClient {
                 </prop>"#,
         );
         for href in hrefs {
+            // TODO: maybe escape it?
             body.push_str(&format!("<href>{}</href>", href.as_ref()));
         }
         body.push_str("</C:calendar-multiget>");
