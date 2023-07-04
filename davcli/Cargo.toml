@@ -6,6 +6,7 @@
 name = "davcli"
 version = "0.1.0"
 edition = "2021"
+license = "EUPL-1.2"
 
 [dependencies]
 libdav = { version = "0.1.0", path = "../libdav" }

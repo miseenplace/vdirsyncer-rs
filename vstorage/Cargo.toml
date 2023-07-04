@@ -11,7 +11,7 @@ description = "A common API for various icalendar/vcard storages."
 readme = "README.md"
 homepage = "https://github.com/pimutils/vdirsyncer/issues/946"
 keywords = ["vdir", "filesystem", "icalendar", "caldav"]
-# TODO: license = " MPL-2.0" ?
+license = "EUPL-1.2"
 
 [dependencies]
 sha2 = "0.10.2"
