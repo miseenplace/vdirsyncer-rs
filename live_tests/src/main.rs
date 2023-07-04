@@ -7,7 +7,7 @@ use http::{StatusCode, Uri};
 use libdav::{
     auth::Auth,
     dav::{mime_types, CollectionType, DavError},
-    CalDavClient,
+    CalDavClient, CardDavClient,
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::Deserialize;
@@ -40,16 +40,17 @@ impl Profile {
     }
 }
 
-#[derive(Clone)]
 struct TestData {
-    client: CalDavClient,
-    home_set: Uri,
+    caldav: CalDavClient,
+    carddav: CardDavClient,
+    calendar_home_set: Uri,
+    address_home_set: Uri,
     profile: Profile,
 }
 
 impl TestData {
     async fn from_profile(profile: Profile) -> anyhow::Result<Self> {
-        let client = CalDavClient::builder()
+        let caldav = CalDavClient::builder()
             .with_uri(profile.host.parse()?)
             .with_auth(Auth::Basic {
                 username: profile.username.clone(),
@@ -59,20 +60,39 @@ impl TestData {
             .auto_bootstrap()
             .await
             .context("could not initialise test client")?;
-        let home_set = client
+        let calendar_home_set = caldav
             .calendar_home_set
             .as_ref()
             .context("no calendar home set found")?
             .clone();
+
+        let carddav = CardDavClient::builder()
+            .with_uri(profile.host.parse()?)
+            .with_auth(Auth::Basic {
+                username: profile.username.clone(),
+                password: Some(profile.password.clone().into()),
+            })
+            .build()
+            .auto_bootstrap()
+            .await
+            .context("could not initialise test client")?;
+        let address_home_set = carddav
+            .addressbook_home_set
+            .as_ref()
+            .context("no calendar home set found")?
+            .clone();
+
         Ok(TestData {
-            client,
-            home_set,
+            caldav,
+            carddav,
+            calendar_home_set,
+            address_home_set,
             profile,
         })
     }
 
     async fn calendar_count(&self) -> anyhow::Result<usize> {
-        self.client
+        self.caldav
             .find_calendars(None)
             .await
             .map(|calendars| calendars.len())
@@ -86,12 +106,15 @@ impl TestData {
 enum Test {
     CreateAndDeleteCollection,
     CreateAndForceDeleteCollection,
-    SetAndGetDisplayName,
+    SetAndGetCalendarDisplayName,
     SetAndGetColour,
     CreateAndDeleteResource,
     CreateAndFetchResource,
     FetchMissingResource,
-    CheckAdvertisesSupport,
+    CheckAdvertisesCalDavSupport,
+
+    SetAndGetAddressBookDisplayName,
+    CheckAdvertisesCardDavSupport,
 }
 
 impl Test {
@@ -101,12 +124,19 @@ impl Test {
             Test::CreateAndForceDeleteCollection => {
                 test_create_and_force_delete_collection(test_data).await
             }
-            Test::SetAndGetDisplayName => test_setting_and_getting_displayname(test_data).await,
+            Test::SetAndGetCalendarDisplayName => {
+                test_setting_and_getting_displayname(test_data).await
+            }
             Test::SetAndGetColour => test_setting_and_getting_colour(test_data).await,
             Test::CreateAndDeleteResource => test_create_and_delete_resource(test_data).await,
             Test::CreateAndFetchResource => test_create_and_fetch_resource(test_data).await,
             Test::FetchMissingResource => test_fetch_missing(test_data).await,
-            Test::CheckAdvertisesSupport => test_check_support(test_data).await,
+            Test::CheckAdvertisesCalDavSupport => test_check_caldav_support(test_data).await,
+
+            Test::SetAndGetAddressBookDisplayName => {
+                test_setting_and_getting_addressbook_displayname(test_data).await
+            }
+            Test::CheckAdvertisesCardDavSupport => test_check_carddav_support(test_data).await,
         }
     }
 }
@@ -179,9 +209,13 @@ fn random_string(len: usize) -> String {
 async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Result<()> {
     let orig_calendar_count = test_data.calendar_count().await?;
 
-    let new_collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    let new_collection = format!(
+        "{}{}/",
+        test_data.calendar_home_set.path(),
+        &random_string(16)
+    );
     test_data
-        .client
+        .caldav
         .create_collection(&new_collection, CollectionType::Calendar)
         .await?;
 
@@ -191,7 +225,7 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
 
     // Get the etag of the newly created calendar:
     // ASSERTION: this validates that a collection with a matching href was created.
-    let calendars = test_data.client.find_calendars(None).await?;
+    let calendars = test_data.caldav.find_calendars(None).await?;
     let etag = calendars
         .into_iter()
         .find(|collection| collection.href == new_collection)
@@ -200,7 +234,7 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
 
     // Try deleting with the wrong etag.
     test_data
-        .client
+        .caldav
         .delete(&new_collection, "wrong-etag")
         .await
         .unwrap_err();
@@ -208,7 +242,7 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
     let Some(etag) = etag else { bail!("deletion is only supported on servers which provide etags") };
 
     // Delete the calendar
-    test_data.client.delete(new_collection, etag).await?;
+    test_data.caldav.delete(new_collection, etag).await?;
 
     let third_calendar_count = test_data.calendar_count().await?;
     ensure!(orig_calendar_count == third_calendar_count);
@@ -219,9 +253,13 @@ async fn test_create_and_delete_collection(test_data: &TestData) -> anyhow::Resu
 async fn test_create_and_force_delete_collection(test_data: &TestData) -> anyhow::Result<()> {
     let orig_calendar_count = test_data.calendar_count().await?;
 
-    let new_collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    let new_collection = format!(
+        "{}{}/",
+        test_data.calendar_home_set.path(),
+        &random_string(16)
+    );
     test_data
-        .client
+        .caldav
         .create_collection(&new_collection, CollectionType::Calendar)
         .await?;
 
@@ -229,7 +267,7 @@ async fn test_create_and_force_delete_collection(test_data: &TestData) -> anyhow
     ensure!(orig_calendar_count + 1 == after_creationg_calendar_count);
 
     // Force-delete the collection
-    test_data.client.force_delete(&new_collection).await?;
+    test_data.caldav.force_delete(&new_collection).await?;
 
     let after_deletion_calendar_count = test_data.calendar_count().await?;
     ensure!(orig_calendar_count == after_deletion_calendar_count);
@@ -238,21 +276,25 @@ async fn test_create_and_force_delete_collection(test_data: &TestData) -> anyhow
 }
 
 async fn test_setting_and_getting_displayname(test_data: &TestData) -> anyhow::Result<()> {
-    let new_collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    let new_collection = format!(
+        "{}{}/",
+        test_data.calendar_home_set.path(),
+        &random_string(16)
+    );
     test_data
-        .client
+        .caldav
         .create_collection(&new_collection, CollectionType::Calendar)
         .await?;
 
     let first_name = "panda-events";
     test_data
-        .client
+        .caldav
         .set_collection_displayname(&new_collection, Some(first_name))
         .await
         .context("setting collection displayname")?;
 
     let value = test_data
-        .client
+        .caldav
         .get_collection_displayname(&new_collection)
         .await
         .context("getting collection displayname")?;
@@ -261,40 +303,44 @@ async fn test_setting_and_getting_displayname(test_data: &TestData) -> anyhow::R
 
     let new_name = "🔥🔥🔥<lol>";
     test_data
-        .client
+        .caldav
         .set_collection_displayname(&new_collection, Some(new_name))
         .await
         .context("setting collection displayname")?;
 
     let value = test_data
-        .client
+        .caldav
         .get_collection_displayname(&new_collection)
         .await
         .context("getting collection displayname")?;
 
     ensure!(value == Some(String::from(new_name)));
 
-    test_data.client.force_delete(&new_collection).await?;
+    test_data.caldav.force_delete(&new_collection).await?;
 
     Ok(())
 }
 
 async fn test_setting_and_getting_colour(test_data: &TestData) -> anyhow::Result<()> {
-    let new_collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    let new_collection = format!(
+        "{}{}/",
+        test_data.calendar_home_set.path(),
+        &random_string(16)
+    );
     test_data
-        .client
+        .caldav
         .create_collection(&new_collection, CollectionType::Calendar)
         .await?;
 
     let colour = "#ff00ff";
     test_data
-        .client
+        .caldav
         .set_calendar_colour(&new_collection, Some(colour))
         .await
         .context("setting collection colour")?;
 
     let value = test_data
-        .client
+        .caldav
         .get_calendar_colour(&new_collection)
         .await
         .context("getting collection colour")?;
@@ -304,7 +350,7 @@ async fn test_setting_and_getting_colour(test_data: &TestData) -> anyhow::Result
         None => bail!("Set a colour but then got colour None"),
     }
 
-    test_data.client.force_delete(&new_collection).await?;
+    test_data.caldav.force_delete(&new_collection).await?;
 
     Ok(())
 }
@@ -328,9 +374,13 @@ fn minimal_icalendar() -> anyhow::Result<Vec<u8>> {
 }
 
 async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result<()> {
-    let collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    let collection = format!(
+        "{}{}/",
+        test_data.calendar_home_set.path(),
+        &random_string(16)
+    );
     test_data
-        .client
+        .caldav
         .create_collection(&collection, CollectionType::Calendar)
         .await?;
 
@@ -338,11 +388,11 @@ async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result
     let content = minimal_icalendar()?;
 
     test_data
-        .client
+        .caldav
         .create_resource(&resource, content.clone(), mime_types::CALENDAR)
         .await?;
 
-    let items = test_data.client.list_resources(&collection).await?;
+    let items = test_data.caldav.list_resources(&collection).await?;
     ensure!(items.len() == 1);
 
     let updated_entry = String::from_utf8(content)?
@@ -352,14 +402,14 @@ async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result
 
     // ASSERTION: deleting with a wrong etag fails.
     test_data
-        .client
+        .caldav
         .delete(&resource, "wrong-lol")
         .await
         .unwrap_err();
 
     // ASSERTION: creating conflicting resource fails.
     test_data
-        .client
+        .caldav
         .create_resource(&resource, updated_entry.clone(), mime_types::CALENDAR)
         .await
         .unwrap_err();
@@ -379,7 +429,7 @@ async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result
 
     // ASSERTION: updating with wrong etag fails
     match test_data
-        .client
+        .caldav
         .update_resource(
             &resource,
             updated_entry.clone(),
@@ -395,14 +445,14 @@ async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result
 
     // ASSERTION: updating with correct etag work
     test_data
-        .client
+        .caldav
         .update_resource(&resource, updated_entry, &etag, mime_types::CALENDAR)
         .await?;
 
     // ASSERTION: deleting with outdated etag fails
-    test_data.client.delete(&resource, &etag).await.unwrap_err();
+    test_data.caldav.delete(&resource, &etag).await.unwrap_err();
 
-    let items = test_data.client.list_resources(&collection).await?;
+    let items = test_data.caldav.list_resources(&collection).await?;
     ensure!(items.len() == 1);
 
     let etag = items
@@ -418,32 +468,36 @@ async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result
         .context("todo")?;
 
     // ASSERTION: deleting with correct etag works
-    test_data.client.delete(&resource, &etag).await?;
+    test_data.caldav.delete(&resource, &etag).await?;
 
-    let items = test_data.client.list_resources(&collection).await?;
+    let items = test_data.caldav.list_resources(&collection).await?;
     ensure!(items.len() == 0);
     Ok(())
 }
 
 async fn test_create_and_fetch_resource(test_data: &TestData) -> anyhow::Result<()> {
-    let collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    let collection = format!(
+        "{}{}/",
+        test_data.calendar_home_set.path(),
+        &random_string(16)
+    );
     test_data
-        .client
+        .caldav
         .create_collection(&collection, CollectionType::Calendar)
         .await?;
 
     {
         let resource = format!("{}{}.ics", collection, &random_string(12));
         test_data
-            .client
+            .caldav
             .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
             .await?;
 
-        let items = test_data.client.list_resources(&collection).await?;
+        let items = test_data.caldav.list_resources(&collection).await?;
         ensure!(items.len() == 1);
 
         let fetched = test_data
-            .client
+            .caldav
             .get_resources(&collection, &[&items[0].href])
             .await?;
         ensure!(fetched.len() == 1);
@@ -458,20 +512,20 @@ async fn test_create_and_fetch_resource(test_data: &TestData) -> anyhow::Result<
     for symbol in ":[]@!$'()*+,=".chars() {
         let resource = format!("{}weird-{}-{}.ics", collection, symbol, &random_string(6));
         test_data
-            .client
+            .caldav
             .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
             .await?;
         count += 1;
 
         let items = test_data
-            .client
+            .caldav
             .list_resources(&collection)
             .await
             .context("xxx")?;
         ensure!(items.len() == count);
 
         let fetched = test_data
-            .client
+            .caldav
             .get_resources(&collection, &[&resource])
             .await
             .context(format!("with character '{symbol}'"))?;
@@ -486,21 +540,25 @@ async fn test_create_and_fetch_resource(test_data: &TestData) -> anyhow::Result<
 }
 
 async fn test_fetch_missing(test_data: &TestData) -> anyhow::Result<()> {
-    let collection = format!("{}{}/", test_data.home_set.path(), &random_string(16));
+    let collection = format!(
+        "{}{}/",
+        test_data.calendar_home_set.path(),
+        &random_string(16)
+    );
     test_data
-        .client
+        .caldav
         .create_collection(&collection, CollectionType::Calendar)
         .await?;
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
     test_data
-        .client
+        .caldav
         .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
         .await?;
 
     let missing = format!("{}{}.ics", collection, &random_string(8));
     let fetched = test_data
-        .client
+        .caldav
         .get_resources(&collection, &[&resource, &missing])
         .await?;
     log::debug!("{:?}", &fetched);
@@ -524,10 +582,69 @@ async fn test_fetch_missing(test_data: &TestData) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn test_check_support(test_data: &TestData) -> anyhow::Result<()> {
+async fn test_check_caldav_support(test_data: &TestData) -> anyhow::Result<()> {
     test_data
-        .client
-        .check_support(test_data.client.context_path())
+        .caldav
+        .check_support(test_data.caldav.context_path())
+        .await?;
+
+    Ok(())
+}
+
+// CARDDAV ====================================================================
+
+async fn test_setting_and_getting_addressbook_displayname(
+    test_data: &TestData,
+) -> anyhow::Result<()> {
+    let new_collection = format!(
+        "{}{}/",
+        test_data.address_home_set.path(),
+        &random_string(16)
+    );
+    test_data
+        .carddav
+        .create_collection(&new_collection, CollectionType::AddressBook)
+        .await?;
+
+    let first_name = "panda-events";
+    test_data
+        .carddav
+        .set_collection_displayname(&new_collection, Some(first_name))
+        .await
+        .context("setting collection displayname")?;
+
+    let value = test_data
+        .carddav
+        .get_collection_displayname(&new_collection)
+        .await
+        .context("getting collection displayname")?;
+
+    ensure!(value == Some(String::from(first_name)));
+
+    let new_name = "🔥🔥🔥<lol>";
+    test_data
+        .carddav
+        .set_collection_displayname(&new_collection, Some(new_name))
+        .await
+        .context("setting collection displayname")?;
+
+    let value = test_data
+        .carddav
+        .get_collection_displayname(&new_collection)
+        .await
+        .context("getting collection displayname")?;
+
+    ensure!(value == Some(String::from(new_name)));
+
+    test_data.carddav.force_delete(&new_collection).await?;
+
+    Ok(())
+}
+
+async fn test_check_carddav_support(test_data: &TestData) -> anyhow::Result<()> {
+    test_data
+        .carddav
+        .check_support(test_data.carddav.context_path())
         .await?;
 
     Ok(())
