@@ -5,19 +5,18 @@
 use std::ops::Deref;
 
 use http::Method;
-use hyper::body::Bytes;
 use hyper::{Body, Uri};
 use log::debug;
 
 use crate::builder::{ClientBuilder, NeedsUri};
-use crate::common::common_bootstrap;
+use crate::common::{common_bootstrap, parse_find_multiple_collections};
 use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
 use crate::names::{
-    CALENDAR_COLOUR, CALENDAR_DATA, CALENDAR_HOME_SET, GETETAG, RESOURCETYPE, RESPONSE,
-    SUPPORTED_REPORT_SET, SYNC_COLLECTION,
+    CALENDAR, CALENDAR_COLOUR, CALENDAR_DATA, CALENDAR_HOME_SET, GETETAG, RESOURCETYPE,
+    SUPPORTED_REPORT_SET,
 };
-use crate::xmlutils::{check_multistatus, get_unquoted_href};
+use crate::xmlutils::check_multistatus;
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 use crate::{CheckSupportError, FetchedResource};
 
@@ -149,52 +148,7 @@ impl CalDavClient {
             .await?;
         check_status(head.status)?;
 
-        Self::find_calendars_parse(body)
-    }
-
-    fn find_calendars_parse(body: Bytes) -> Result<Vec<FoundCollection>, DavError> {
-        let body = std::str::from_utf8(body.as_ref())?;
-        let doc = roxmltree::Document::parse(body)?;
-        let root = doc.root_element();
-
-        let responses = root
-            .descendants()
-            .filter(|node| node.tag_name() == RESPONSE);
-
-        let mut items = Vec::new();
-        for response in responses {
-            let is_calendar = response
-                .descendants()
-                .find(|node| node.tag_name() == crate::names::RESOURCETYPE)
-                .map_or(false, |node| {
-                    node.descendants()
-                        .any(|node| node.tag_name() == crate::names::CALENDAR)
-                });
-            if !is_calendar {
-                continue;
-            }
-
-            let href = get_unquoted_href(&response)?.to_string();
-            let etag = response
-                .descendants()
-                .find(|node| node.tag_name() == crate::names::GETETAG)
-                .and_then(|node| node.text().map(str::to_string));
-            let supports_sync = response
-                .descendants()
-                .find(|node| node.tag_name() == crate::names::SUPPORTED_REPORT_SET)
-                .map_or(false, |node| {
-                    node.descendants()
-                        .any(|node| node.tag_name() == SYNC_COLLECTION)
-                });
-
-            items.push(FoundCollection {
-                href,
-                etag,
-                supports_sync,
-            });
-        }
-
-        Ok(items)
+        parse_find_multiple_collections(body, &CALENDAR)
     }
 
     /// Returns the colour for the calendar at path `href`.

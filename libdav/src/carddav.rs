@@ -7,17 +7,14 @@ use std::ops::Deref;
 use http::Method;
 use hyper::{Body, Uri};
 use log::debug;
-use roxmltree::ExpandedName;
 
 use crate::builder::{ClientBuilder, NeedsUri};
-use crate::common::common_bootstrap;
+use crate::common::{common_bootstrap, parse_find_multiple_collections};
 use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
 use crate::names::{
     ADDRESSBOOK, ADDRESSBOOK_HOME_SET, ADDRESS_DATA, GETETAG, RESOURCETYPE, SUPPORTED_REPORT_SET,
-    SYNC_COLLECTION,
 };
-use crate::xmlutils::get_unquoted_href;
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 use crate::{CheckSupportError, FetchedResource};
 
@@ -143,49 +140,7 @@ impl CardDavClient {
             .await?;
         check_status(head.status)?;
 
-        let body = std::str::from_utf8(body.as_ref())?;
-        let doc = roxmltree::Document::parse(body)?;
-        let root = doc.root_element();
-
-        let response_name = ExpandedName::from(("DAV:", "response"));
-        let responses = root
-            .descendants()
-            .filter(|node| node.tag_name() == response_name);
-
-        let mut items = Vec::new();
-        for response in responses {
-            let is_addressbook = response
-                .descendants()
-                .find(|node| node.tag_name() == RESOURCETYPE)
-                .map_or(false, |node| {
-                    node.descendants()
-                        .any(|node| node.tag_name() == ADDRESSBOOK)
-                });
-            if !is_addressbook {
-                continue;
-            }
-
-            let href = get_unquoted_href(&response)?.to_string();
-            let etag = response
-                .descendants()
-                .find(|node| node.tag_name() == GETETAG)
-                .and_then(|node| node.text().map(str::to_string));
-            let supports_sync = response
-                .descendants()
-                .find(|node| node.tag_name() == SUPPORTED_REPORT_SET)
-                .map_or(false, |node| {
-                    node.descendants()
-                        .any(|node| node.tag_name() == SYNC_COLLECTION)
-                });
-
-            items.push(FoundCollection {
-                href,
-                etag,
-                supports_sync,
-            });
-        }
-
-        Ok(items)
+        parse_find_multiple_collections(body, &ADDRESSBOOK)
     }
 
     // TODO: get_addressbook_description ("addressbook-description", "urn:ietf:params:xml:ns:carddav")

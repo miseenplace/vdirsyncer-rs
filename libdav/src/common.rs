@@ -5,13 +5,16 @@
 //! Common bits shared between caldav and carddav clients.
 
 use crate::{
-    dav::WebDavClient,
+    dav::{DavError, FoundCollection, WebDavClient},
     dns::{find_context_path_via_txt_records, resolve_srv_record, DiscoverableService},
+    names,
+    xmlutils::get_unquoted_href,
     BootstrapError,
 };
 use domain::base::Dname;
 
 use hyper::Uri;
+use roxmltree::ExpandedName;
 
 /// A big chunk of the bootstrap logic that's shared between both types.
 ///
@@ -66,4 +69,51 @@ pub(crate) async fn common_bootstrap(
     client.principal = client.find_current_user_principal().await?;
 
     Ok(())
+}
+
+pub(crate) fn parse_find_multiple_collections<B: AsRef<[u8]>>(
+    body: B,
+    only: &ExpandedName<'_, '_>,
+) -> Result<Vec<FoundCollection>, DavError> {
+    let body = std::str::from_utf8(body.as_ref())?;
+    let doc = roxmltree::Document::parse(body)?;
+    let root = doc.root_element();
+
+    let responses = root
+        .descendants()
+        .filter(|node| node.tag_name() == names::RESPONSE);
+
+    let mut items = Vec::new();
+    for response in responses {
+        if !response
+            .descendants()
+            .find(|node| node.tag_name() == names::RESOURCETYPE)
+            .map_or(false, |node| {
+                node.descendants().any(|node| node.tag_name() == *only)
+            })
+        {
+            continue;
+        }
+
+        let href = get_unquoted_href(&response)?.to_string();
+        let etag = response
+            .descendants()
+            .find(|node| node.tag_name() == names::GETETAG)
+            .and_then(|node| node.text().map(str::to_string));
+        let supports_sync = response
+            .descendants()
+            .find(|node| node.tag_name() == names::SUPPORTED_REPORT_SET)
+            .map_or(false, |node| {
+                node.descendants()
+                    .any(|node| node.tag_name() == names::SYNC_COLLECTION)
+            });
+
+        items.push(FoundCollection {
+            href,
+            etag,
+            supports_sync,
+        });
+    }
+
+    Ok(items)
 }
