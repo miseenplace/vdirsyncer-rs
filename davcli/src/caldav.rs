@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use libdav::{auth::Auth, CalDavClient};

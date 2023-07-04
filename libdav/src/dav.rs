@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Generic webdav implementation.
 //!
 //! This mostly implements the necessary bits for the caldav and carddav implementations. It should

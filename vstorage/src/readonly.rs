@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Wrappers for using storages in read-only mode.
 //!
 //! These wrappers wrap around a normal [`Storage`] instance, but return [`ReadOnly`] for

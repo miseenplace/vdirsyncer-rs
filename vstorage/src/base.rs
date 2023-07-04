@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Traits and common implementations shared by different storages.
 //!
 //! When writing code that should deal with different storage implementations, these traits should

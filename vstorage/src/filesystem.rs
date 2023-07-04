@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Implements reading/writing entries from a local filesystem [`vdir`].
 //!
 //! - The `href` for an items is its filename relative to its parent directory.

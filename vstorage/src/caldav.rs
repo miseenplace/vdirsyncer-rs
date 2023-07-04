@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! A [`CalDavStorage`] is a single caldav repository, as specified in rfc4791.
 
 use async_trait::async_trait;

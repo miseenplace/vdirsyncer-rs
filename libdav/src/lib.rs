@@ -1,5 +1,9 @@
 #![warn(clippy::pedantic)]
 
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! This library contains caldav and carddav clients.
 //!
 //! See [`CalDavClient`] and [`CardDavClient`] as a useful entry points.

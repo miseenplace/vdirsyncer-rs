@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Common types used by caldav and carddav builder.
 //!
 //! See [`CalDavClient::builder`] and [`CrdlDavClient::builder`] as entry points.

@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! This crate is part of the `vdirsyncer` project, and implements a common API for reading and
 //! writing to different underlying storage implementations. Storage implementations can contain
 //! `icalendar` or `vcard` entries (although generic items in planned in future).

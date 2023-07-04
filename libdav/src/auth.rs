@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Authentication-related types.
 
 use base64::{prelude::BASE64_STANDARD, write::EncoderWriter};

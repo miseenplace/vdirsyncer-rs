@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Utilities for handling XML data.
 use std::borrow::Cow;
 use std::str::FromStr;

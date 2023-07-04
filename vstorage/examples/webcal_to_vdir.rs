@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! This example copies all entries from a remote webcal storage into a local filesystem storage.
 //! It DOES NOT synchronise items; it does a blind one-way copy.
 //!

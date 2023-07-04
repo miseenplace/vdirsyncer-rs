@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! A [`CardDavStorage`] is a single carddav repository, as specified in rfc6352.
 
 use async_trait::async_trait;

@@ -61,3 +61,14 @@ cargo build -p live_tests || exit
 Test clients use the discovery bootstrapping mechanism, do you can specify your
 providers main site as URL as `CALDAV_SERVER` and DNS discovery should resolve
 the real server and port automatically.
+
+# Licence
+
+<!--
+Copyright 2023 Hugo Osvaldo Barrera
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+Copyright 2023 Hugo Osvaldo Barrera  
+Licensed under the EUPL, Version 1.2 only

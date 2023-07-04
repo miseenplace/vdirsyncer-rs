@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::boxed::Box;
 use std::{fmt::Write, path::PathBuf};

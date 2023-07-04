@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Implements reading entries from a remote webcal resource.
 //!
 //! Webcal is a de-facto standard, and is basically a single icalendar file hosted via http(s).

@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use http::Uri;
 
