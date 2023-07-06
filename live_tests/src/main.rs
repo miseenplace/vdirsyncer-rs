@@ -336,7 +336,7 @@ fn minimal_icalendar() -> anyhow::Result<Vec<u8>> {
     write!(entry, "UID:{uid}\r\n")?;
     entry.push_str("DTSTAMP:19970610T172345Z\r\n");
     entry.push_str("DTSTART:19970714T170000Z\r\n");
-    entry.push_str("SUMMARY:hello, testing\r\n");
+    entry.push_str("SUMMARY:hello\\, testing\r\n");
     entry.push_str("END:VEVENT\r\n");
     entry.push_str("END:VCALENDAR\r\n");
 
@@ -457,9 +457,10 @@ async fn test_create_and_fetch_resource(test_data: &TestData) -> anyhow::Result<
         .await?;
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
+    let event_data = minimal_icalendar()?;
     test_data
         .caldav
-        .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
+        .create_resource(&resource, event_data.clone(), mime_types::CALENDAR)
         .await?;
 
     let items = test_data.caldav.list_resources(&collection).await?;
@@ -472,6 +473,10 @@ async fn test_create_and_fetch_resource(test_data: &TestData) -> anyhow::Result<
     ensure!(fetched.len() == 1);
     assert_eq!(fetched[0].href, resource);
 
+    let fetched_data = &fetched[0].content.as_ref().unwrap().data;
+    // TODO: compare normalised items here!
+    ensure!(fetched_data.starts_with("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"));
+    ensure!(fetched_data.contains("SUMMARY:hello\\, testing\r\n"));
     Ok(())
 }
 
@@ -518,9 +523,6 @@ async fn test_create_and_fetch_resource_with_weird_characters(
         assert_eq!(fetched[0].href, resource);
     }
 
-    // FIXME: some servers will fail here due to tampering PRODID
-    // FIXME: order of lines may vary but items are still equivalent.
-    // ensure!(fetched[0].data, String::from_utf8(minimal_icalendar()?)?);
     Ok(())
 }
 

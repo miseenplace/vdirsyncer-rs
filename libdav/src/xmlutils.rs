@@ -200,3 +200,86 @@ pub(crate) fn get_unquoted_href<'a>(node: &'a Node) -> Result<Cow<'a, str>, DavE
 pub(crate) fn quote_href<'a>(href: &'a [u8]) -> Cow<'a, str> {
     Cow::from(percent_encode(href, DISALLOWED_FOR_HREF))
 }
+
+#[inline]
+pub(crate) fn get_newline_corrected_text(
+    node: &Node,
+    property: &ExpandedName<'_, '_>,
+) -> Result<String, DavError> {
+    let raw_data = node
+        .descendants()
+        .find(|node| node.tag_name() == *property)
+        .ok_or(DavError::InvalidResponse(
+            format!("missing {} in response", property.name()).into(),
+        ))?
+        .text()
+        .ok_or(DavError::InvalidResponse("missing text in property".into()))?;
+
+    // "\r\n" is converted into "\n" during XML parsing. This needs to be undone.
+    //
+    // See: https://github.com/RazrFalcon/roxmltree/issues/102
+    // See: https://www.w3.org/TR/xml/#sec-line-ends
+    // See: https://www.rfc-editor.org/rfc/rfc4791#section-9.6
+
+    let mut result = String::new();
+    let mut last_end = 0;
+    for (start, part) in raw_data.match_indices('\n') {
+        // If the following character is `\n`, then no data has been lost (it might
+        // have been in a CDATA or escaped).
+        if raw_data.get(start - 1..=start - 1) == Some(&"\r") {
+            continue;
+        }
+        result.push_str(
+            raw_data
+                .get(last_end..start)
+                .expect("data between last match and the current one must exist"),
+        );
+        result.push_str("\r\n");
+        last_end = start + part.len();
+    }
+    result.push_str(
+        raw_data
+            .get(last_end..raw_data.len())
+            .expect("data for the remainder of the input must exist"),
+    );
+    Ok(result)
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{names, xmlutils::get_newline_corrected_text};
+
+    #[test]
+    fn test_get_newline_corrected_text_without_returns() {
+        let without_returns ="<ns0:multistatus xmlns:ns0=\"DAV:\" xmlns:ns1=\"urn:ietf:params:xml:ns:caldav\"><ns0:response><ns0:href>/user/calendars/qdBEnN9jwjQFLry4/1ehsci7nhH31.ics</ns0:href><ns0:propstat><ns0:status>HTTP/1.1 200 OK</ns0:status><ns0:prop><ns0:getetag>\"2d2c827debd802fb3844309b53254b90dd7fd900\"</ns0:getetag><ns1:calendar-data>BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//hacksw/handcal//NONSGML v1.0//EN\nBEGIN:VEVENT\nSUMMARY:hello\\, testing\nDTSTART:19970714T170000Z\nDTSTAMP:19970610T172345Z\nUID:92gDWceCowpO\nEND:VEVENT\nEND:VCALENDAR\n</ns1:calendar-data></ns0:prop></ns0:propstat></ns0:response></ns0:multistatus>";
+        let expected = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//hacksw/handcal//NONSGML v1.0//EN\r\nBEGIN:VEVENT\r\nSUMMARY:hello\\, testing\r\nDTSTART:19970714T170000Z\r\nDTSTAMP:19970610T172345Z\r\nUID:92gDWceCowpO\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+        let doc = roxmltree::Document::parse(without_returns).unwrap();
+        let responses = doc
+            .root_element()
+            .descendants()
+            .find(|node| node.tag_name() == names::RESPONSE)
+            .unwrap();
+        assert_eq!(
+            get_newline_corrected_text(&responses, &names::CALENDAR_DATA).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn test_get_newline_corrected_text_with_returns() {
+        let with_returns= "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<multistatus xmlns=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\">\n  <response>\n    <href>/dav/calendars/user/vdirsyncer@fastmail.com/UvrlExcG9Jp0gEzQ/2H8kQfNQj8GP.ics</href>\n    <propstat>\n      <prop>\n        <getetag>\"4d92fc1c8bdc18bbf83caf34eeab7e7167eb292e\"</getetag>\n        <C:calendar-data><![CDATA[BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//hacksw/handcal//NONSGML v1.0//EN\r\nBEGIN:VEVENT\r\nUID:jSayX7OSdp3V\r\nDTSTAMP:19970610T172345Z\r\nDTSTART:19970714T170000Z\r\nSUMMARY:hello\\, testing\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n]]></C:calendar-data>\n      </prop>\n      <status>HTTP/1.1 200 OK</status>\n    </propstat>\n  </response>\n</multistatus>\n";
+        let expected = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//hacksw/handcal//NONSGML v1.0//EN\r\nBEGIN:VEVENT\r\nUID:jSayX7OSdp3V\r\nDTSTAMP:19970610T172345Z\r\nDTSTART:19970714T170000Z\r\nSUMMARY:hello\\, testing\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+        let doc = roxmltree::Document::parse(with_returns).unwrap();
+        let responses = doc
+            .root_element()
+            .descendants()
+            .find(|node| node.tag_name() == names::RESPONSE)
+            .unwrap();
+        assert_eq!(
+            get_newline_corrected_text(&responses, &names::CALENDAR_DATA).unwrap(),
+            expected
+        );
+    }
+}

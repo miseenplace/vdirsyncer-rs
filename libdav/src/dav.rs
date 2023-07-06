@@ -24,7 +24,8 @@ use crate::{
         GETCONTENTTYPE, GETETAG, HREF, PROPSTAT, RESOURCETYPE, RESPONSE,
     },
     xmlutils::{
-        check_multistatus, get_unquoted_href, quote_href, render_xml, render_xml_with_text,
+        check_multistatus, get_newline_corrected_text, get_unquoted_href, quote_href, render_xml,
+        render_xml_with_text,
     },
     Auth, AuthError, FetchedResource, FetchedResourceContent, ItemDetails, ResourceType,
 };
@@ -858,15 +859,7 @@ fn multi_get_parse<B: AsRef<[u8]>>(
                 .text()
                 .ok_or(DavError::InvalidResponse("missing text in etag".into()))?
                 .to_string();
-            let data = response
-                .descendants()
-                .find(|node| node.tag_name() == *property)
-                .ok_or(DavError::InvalidResponse(
-                    format!("missing {} in response", property.name()).into(),
-                ))?
-                .text()
-                .ok_or(DavError::InvalidResponse("missing text in property".into()))?
-                .to_string();
+            let data = get_newline_corrected_text(&response, property)?;
 
             items.push(FetchedResource {
                 href,
