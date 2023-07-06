@@ -5,4 +5,4 @@ username = "test"
 password = "test"
 
 [xfail]
-CreateAndFetchWeirdResource = "https://github.com/jelmer/xandikos/issues/253"
+test_create_and_fetch_resource_with_weird_characters = "https://github.com/jelmer/xandikos/issues/253"

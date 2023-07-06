@@ -10,9 +10,7 @@ use libdav::{
     CalDavClient, CardDavClient,
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use serde::Deserialize;
-use std::{collections::HashMap, fmt::Write, fs::File, io::Read, path::Path, str::FromStr};
-use strum::{EnumIter, EnumString, IntoEnumIterator};
+use std::{collections::HashMap, fmt::Write, fs::File, io::Read, path::Path};
 
 /// A profile for a test server
 ///
@@ -24,7 +22,7 @@ struct Profile {
     username: String,
     password: String,
     #[serde(default = "HashMap::new")]
-    xfail: HashMap<Test, String>,
+    xfail: HashMap<String, String>,
 }
 
 impl Profile {
@@ -100,49 +98,32 @@ impl TestData {
     }
 }
 
-#[derive(
-    Debug, PartialEq, EnumIter, Deserialize, strum::Display, Clone, Copy, Hash, Eq, EnumString,
-)]
-enum Test {
-    CreateAndDeleteCollection,
-    CreateAndForceDeleteCollection,
-    SetAndGetCalendarDisplayName,
-    SetAndGetColour,
-    CreateAndDeleteResource,
-    CreateAndFetchResource,
-    CreateAndFetchWeirdResource,
-    FetchMissingResource,
-    CheckAdvertisesCalDavSupport,
-
-    SetAndGetAddressBookDisplayName,
-    CheckAdvertisesCardDavSupport,
-}
-
-impl Test {
-    async fn exec(&self, test_data: &TestData) -> anyhow::Result<()> {
-        match self {
-            Test::CreateAndDeleteCollection => test_create_and_delete_collection(test_data).await,
-            Test::CreateAndForceDeleteCollection => {
-                test_create_and_force_delete_collection(test_data).await
-            }
-            Test::SetAndGetCalendarDisplayName => {
-                test_setting_and_getting_displayname(test_data).await
-            }
-            Test::SetAndGetColour => test_setting_and_getting_colour(test_data).await,
-            Test::CreateAndDeleteResource => test_create_and_delete_resource(test_data).await,
-            Test::CreateAndFetchResource => test_create_and_fetch_resource(test_data).await,
-            Test::CreateAndFetchWeirdResource => {
-                test_create_and_fetch_resource_with_weird_characters(test_data).await
-            }
-            Test::FetchMissingResource => test_fetch_missing(test_data).await,
-            Test::CheckAdvertisesCalDavSupport => test_check_caldav_support(test_data).await,
-
-            Test::SetAndGetAddressBookDisplayName => {
-                test_setting_and_getting_addressbook_displayname(test_data).await
-            }
-            Test::CheckAdvertisesCardDavSupport => test_check_carddav_support(test_data).await,
+macro_rules! run_tests {
+    ($test_data:expr, $($test:expr,)*) => {
+        {
+            let mut total = 0;
+            let mut failed = 0;
+            $(
+                let name = stringify!($test);
+                let result = $test($test_data).await;
+                print!("- {name}: ");
+                if let Some((_, reason)) = $test_data.profile.xfail.iter().find(|(k, _)| k.as_str() == name) {
+                    if result.is_ok() {
+                        println!("⛔ expected failure but passed");
+                    } else {
+                        println!("⚠️ expected failure: {reason}");
+                    }
+                } else if let Err(err) = &result {
+                    println!("⛔ failed: {err:?}");
+                    failed += 1;
+                } else {
+                    println!("✅ passed");
+                };
+                total += 1;
+            )*
+            (total, failed)
         }
-    }
+    };
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -155,48 +136,32 @@ async fn main() -> anyhow::Result<()> {
         .next()
         .context(format!("Usage: {} PROFILE", cmd.to_string_lossy()))?;
 
-    let tests = {
-        let test_names = args.collect::<Vec<_>>();
-        let mut tests = Vec::new();
-        for name in test_names {
-            tests.push(Test::from_str(&name.to_string_lossy())?);
-        }
-
-        if tests.is_empty() {
-            Test::iter().collect()
-        } else {
-            tests
-        }
-    };
-
     println!("🗓️ Running tests for: {}", profile_path.to_string_lossy());
     let profile = Profile::load(&profile_path)?;
     let test_data = TestData::from_profile(profile).await?;
 
-    let mut results = Vec::with_capacity(tests.len());
-    let mut failed = 0;
-    for test in tests {
-        let result = test.exec(&test_data).await;
-
-        if let Some(reason) = test_data.profile.xfail.get(&test) {
-            if result.is_ok() {
-                println!("- {test}: ⛔ expected failure but passed");
-            } else {
-                println!("- {test}: ⚠️ expected failure: {reason}");
-            }
-        } else if let Err(err) = &result {
-            println!("- {test}: ⛔ failed: {err:?}");
-            failed += 1;
-        } else {
-            println!("- {test}: ✅ passed");
-        };
-        results.push((test, result));
-    }
-
-    println!("✅ {} tests completed.\n", results.len());
+    let (total, failed) = run_tests!(
+        &test_data,
+        // caldav tests
+        test_create_and_delete_collection,
+        test_create_and_force_delete_collection,
+        test_setting_and_getting_displayname,
+        test_setting_and_getting_colour,
+        test_create_and_delete_resource,
+        test_create_and_fetch_resource,
+        test_create_and_fetch_resource_with_weird_characters,
+        test_fetch_missing,
+        test_check_caldav_support,
+        // carddav
+        test_setting_and_getting_addressbook_displayname,
+        test_check_carddav_support,
+    );
 
     if failed > 0 {
+        println!("⛔ {}/{} tests failed.\n", failed, total);
         std::process::exit(1);
+    } else {
+        println!("✅ {} tests passed.\n", total);
     }
 
     Ok(())

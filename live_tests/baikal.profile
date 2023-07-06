@@ -5,4 +5,4 @@ username = "baikal"
 password = "baikal"
 
 [xfail]
-CreateAndDeleteCollection = "https://github.com/sabre-io/Baikal/issues/1182"
+test_create_and_delete_collection = "https://github.com/sabre-io/Baikal/issues/1182"
