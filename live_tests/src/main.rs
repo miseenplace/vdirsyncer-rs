@@ -110,6 +110,7 @@ macro_rules! run_tests {
                 if let Some((_, reason)) = $test_data.profile.xfail.iter().find(|(k, _)| k.as_str() == name) {
                     if result.is_ok() {
                         println!("⛔ expected failure but passed");
+                        failed += 1;
                     } else {
                         println!("⚠️ expected failure: {reason}");
                     }
