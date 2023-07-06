@@ -14,6 +14,9 @@
 //!
 //! All `href` strings returned by the server are returned unquoted by this library before being
 //! returned to consumers.
+//!
+//! All functions that take a parameter named `href` (or similar ones like `calendar_href`) expect
+//! their input to NOT be URL-encoded.
 
 use crate::auth::{Auth, AuthError};
 use dav::DavError;

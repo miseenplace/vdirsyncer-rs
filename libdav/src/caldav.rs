@@ -16,7 +16,7 @@ use crate::names::{
     CALENDAR, CALENDAR_COLOUR, CALENDAR_DATA, CALENDAR_HOME_SET, GETETAG, RESOURCETYPE,
     SUPPORTED_REPORT_SET,
 };
-use crate::xmlutils::check_multistatus;
+use crate::xmlutils::{check_multistatus, quote_href};
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 use crate::{CheckSupportError, FetchedResource};
 
@@ -239,8 +239,8 @@ impl CalDavClient {
                 </prop>"#,
         );
         for href in hrefs {
-            // TODO: maybe escape it?
-            body.push_str(&format!("<href>{}</href>", href.as_ref()));
+            let href = quote_href(href.as_ref().as_bytes());
+            body.push_str(&format!("<href>{}</href>", href));
         }
         body.push_str("</C:calendar-multiget>");
 

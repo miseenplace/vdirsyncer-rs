@@ -110,6 +110,7 @@ enum Test {
     SetAndGetColour,
     CreateAndDeleteResource,
     CreateAndFetchResource,
+    CreateAndFetchWeirdResource,
     FetchMissingResource,
     CheckAdvertisesCalDavSupport,
 
@@ -130,6 +131,9 @@ impl Test {
             Test::SetAndGetColour => test_setting_and_getting_colour(test_data).await,
             Test::CreateAndDeleteResource => test_create_and_delete_resource(test_data).await,
             Test::CreateAndFetchResource => test_create_and_fetch_resource(test_data).await,
+            Test::CreateAndFetchWeirdResource => {
+                test_create_and_fetch_resource_with_weird_characters(test_data).await
+            }
             Test::FetchMissingResource => test_fetch_missing(test_data).await,
             Test::CheckAdvertisesCalDavSupport => test_check_caldav_support(test_data).await,
 
@@ -486,49 +490,64 @@ async fn test_create_and_fetch_resource(test_data: &TestData) -> anyhow::Result<
         .create_collection(&collection, CollectionType::Calendar)
         .await?;
 
-    {
-        let resource = format!("{}{}.ics", collection, &random_string(12));
-        test_data
-            .caldav
-            .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
-            .await?;
+    let resource = format!("{}{}.ics", collection, &random_string(12));
+    test_data
+        .caldav
+        .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
+        .await?;
 
-        let items = test_data.caldav.list_resources(&collection).await?;
-        ensure!(items.len() == 1);
+    let items = test_data.caldav.list_resources(&collection).await?;
+    ensure!(items.len() == 1);
 
-        let fetched = test_data
-            .caldav
-            .get_resources(&collection, &[&items[0].href])
-            .await?;
-        ensure!(fetched.len() == 1);
-        assert_eq!(fetched[0].href, resource);
-    }
+    let fetched = test_data
+        .caldav
+        .get_resources(&collection, &[&items[0].href])
+        .await?;
+    ensure!(fetched.len() == 1);
+    assert_eq!(fetched[0].href, resource);
 
-    let mut count = 1;
-    // We should escape the following in requests: /?#&
-    // Fails only on radicale: ;
-    // TODO: maybe we should always encode hrefs in requests
-    //       and our API should clearly declare that all inputs must be unescaped.
-    for symbol in ":[]@!$'()*+,=".chars() {
+    Ok(())
+}
+
+async fn test_create_and_fetch_resource_with_weird_characters(
+    test_data: &TestData,
+) -> anyhow::Result<()> {
+    let collection = format!(
+        "{}{}/",
+        test_data.calendar_home_set.path(),
+        &random_string(16)
+    );
+    test_data
+        .caldav
+        .create_collection(&collection, CollectionType::Calendar)
+        .await?;
+
+    let mut count = 0;
+    for symbol in ":?# []@!$&'()*+,;=<>".chars() {
         let resource = format!("{}weird-{}-{}.ics", collection, symbol, &random_string(6));
         test_data
             .caldav
             .create_resource(&resource, minimal_icalendar()?, mime_types::CALENDAR)
-            .await?;
+            .await
+            .context(format!("failed to create resource with '{symbol}'"))?;
         count += 1;
 
         let items = test_data
             .caldav
             .list_resources(&collection)
             .await
-            .context("xxx")?;
+            .context(format!("failed listing resource (when testing '{symbol}')"))?;
         ensure!(items.len() == count);
+        ensure!(
+            items.iter().any(|i| i.href == resource),
+            format!("created item must be present when listing (testing '{symbol}')")
+        );
 
         let fetched = test_data
             .caldav
             .get_resources(&collection, &[&resource])
             .await
-            .context(format!("with character '{symbol}'"))?;
+            .context(format!("failed to get resource with '{symbol}'"))?;
         ensure!(fetched.len() == 1);
         assert_eq!(fetched[0].href, resource);
     }

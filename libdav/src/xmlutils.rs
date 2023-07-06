@@ -8,12 +8,16 @@ use std::str::FromStr;
 
 use http::status::InvalidStatusCode;
 use http::StatusCode;
-use percent_encoding::percent_decode_str;
+use percent_encoding::percent_encode;
+use percent_encoding::{percent_decode_str, AsciiSet, NON_ALPHANUMERIC};
 use roxmltree::ExpandedName;
 use roxmltree::Node;
 
 use crate::dav::{check_status, DavError};
 use crate::names::STATUS;
+
+/// Characters that are escaped for hrefs.
+pub(crate) const DISALLOWED_FOR_HREF: &AsciiSet = &NON_ALPHANUMERIC.remove(b'/').remove(b'.');
 
 /// Check all the statuses in a `multistatus` response.
 ///
@@ -188,4 +192,11 @@ pub(crate) fn get_unquoted_href<'a>(node: &'a Node) -> Result<Cow<'a, str>, DavE
         .map(percent_decode_str)
         .ok_or(DavError::InvalidResponse("missing text in href".into()))?
         .decode_utf8()?)
+}
+
+// URL-encodes an href.
+//
+// Obviously the input parameter MUST NOT be url-encoded.
+pub(crate) fn quote_href<'a>(href: &'a [u8]) -> Cow<'a, str> {
+    Cow::from(percent_encode(href, DISALLOWED_FOR_HREF))
 }

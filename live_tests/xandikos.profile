@@ -3,3 +3,6 @@
 host = "http://localhost:8000"
 username = "test"
 password = "test"
+
+[xfail]
+CreateAndFetchWeirdResource = "https://github.com/jelmer/xandikos/issues/253"

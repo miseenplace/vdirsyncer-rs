@@ -15,6 +15,7 @@ use crate::dns::DiscoverableService;
 use crate::names::{
     ADDRESSBOOK, ADDRESSBOOK_HOME_SET, ADDRESS_DATA, GETETAG, RESOURCETYPE, SUPPORTED_REPORT_SET,
 };
+use crate::xmlutils::quote_href;
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
 use crate::{CheckSupportError, FetchedResource};
 
@@ -170,7 +171,7 @@ impl CardDavClient {
                 </D:prop>"#,
         );
         for href in hrefs {
-            // TODO: maybe escape it?
+            let href = quote_href(href.as_ref().as_bytes());
             body.push_str(&format!("<href>{}</href>", href.as_ref()));
         }
         body.push_str("</C:addressbook-multiget>");

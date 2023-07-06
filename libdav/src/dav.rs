@@ -23,7 +23,9 @@ use crate::{
         ADDRESSBOOK, CALDAV, CALENDAR, CARDDAV, COLLECTION, CURRENT_USER_PRINCIPAL, DISPLAY_NAME,
         GETCONTENTTYPE, GETETAG, HREF, PROPSTAT, RESOURCETYPE, RESPONSE,
     },
-    xmlutils::{check_multistatus, get_unquoted_href, render_xml, render_xml_with_text},
+    xmlutils::{
+        check_multistatus, get_unquoted_href, quote_href, render_xml, render_xml_with_text,
+    },
     Auth, AuthError, FetchedResource, FetchedResourceContent, ItemDetails, ResourceType,
 };
 
@@ -158,9 +160,10 @@ impl WebDavClient {
     /// # Errors
     ///
     /// If this client's `base_url` is invalid or the provided `path` is not an acceptable path.
-    pub fn relative_uri(&self, path: &str) -> Result<Uri, http::Error> {
+    pub fn relative_uri<S: AsRef<str>>(&self, path: S) -> Result<Uri, http::Error> {
+        let href = quote_href(path.as_ref().as_bytes());
         let mut parts = self.base_url.clone().into_parts();
-        parts.path_and_query = Some(path.try_into()?);
+        parts.path_and_query = Some(PathAndQuery::try_from(href.as_ref())?);
         Uri::from_parts(parts).map_err(http::Error::from)
     }
 
@@ -448,7 +451,7 @@ impl WebDavClient {
         let mut builder = self
             .request_builder()?
             .method(Method::PUT)
-            .uri(self.relative_uri(href.as_ref())?)
+            .uri(self.relative_uri(href)?)
             .header("Content-Type", mime_type.as_ref());
 
         builder = match etag {
@@ -625,7 +628,7 @@ impl WebDavClient {
         let request = self
             .request_builder()?
             .method(Method::from_bytes(b"REPORT").expect("API for HTTP methods is dumb"))
-            .uri(self.relative_uri(collection_href.as_ref())?)
+            .uri(self.relative_uri(collection_href)?)
             .header("Content-Type", "application/xml; charset=utf-8")
             .body(Body::from(body))?;
 
@@ -677,6 +680,7 @@ pub mod mime_types {
 #[derive(Debug, PartialEq)]
 pub struct ListedResource {
     pub details: ItemDetails,
+    /// This value is not URL-encoded.
     pub href: String,
 }
 
@@ -686,6 +690,7 @@ pub struct ListedResource {
 /// collection itself, but not the entires themselves.
 #[derive(Debug)]
 pub struct FoundCollection {
+    /// This value is not URL-encoded.
     pub href: String,
     pub etag: Option<String>,
     pub supports_sync: bool,
@@ -771,6 +776,7 @@ fn list_resources_parse<B: AsRef<[u8]>>(
         let href = get_unquoted_href(&response)?.to_string();
 
         // Don't list the collection itself.
+        // INVARIANT: href has been unquoted. collection_href parameter MUST NOT be URL-encoded.
         if href == collection_href {
             continue;
         }
