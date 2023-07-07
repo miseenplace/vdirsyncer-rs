@@ -226,7 +226,7 @@ pub(crate) fn get_newline_corrected_text(
     for (start, part) in raw_data.match_indices('\n') {
         // If the following character is `\n`, then no data has been lost (it might
         // have been in a CDATA or escaped).
-        if raw_data.get(start - 1..=start - 1) == Some(&"\r") {
+        if raw_data.get(start - 1..start) == Some("\r") {
             continue;
         }
         result.push_str(

@@ -173,7 +173,9 @@ impl CardDavClient {
         );
         for href in hrefs {
             let href = quote_href(href.as_ref().as_bytes());
-            body.push_str(&format!("<href>{}</href>", href.as_ref()));
+            body.push_str("<href>");
+            body.push_str(&href);
+            body.push_str("</href>");
         }
         body.push_str("</C:addressbook-multiget>");
 

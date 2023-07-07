@@ -240,7 +240,9 @@ impl CalDavClient {
         );
         for href in hrefs {
             let href = quote_href(href.as_ref().as_bytes());
-            body.push_str(&format!("<href>{}</href>", href));
+            body.push_str("<href>");
+            body.push_str(&href);
+            body.push_str("</href>");
         }
         body.push_str("</C:calendar-multiget>");
 
