@@ -20,9 +20,14 @@ server. For example:
 host = "http://example.com"
 username = "testuser"
 password = "password"
+server = "nextcloud"
 ```
 
-Then run:
+The `server` attribute is a hint as to which server implementation is being
+used. Tests that are known to fail on specific servers will soft-fail. Consider
+this a kid of `xfail` feature.
+
+Execute tests with:
 
 ```sh
 cargo run -p live_tests -- example.profile
@@ -58,9 +63,9 @@ cargo build -p live_tests || exit
 ./target/debug/live_tests live_tests/radicale.profile
 ```
 
-Test clients use the discovery bootstrapping mechanism, do you can specify your
-providers main site as URL as `CALDAV_SERVER` and DNS discovery should resolve
-the real server and port automatically.
+Test clients use the discovery bootstrapping mechanism, so you can specify your
+providers main site as URL as `host` and DNS discovery should resolve the real
+server and port automatically.
 
 # Licence
 
