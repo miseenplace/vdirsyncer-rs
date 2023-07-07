@@ -225,6 +225,7 @@ async fn main() -> anyhow::Result<()> {
         test_create_and_delete_resource,
         test_create_and_fetch_resource,
         test_create_and_fetch_resource_with_weird_characters,
+        test_create_and_fetch_resource_with_non_ascii_data,
         test_fetch_missing,
         test_check_caldav_support,
         // carddav
@@ -417,6 +418,24 @@ fn minimal_icalendar() -> anyhow::Result<Vec<u8>> {
     Ok(entry.into())
 }
 
+fn funky_calendar_event() -> anyhow::Result<Vec<u8>> {
+    let mut entry = String::new();
+    let uid = random_string(12);
+
+    entry.push_str("BEGIN:VCALENDAR\r\n");
+    entry.push_str("VERSION:2.0\r\n");
+    entry.push_str("PRODID:-//hacksw/handcal//NONSGML v1.0//EN\r\n");
+    entry.push_str("BEGIN:VEVENT\r\n");
+    write!(entry, "UID:{uid}\r\n")?;
+    entry.push_str("DTSTAMP:19970610T172345Z\r\n");
+    entry.push_str("DTSTART:19970714T170000Z\r\n");
+    entry.push_str("SUMMARY:eine Testparty mit Bären\r\n");
+    entry.push_str("END:VEVENT\r\n");
+    entry.push_str("END:VCALENDAR\r\n");
+
+    Ok(entry.into())
+}
+
 async fn test_create_and_delete_resource(test_data: &TestData) -> anyhow::Result<()> {
     let collection = format!(
         "{}{}/",
@@ -551,6 +570,43 @@ async fn test_create_and_fetch_resource(test_data: &TestData) -> anyhow::Result<
     // TODO: compare normalised items here!
     ensure!(fetched_data.starts_with("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"));
     ensure!(fetched_data.contains("SUMMARY:hello\\, testing\r\n"));
+    Ok(())
+}
+
+async fn test_create_and_fetch_resource_with_non_ascii_data(
+    test_data: &TestData,
+) -> anyhow::Result<()> {
+    let collection = format!(
+        "{}{}/",
+        test_data.calendar_home_set.path(),
+        &random_string(16)
+    );
+    test_data
+        .caldav
+        .create_collection(&collection, CollectionType::Calendar)
+        .await?;
+
+    let resource = format!("{}{}.ics", collection, &random_string(12));
+    let event_data = funky_calendar_event()?;
+    test_data
+        .caldav
+        .create_resource(&resource, event_data.clone(), mime_types::CALENDAR)
+        .await?;
+
+    let items = test_data.caldav.list_resources(&collection).await?;
+    ensure!(items.len() == 1);
+
+    let fetched = test_data
+        .caldav
+        .get_resources(&collection, &[&items[0].href])
+        .await?;
+    ensure!(fetched.len() == 1);
+    assert_eq!(fetched[0].href, resource);
+
+    let fetched_data = &fetched[0].content.as_ref().unwrap().data;
+    // TODO: compare normalised items here!
+    ensure!(fetched_data.starts_with("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"));
+    ensure!(fetched_data.contains("SUMMARY:eine Testparty mit Bären"));
     Ok(())
 }
 
