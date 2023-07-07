@@ -95,6 +95,14 @@ impl TestData {
             .map(|calendars| calendars.len())
             .context("fetch calendar count")
     }
+
+    async fn addressbook_count(&self) -> anyhow::Result<usize> {
+        self.carddav
+            .find_addresbooks(None)
+            .await
+            .map(|a| a.len())
+            .context("fetching addressbook count")
+    }
 }
 
 fn process_result(
@@ -155,10 +163,20 @@ const EXPECTED_FAILURES: &[ExpectedFailure] = &[
         test: "caldav::test_create_and_delete_collection",
         reason: "https://github.com/sabre-io/Baikal/issues/1182",
     },
+    ExpectedFailure {
+        server: "baikal",
+        test: "carddav::test_create_and_delete_addressbook",
+        reason: "https://github.com/sabre-io/Baikal/issues/1182",
+    },
     // Cyrus-IMAP
     ExpectedFailure {
         server: "cyrus-imap",
         test: "caldav::test_create_and_delete_collection",
+        reason: "precondition failed (unreported)",
+    },
+    ExpectedFailure {
+        server: "cyrus-imap",
+        test: "carddav::test_create_and_delete_addressbook",
         reason: "precondition failed (unreported)",
     },
     ExpectedFailure {
@@ -180,6 +198,11 @@ const EXPECTED_FAILURES: &[ExpectedFailure] = &[
     ExpectedFailure {
         server: "nextcloud",
         test: "caldav::test_create_and_delete_collection",
+        reason: "server does not return etags (unreported)",
+    },
+    ExpectedFailure {
+        server: "nextcloud",
+        test: "carddav::test_create_and_delete_addressbook",
         reason: "server does not return etags (unreported)",
     },
     ExpectedFailure {
@@ -228,6 +251,8 @@ async fn main() -> anyhow::Result<()> {
         caldav::test_check_caldav_support,
         carddav::test_setting_and_getting_addressbook_displayname,
         carddav::test_check_carddav_support,
+        carddav::test_create_and_delete_addressbook,
+        carddav::test_create_and_delete_resource,
     );
 
     if failed > 0 {
