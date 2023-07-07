@@ -110,7 +110,7 @@ fn process_result(
     test_name: &str,
     result: anyhow::Result<()>,
     total: &mut u32,
-    failed: &mut u32,
+    passed: &mut u32,
 ) {
     print!("- {test_name}: ");
     if let Some(expected_failure) = EXPECTED_FAILURES
@@ -119,15 +119,15 @@ fn process_result(
     {
         if result.is_ok() {
             println!("⛔ expected failure but passed");
-            *failed += 1;
         } else {
             println!("⚠️ expected failure: {}", expected_failure.reason);
+            *passed += 1;
         }
     } else if let Err(err) = &result {
         println!("⛔ failed: {err:?}");
-        *failed += 1;
     } else {
         println!("✅ passed");
+        *passed += 1;
     };
     *total += 1;
 }
@@ -136,13 +136,13 @@ macro_rules! run_tests {
     ($test_data:expr, $($test:expr,)*) => {
         {
             let mut total = 0;
-            let mut failed = 0;
+            let mut passed = 0;
             $(
                 let name = stringify!($test);
                 let result = $test($test_data).await;
-                process_result($test_data, name, result, &mut total, &mut failed);
+                process_result($test_data, name, result, &mut total, &mut passed);
             )*
-            (total, failed)
+            (total, passed)
         }
     };
 }
@@ -237,7 +237,7 @@ async fn main() -> anyhow::Result<()> {
     let profile = Profile::load(&profile_path)?;
     let test_data = TestData::from_profile(profile).await?;
 
-    let (total, failed) = run_tests!(
+    let (total, passed) = run_tests!(
         &test_data,
         caldav::test_create_and_delete_collection,
         caldav::test_create_and_force_delete_collection,
@@ -255,11 +255,11 @@ async fn main() -> anyhow::Result<()> {
         carddav::test_create_and_delete_resource,
     );
 
-    if failed > 0 {
-        println!("⛔ {}/{} tests failed.\n", failed, total);
+    if passed < total {
+        println!("⛔ {passed}/{total} tests passed.\n");
         std::process::exit(1);
     } else {
-        println!("✅ {} tests passed.\n", total);
+        println!("✅ {total} tests passed.\n");
     }
 
     Ok(())
