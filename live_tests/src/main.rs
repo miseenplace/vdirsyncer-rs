@@ -596,17 +596,28 @@ async fn test_create_and_fetch_resource_with_non_ascii_data(
     let items = test_data.caldav.list_resources(&collection).await?;
     ensure!(items.len() == 1);
 
-    let fetched = test_data
+    let mut fetched = test_data
         .caldav
         .get_resources(&collection, &[&items[0].href])
         .await?;
     ensure!(fetched.len() == 1);
     assert_eq!(fetched[0].href, resource);
 
-    let fetched_data = &fetched[0].content.as_ref().unwrap().data;
-    // TODO: compare normalised items here!
+    let fetched_data = fetched.pop().unwrap().content.unwrap().data;
+
     ensure!(fetched_data.starts_with("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"));
     ensure!(fetched_data.contains("SUMMARY:eine Testparty mit Bären"));
+
+    // TODO: compare normalised items here!
+    // Need to do a semantic comparison of the send data vs fetched data. E.g.: to items should be
+    // considered the same if only the order of its properties has changed.
+
+    // This only compares length until the above is implemented.
+    // Some servers move around the UID:, but the total length ends up being the same.
+    assert_eq!(
+        fetched_data.len(),
+        String::from_utf8(event_data).unwrap().len()
+    );
     Ok(())
 }
 
