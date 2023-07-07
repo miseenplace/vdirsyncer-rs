@@ -13,7 +13,7 @@ use crate::common::{common_bootstrap, parse_find_multiple_collections};
 use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
 use crate::names::{
-    CALENDAR, CALENDAR_COLOUR, CALENDAR_DATA, CALENDAR_HOME_SET, GETETAG, RESOURCETYPE,
+    self, CALENDAR, CALENDAR_COLOUR, CALENDAR_DATA, CALENDAR_HOME_SET, GETETAG, RESOURCETYPE,
     SUPPORTED_REPORT_SET,
 };
 use crate::xmlutils::{check_multistatus, quote_href};
@@ -329,7 +329,7 @@ impl CalDavClient {
     pub async fn create_calendar<Href: AsRef<str>>(&self, href: Href) -> Result<(), DavError> {
         // TODO: Can I somehow delegate to this async method without introducing a new await point?
         self.dav_client
-            .create_collection(href, crate::dav::CollectionType::Calendar)
+            .create_collection(href, &[&names::CALENDAR])
             .await
     }
 }

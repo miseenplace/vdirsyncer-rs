@@ -20,8 +20,8 @@ use crate::{
     auth::AuthExt,
     dns::DiscoverableService,
     names::{
-        ADDRESSBOOK, CALDAV, CALENDAR, CARDDAV, COLLECTION, CURRENT_USER_PRINCIPAL, DISPLAY_NAME,
-        GETCONTENTTYPE, GETETAG, HREF, PROPSTAT, RESOURCETYPE, RESPONSE,
+        ADDRESSBOOK, CALENDAR, COLLECTION, CURRENT_USER_PRINCIPAL, DISPLAY_NAME, GETCONTENTTYPE,
+        GETETAG, HREF, PROPSTAT, RESOURCETYPE, RESPONSE,
     },
     xmlutils::{
         check_multistatus, get_newline_corrected_text, get_unquoted_href, quote_href, render_xml,
@@ -520,6 +520,11 @@ impl WebDavClient {
 
     /// Creates a collection under path `href`.
     ///
+    /// This function executes an [Extended MKCOL](https://www.rfc-editor.org/rfc/rfc5689).
+    ///
+    /// Additional resource types may be specified via the `resourcetypes` argument. The
+    /// `DAV:collection` resource type is implied and MUST NOT be specified.
+    ///
     /// # Caveats
     ///
     /// Because servers commonly don't return an Etag for this operation, it needs to be fetched in
@@ -531,8 +536,13 @@ impl WebDavClient {
     pub async fn create_collection<Href: AsRef<str>>(
         &self,
         href: Href,
-        resourcetype: CollectionType,
+        resourcetypes: &[&ExpandedName<'_, '_>],
     ) -> Result<(), DavError> {
+        let mut rendered_resource_types = String::new();
+        for resource_type in resourcetypes {
+            rendered_resource_types.push_str(&render_xml(resource_type));
+        }
+
         let body = format!(
             r#"
             <mkcol xmlns="DAV:">
@@ -540,7 +550,7 @@ impl WebDavClient {
                     <prop>
                         <resourcetype>
                             <collection/>
-                            {resourcetype}
+                            {rendered_resource_types}
                         </resourcetype>
                     </prop>
                 </set>
@@ -549,7 +559,7 @@ impl WebDavClient {
 
         let request = self
             .request_builder()?
-            .method(Method::from_bytes(b"MKCOL").expect("API for HTTP methods is dumb"))
+            .method("MKCOL")
             .uri(self.relative_uri(href.as_ref())?)
             .header("Content-Type", "application/xml; charset=utf-8")
             .body(Body::from(body))?;
@@ -637,26 +647,6 @@ impl WebDavClient {
         check_status(head.status)?;
 
         multi_get_parse(body, property)
-    }
-}
-
-/// Known types of collections.
-pub enum CollectionType {
-    /// A generic webdav collection.
-    Collection,
-    /// A caldav calendar collection.
-    Calendar,
-    /// A carddav addressbook collection.
-    AddressBook,
-}
-
-impl std::fmt::Display for CollectionType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CollectionType::Collection => write!(f, "<collection xmlns=\"DAV:\" />"),
-            CollectionType::Calendar => write!(f, "<calendar xmlns=\"{CALDAV}\" />"),
-            CollectionType::AddressBook => write!(f, "<addressbook xmlns=\"{CARDDAV}\" />"),
-        }
     }
 }
 

@@ -13,7 +13,8 @@ use crate::common::{common_bootstrap, parse_find_multiple_collections};
 use crate::dav::{check_status, DavError, FoundCollection};
 use crate::dns::DiscoverableService;
 use crate::names::{
-    ADDRESSBOOK, ADDRESSBOOK_HOME_SET, ADDRESS_DATA, GETETAG, RESOURCETYPE, SUPPORTED_REPORT_SET,
+    self, ADDRESSBOOK, ADDRESSBOOK_HOME_SET, ADDRESS_DATA, GETETAG, RESOURCETYPE,
+    SUPPORTED_REPORT_SET,
 };
 use crate::xmlutils::quote_href;
 use crate::{dav::WebDavClient, BootstrapError, FindHomeSetError};
@@ -255,7 +256,7 @@ impl CardDavClient {
     pub async fn create_addressbook<Href: AsRef<str>>(&self, href: Href) -> Result<(), DavError> {
         // TODO: Can I somehow delegate to this async method without introducing a new await point?
         self.dav_client
-            .create_collection(href, crate::dav::CollectionType::AddressBook)
+            .create_collection(href, &[&names::ADDRESSBOOK])
             .await
     }
 }
