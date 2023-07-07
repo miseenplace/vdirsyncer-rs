@@ -6,9 +6,9 @@
 
 use async_trait::async_trait;
 use http::Uri;
+use libdav::auth::Auth;
 use libdav::dav::mime_types;
 use libdav::CardDavClient;
-use libdav::{auth::Auth, dav::CollectionType};
 
 use crate::base::{AddressBookProperty, Collection, Definition, Item, ItemRef, Storage, VcardItem};
 use crate::{Error, ErrorKind, Etag, Href, Result};
@@ -75,7 +75,7 @@ impl Storage<VcardItem> for CardDavStorage {
 
     async fn create_collection(&mut self, href: &str) -> Result<Collection> {
         self.client
-            .create_collection(href, CollectionType::AddressBook)
+            .create_addressbook(href)
             .await
             .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
         Ok(Collection::new(href.to_string()))

@@ -6,9 +6,9 @@
 
 use async_trait::async_trait;
 use http::Uri;
+use libdav::auth::Auth;
 use libdav::dav::mime_types;
 use libdav::CalDavClient;
-use libdav::{auth::Auth, dav::CollectionType};
 
 use crate::base::{CalendarProperty, Collection, Definition, IcsItem, Item, ItemRef, Storage};
 use crate::{Error, ErrorKind, Etag, Href, Result};
@@ -89,7 +89,7 @@ impl Storage<IcsItem> for CalDavStorage {
 
     async fn create_collection(&mut self, href: &str) -> Result<Collection> {
         self.client
-            .create_collection(href, CollectionType::Calendar)
+            .create_calendar(href)
             .await
             .map_err(|e| Error::new(ErrorKind::Uncategorised, e))?;
         Ok(Collection::new(href.to_string()))

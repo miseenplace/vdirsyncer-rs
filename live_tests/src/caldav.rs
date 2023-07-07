@@ -1,6 +1,6 @@
 use anyhow::{bail, ensure, Context};
 use http::StatusCode;
-use libdav::dav::{mime_types, CollectionType, DavError};
+use libdav::dav::{mime_types, DavError};
 use std::fmt::Write;
 
 use crate::{random_string, TestData};
@@ -13,10 +13,7 @@ pub(crate) async fn test_create_and_delete_collection(test_data: &TestData) -> a
         test_data.calendar_home_set.path(),
         &random_string(16)
     );
-    test_data
-        .caldav
-        .create_collection(&new_collection, CollectionType::Calendar)
-        .await?;
+    test_data.caldav.create_calendar(&new_collection).await?;
 
     let new_calendar_count = test_data.calendar_count().await?;
 
@@ -59,10 +56,7 @@ pub(crate) async fn test_create_and_force_delete_collection(
         test_data.calendar_home_set.path(),
         &random_string(16)
     );
-    test_data
-        .caldav
-        .create_collection(&new_collection, CollectionType::Calendar)
-        .await?;
+    test_data.caldav.create_calendar(&new_collection).await?;
 
     let after_creationg_calendar_count = test_data.calendar_count().await?;
     ensure!(orig_calendar_count + 1 == after_creationg_calendar_count);
@@ -84,10 +78,7 @@ pub(crate) async fn test_setting_and_getting_displayname(
         test_data.calendar_home_set.path(),
         &random_string(16)
     );
-    test_data
-        .caldav
-        .create_collection(&new_collection, CollectionType::Calendar)
-        .await?;
+    test_data.caldav.create_calendar(&new_collection).await?;
 
     let first_name = "panda-events";
     test_data
@@ -130,10 +121,7 @@ pub(crate) async fn test_setting_and_getting_colour(test_data: &TestData) -> any
         test_data.calendar_home_set.path(),
         &random_string(16)
     );
-    test_data
-        .caldav
-        .create_collection(&new_collection, CollectionType::Calendar)
-        .await?;
+    test_data.caldav.create_calendar(&new_collection).await?;
 
     let colour = "#ff00ff";
     test_data
@@ -200,10 +188,7 @@ pub(crate) async fn test_create_and_delete_resource(test_data: &TestData) -> any
         test_data.calendar_home_set.path(),
         &random_string(16)
     );
-    test_data
-        .caldav
-        .create_collection(&collection, CollectionType::Calendar)
-        .await?;
+    test_data.caldav.create_calendar(&collection).await?;
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
     let content = minimal_icalendar()?;
@@ -302,10 +287,7 @@ pub(crate) async fn test_create_and_fetch_resource(test_data: &TestData) -> anyh
         test_data.calendar_home_set.path(),
         &random_string(16)
     );
-    test_data
-        .caldav
-        .create_collection(&collection, CollectionType::Calendar)
-        .await?;
+    test_data.caldav.create_calendar(&collection).await?;
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
     let event_data = minimal_icalendar()?;
@@ -339,10 +321,7 @@ pub(crate) async fn test_create_and_fetch_resource_with_non_ascii_data(
         test_data.calendar_home_set.path(),
         &random_string(16)
     );
-    test_data
-        .caldav
-        .create_collection(&collection, CollectionType::Calendar)
-        .await?;
+    test_data.caldav.create_calendar(&collection).await?;
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
     let event_data = funky_calendar_event()?;
@@ -387,10 +366,7 @@ pub(crate) async fn test_create_and_fetch_resource_with_weird_characters(
         test_data.calendar_home_set.path(),
         &random_string(16)
     );
-    test_data
-        .caldav
-        .create_collection(&collection, CollectionType::Calendar)
-        .await?;
+    test_data.caldav.create_calendar(&collection).await?;
 
     let mut count = 0;
     for symbol in ":?# []@!$&'()*+,;=<>".chars() {
@@ -431,10 +407,7 @@ pub(crate) async fn test_fetch_missing(test_data: &TestData) -> anyhow::Result<(
         test_data.calendar_home_set.path(),
         &random_string(16)
     );
-    test_data
-        .caldav
-        .create_collection(&collection, CollectionType::Calendar)
-        .await?;
+    test_data.caldav.create_calendar(&collection).await?;
 
     let resource = format!("{}{}.ics", collection, &random_string(12));
     test_data

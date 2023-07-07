@@ -1,6 +1,6 @@
 use anyhow::{bail, ensure, Context};
 use http::StatusCode;
-use libdav::dav::{mime_types, CollectionType, DavError};
+use libdav::dav::{mime_types, DavError};
 use std::fmt::Write;
 
 use crate::{random_string, TestData};
@@ -15,7 +15,7 @@ pub(crate) async fn test_create_and_delete_addressbook(test_data: &TestData) -> 
     );
     test_data
         .carddav
-        .create_collection(&new_collection, CollectionType::AddressBook)
+        .create_addressbook(&new_collection)
         .await?;
 
     ensure!(orig_addressbook_count + 1 == test_data.addressbook_count().await?);
@@ -70,10 +70,7 @@ pub(crate) async fn test_create_and_delete_resource(test_data: &TestData) -> any
         test_data.address_home_set.path(),
         &random_string(16)
     );
-    test_data
-        .carddav
-        .create_collection(&collection, CollectionType::AddressBook)
-        .await?;
+    test_data.carddav.create_addressbook(&collection).await?;
 
     let resource = format!("{}{}.vcf", collection, &random_string(12));
     let content = minimal_vcard()?;
@@ -179,7 +176,7 @@ pub(crate) async fn test_setting_and_getting_addressbook_displayname(
     );
     test_data
         .carddav
-        .create_collection(&new_collection, CollectionType::AddressBook)
+        .create_addressbook(&new_collection)
         .await?;
 
     let first_name = "panda-events";

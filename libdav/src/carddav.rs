@@ -246,4 +246,16 @@ impl CardDavClient {
             _ => Err(BootstrapError::InvalidUrl("scheme is invalid")),
         }
     }
+
+    /// Create an address book collection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error in case of network errors or if the server returns a failure status code.
+    pub async fn create_addressbook<Href: AsRef<str>>(&self, href: Href) -> Result<(), DavError> {
+        // TODO: Can I somehow delegate to this async method without introducing a new await point?
+        self.dav_client
+            .create_collection(href, crate::dav::CollectionType::AddressBook)
+            .await
+    }
 }
