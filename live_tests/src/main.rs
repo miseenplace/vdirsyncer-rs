@@ -10,7 +10,7 @@ use libdav::{
     CalDavClient, CardDavClient,
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use std::{collections::HashMap, fmt::Write, fs::File, io::Read, path::Path};
+use std::{fmt::Write, fs::File, io::Read, path::Path};
 
 /// A profile for a test server
 ///
@@ -21,8 +21,8 @@ struct Profile {
     host: String,
     username: String,
     password: String,
-    #[serde(default = "HashMap::new")]
-    xfail: HashMap<String, String>,
+    /// The name of the server implementation.
+    server: String,
 }
 
 impl Profile {
@@ -98,6 +98,33 @@ impl TestData {
     }
 }
 
+fn process_result(
+    test_data: &TestData,
+    test_name: &str,
+    result: anyhow::Result<()>,
+    total: &mut u32,
+    failed: &mut u32,
+) {
+    print!("- {test_name}: ");
+    if let Some(expected_failure) = EXPECTED_FAILURES
+        .iter()
+        .find(|x| x.server == test_data.profile.server.as_str() && x.test == test_name)
+    {
+        if result.is_ok() {
+            println!("⛔ expected failure but passed");
+            *failed += 1;
+        } else {
+            println!("⚠️ expected failure: {}", expected_failure.reason);
+        }
+    } else if let Err(err) = &result {
+        println!("⛔ failed: {err:?}");
+        *failed += 1;
+    } else {
+        println!("✅ passed");
+    };
+    *total += 1;
+}
+
 macro_rules! run_tests {
     ($test_data:expr, $($test:expr,)*) => {
         {
@@ -106,26 +133,73 @@ macro_rules! run_tests {
             $(
                 let name = stringify!($test);
                 let result = $test($test_data).await;
-                print!("- {name}: ");
-                if let Some((_, reason)) = $test_data.profile.xfail.iter().find(|(k, _)| k.as_str() == name) {
-                    if result.is_ok() {
-                        println!("⛔ expected failure but passed");
-                        failed += 1;
-                    } else {
-                        println!("⚠️ expected failure: {reason}");
-                    }
-                } else if let Err(err) = &result {
-                    println!("⛔ failed: {err:?}");
-                    failed += 1;
-                } else {
-                    println!("✅ passed");
-                };
-                total += 1;
+                process_result($test_data, name, result, &mut total, &mut failed);
             )*
             (total, failed)
         }
     };
 }
+
+struct ExpectedFailure {
+    server: &'static str,
+    test: &'static str,
+    reason: &'static str,
+}
+
+/// A list of tests that are known to fail on specific servers.
+///
+/// An `xfail` proc macro would be nice, but it seems like an overkill for just a single project.
+const EXPECTED_FAILURES: &[ExpectedFailure] = &[
+    // Baikal
+    ExpectedFailure {
+        server: "baikal",
+        test: "test_create_and_delete_collection",
+        reason: "https://github.com/sabre-io/Baikal/issues/1182",
+    },
+    // Cyrus-IMAP
+    ExpectedFailure {
+        server: "cyrus-imap",
+        test: "test_create_and_delete_collection",
+        reason: "precondition failed (unreported)",
+    },
+    ExpectedFailure {
+        server: "cyrus-imap",
+        test: "test_check_caldav_support",
+        reason: "server does not adviertise caldav support (unreported)",
+    },
+    ExpectedFailure {
+        server: "cyrus-imap",
+        test: "test_setting_and_getting_colour",
+        reason: "https://github.com/cyrusimap/cyrus-imapd/issues/4489",
+    },
+    ExpectedFailure {
+        server: "cyrus-imap",
+        test: "test_check_carddav_support",
+        reason: "server does not adviertise caldav support (unreported)",
+    },
+    // Nextcloud
+    ExpectedFailure {
+        server: "nextcloud",
+        test: "test_create_and_delete_collection",
+        reason: "server does not return etags (unreported)",
+    },
+    ExpectedFailure {
+        server: "nextcloud",
+        test: "test_check_caldav_support",
+        reason: "https://github.com/nextcloud/server/issues/37374",
+    },
+    ExpectedFailure {
+        server: "nextcloud",
+        test: "test_check_carddav_support",
+        reason: "server does not adviertise caldav support (unreported)",
+    },
+    // Xandikos
+    ExpectedFailure {
+        server: "xandikos",
+        test: "test_create_and_fetch_resource_with_weird_characters",
+        reason: "https://github.com/jelmer/xandikos/issues/253",
+    },
+];
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {

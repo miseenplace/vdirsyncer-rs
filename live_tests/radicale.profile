@@ -3,3 +3,4 @@
 host = "http://localhost:8001"
 username = "test"
 password = "test"
+server = "radicale"

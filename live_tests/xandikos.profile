@@ -3,6 +3,4 @@
 host = "http://localhost:8000"
 username = "test"
 password = "test"
-
-[xfail]
-test_create_and_fetch_resource_with_weird_characters = "https://github.com/jelmer/xandikos/issues/253"
+server = "xandikos"
