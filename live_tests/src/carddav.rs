@@ -1,3 +1,7 @@
+// Copyright 2023 Hugo Osvaldo Barrera
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use anyhow::{bail, ensure, Context};
 use http::StatusCode;
 use libdav::dav::{mime_types, DavError};
